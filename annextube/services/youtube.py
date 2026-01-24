@@ -59,6 +59,11 @@ class YouTubeService:
         """
         logger.info(f"Fetching videos from channel: {channel_url}")
 
+        # Ensure we're getting the videos tab, not channel tabs
+        if not channel_url.endswith("/videos"):
+            channel_url = channel_url.rstrip("/") + "/videos"
+            logger.debug(f"Adjusted URL to videos tab: {channel_url}")
+
         ydl_opts = self._get_ydl_opts(download=False)
 
         # Get full metadata directly
