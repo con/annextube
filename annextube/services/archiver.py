@@ -59,11 +59,16 @@ class Archiver:
         """
         pattern = self.config.organization.video_path_pattern
 
-        # Extract date from published_at (ISO 8601 format)
+        # Extract date from published_at (datetime object)
         try:
-            date_obj = datetime.fromisoformat(video.published_at.replace('Z', '+00:00'))
-            date_str = date_obj.strftime('%Y-%m-%d')
-        except Exception:
+            if isinstance(video.published_at, datetime):
+                date_str = video.published_at.strftime('%Y-%m-%d')
+            else:
+                # If it's a string, parse it
+                date_obj = datetime.fromisoformat(str(video.published_at).replace('Z', '+00:00'))
+                date_str = date_obj.strftime('%Y-%m-%d')
+        except Exception as e:
+            logger.warning(f"Failed to parse date from published_at: {e}")
             date_str = 'unknown'
 
         # Build placeholders
