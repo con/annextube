@@ -66,11 +66,12 @@ class Archiver:
                 try:
                     logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
                     video = self.youtube.metadata_to_video(video_meta)
-                    self._process_video(video)
+                    caption_count = self._process_video(video)
 
                     stats["videos_processed"] += 1
                     stats["videos_tracked"] += 1
                     stats["metadata_saved"] += 1
+                    stats["captions_downloaded"] += caption_count
 
                 except Exception as e:
                     logger.error(f"Failed to process video {video_meta.get('id', 'unknown')}: {e}", exc_info=True)
@@ -89,13 +90,17 @@ class Archiver:
 
         return stats
 
-    def _process_video(self, video: Video) -> None:
+    def _process_video(self, video: Video) -> int:
         """Process a single video.
 
         Args:
             video: Video model instance
+
+        Returns:
+            Number of captions downloaded
         """
         logger.debug(f"Processing video: {video.video_id} - {video.title}")
+        caption_count = 0
 
         # Create video directory
         video_dir = self.repo_path / "videos" / video.video_id
@@ -127,7 +132,9 @@ class Archiver:
 
         # Download captions (if enabled)
         if self.config.components.captions and video.captions_available:
-            self._download_captions(video, video_dir)
+            caption_count = self._download_captions(video, video_dir)
+
+        return caption_count
 
     def _download_thumbnail(self, video: Video, video_dir: Path) -> None:
         """Download video thumbnail.
@@ -146,12 +153,15 @@ class Archiver:
         except Exception as e:
             logger.warning(f"Failed to download thumbnail: {e}")
 
-    def _download_captions(self, video: Video, video_dir: Path) -> None:
+    def _download_captions(self, video: Video, video_dir: Path) -> int:
         """Download video captions.
 
         Args:
             video: Video model instance
             video_dir: Video directory path
+
+        Returns:
+            Number of caption files downloaded
         """
         try:
             captions_dir = video_dir / "captions"
@@ -159,6 +169,9 @@ class Archiver:
 
             if languages:
                 logger.debug(f"Downloaded {len(languages)} caption files")
+                return len(languages)
 
         except Exception as e:
             logger.warning(f"Failed to download captions: {e}")
+
+        return 0

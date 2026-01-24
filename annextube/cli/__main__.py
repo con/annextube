@@ -56,9 +56,11 @@ def cli(
 # Import commands
 from annextube.cli.init import init
 from annextube.cli.backup import backup
+from annextube.cli.info import info
 
 cli.add_command(init)
 cli.add_command(backup)
+cli.add_command(info)
 
 
 def main():

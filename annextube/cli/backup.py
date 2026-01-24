@@ -142,7 +142,8 @@ def _print_stats(stats: dict, prefix: str = ""):
     click.echo(f"{prefix}Summary:")
     click.echo(f"{prefix}  Videos processed: {stats['videos_processed']}")
     click.echo(f"{prefix}  Videos tracked: {stats['videos_tracked']}")
-    click.echo(f"{prefix}  Metadata saved: {stats['metadata_saved']}")
+    click.echo(f"{prefix}  Metadata files: {stats['metadata_saved']}")
+    click.echo(f"{prefix}  Captions downloaded: {stats.get('captions_downloaded', 0)}")
 
     if stats["errors"]:
-        click.echo(f"{prefix}  Errors: {len(stats['errors'])}")
+        click.echo(f"{prefix}  ⚠ Errors: {len(stats['errors'])}")
