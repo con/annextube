@@ -1,8 +1,8 @@
 # 🎉 annextube MVP - Complete Implementation Summary
 
-**Date**: 2026-01-24  
-**Branch**: 001-youtube-backup  
-**Status**: ✅ MVP Working and Demonstrated
+**Date**: 2026-01-24 (Updated)
+**Branch**: 001-youtube-backup
+**Status**: ✅ MVP Working and Demonstrated - All Critical Issues Fixed
 
 ---
 
@@ -28,7 +28,10 @@ cat README.md
 ls -R videos/
 
 # View metadata
-cat videos/FE-hM1kRK4Y/metadata.json | python3 -m json.tool | less
+cat videos/2025-10-30_WyK7s-osTLs_rick_astley_the_never_book_tour_dublin_2024/metadata.json | python3 -m json.tool | less
+
+# Check git-annex metadata
+git annex metadata videos/*/*.mp4
 
 # Check git history
 git log --oneline
@@ -39,24 +42,68 @@ git log --oneline
 ## 🎬 What Was Demonstrated
 
 ### Successfully Backed Up
-- **Channel**: 3Blue1Brown (@3blue1brown)
-- **Videos**: 2 complete videos with metadata
-- **Duration**: 23-34 minutes per video
-- **Views**: 580K - 1.2M views per video
+- **Channel**: Rick Astley (@RickAstleyYT) - Matches configured channel ✅
+- **Videos**: 2 complete videos with metadata and URLs tracked
+- **Duration**: 1m 17s and 6m 51s
+- **Views**: 23K - 32K views per video
 
-### Files Created (26 total)
-- ✅ **21 caption files** (.vtt format)
-  - Multiple languages: EN, ES, FR, DE, IT, JA, KO, PT-BR, PL, TR, AR, HI, HU, ID, UK
+### Files Created
+- ✅ **2 video URL references** (tracked with git-annex addurl --fast --relaxed)
+  - `2025-10-30_WyK7s-osTLs_rick_astley_the_never_book_tour_dublin_2024/WyK7s-osTLs.mp4`
+  - `2025-10-25_2v3XUO0l7eE_absolutely_rick_/2v3XUO0l7eE.mp4`
 - ✅ **2 metadata files** (.json format)
   - Complete video information (title, description, views, likes, comments, tags, etc.)
-- ✅ **2 high-resolution thumbnails** (.jpg format, ~47KB each)
-- ✅ **1 configuration file** (.toml format)
+- ✅ **2 high-resolution thumbnails** (.jpg format)
+- ✅ **1 caption file** (.vtt format) - more blocked by rate limiting
+- ✅ **1 configuration file** (.toml format) with path patterns
 
 ### Git Integration
 - ✅ All changes committed to git
-- ✅ Git-annex properly configured
+- ✅ Git-annex properly configured with URL backend
 - ✅ File tracking rules working (.gitattributes)
-- ✅ 3 commits in demo archive (init + 2 backups + 1 documentation)
+- ✅ Git-annex metadata assigned to video files
+
+### Path Patterns (NEW)
+- ✅ Configurable path patterns via `[organization]` section
+- ✅ Default pattern: `{date}_{video_id}_{sanitized_title}`
+- ✅ Example: `2025-10-30_WyK7s-osTLs_rick_astley_the_never_book_tour_dublin_2024/`
+
+### Git-annex Metadata (NEW)
+- ✅ video_id
+- ✅ title
+- ✅ channel
+- ✅ published (date)
+- ✅ duration
+- ✅ source_url
+
+---
+
+## 🔧 Critical Fixes Applied
+
+### Issue 1: Wrong Channel
+**Problem**: Demo backed up 3Blue1Brown instead of configured RickAstley channel
+**Fix**: Verified backup logic, redid demo with correct channel from config
+**Status**: ✅ Fixed - Demo now backs up RickAstley as configured
+
+### Issue 2: No Videos Tracked
+**Problem**: Videos were NOT tracked with git-annex addurl at all
+**Fix**: Changed logic to always track URLs (even when `videos=false`)
+**Status**: ✅ Fixed - Videos now tracked as symlinks with URL backend
+
+### Issue 3: Hardcoded Paths
+**Problem**: Paths hardcoded to `videos/{video_id}/`
+**Fix**: Implemented configurable patterns: `{date}_{video_id}_{sanitized_title}`
+**Status**: ✅ Fixed - Paths now configurable via `[organization]` section
+
+### Issue 4: No Git-annex Metadata
+**Problem**: No metadata assigned to files at annex level
+**Fix**: Added `set_metadata()` method and metadata assignment after addurl
+**Status**: ✅ Fixed - Full metadata available via `git annex metadata`
+
+### Issue 5: Date Parsing Errors
+**Problem**: Dates showing as "unknown", datetime errors
+**Fix**: Fixed datetime handling in `_get_video_path()` and metadata assignment
+**Status**: ✅ Fixed - Dates correctly extracted and formatted
 
 ---
 
@@ -83,17 +130,19 @@ git log --oneline
 ├── .git/                   # Git repository
 ├── .git-annex/             # Git-annex metadata
 ├── .annextube/
-│   └── config.toml         # Configuration
-├── README.md               # Demo guide (197 lines)
+│   └── config.toml         # Configuration with path patterns
+├── .gitattributes          # File tracking rules
 └── videos/
-    ├── FE-hM1kRK4Y/        # Video 1 (Laplace transforms)
+    ├── 2025-10-30_WyK7s-osTLs_rick_astley_the_never_book_tour_dublin_2024/
+    │   ├── WyK7s-osTLs.mp4 → git-annex (symlink, URL tracked)
     │   ├── metadata.json
-    │   ├── thumbnail.jpg
-    │   └── captions/       # 15 languages
-    └── j0wJBEZdwLs/        # Video 2 (What is Laplace)
+    │   └── thumbnail.jpg
+    └── 2025-10-25_2v3XUO0l7eE_absolutely_rick_/
+        ├── 2v3XUO0l7eE.mp4 → git-annex (symlink, URL tracked)
         ├── metadata.json
         ├── thumbnail.jpg
-        └── captions/       # 6 languages
+        └── captions/
+            └── 2v3XUO0l7eE.ab.vtt
 ```
 
 ---
@@ -145,7 +194,7 @@ git log --oneline
 **Phase 3 (User Story 1)**: ✅ 42% Complete (8/19)
 - T016-T023: Init command, backup command, archival logic
 
-### Git Commits: 7 total
+### Git Commits: 10 total
 1. Initial project setup and foundational infrastructure
 2. Implement MVP core functionality
 3. Fix YouTube channel video extraction
@@ -153,6 +202,9 @@ git log --oneline
 5. Append /videos to channel URLs
 6. Mark T019-T023 as complete
 7. Add info command and improve backup output
+8. Add configurable path patterns and fix video URL tracking
+9. Fix datetime handling in git-annex metadata
+10. Fix date extraction for path pattern
 
 ### Lines of Code: ~2,500+
 
@@ -241,13 +293,16 @@ annextube backup
 ## ✅ What Works
 
 - ✅ Repository initialization
-- ✅ Configuration management
-- ✅ Channel video extraction
-- ✅ Metadata persistence
-- ✅ Caption downloads (all languages)
+- ✅ Configuration management (TOML with path patterns)
+- ✅ Channel video extraction (correct channel from config)
+- ✅ Metadata persistence (JSON files)
+- ✅ Caption downloads (all languages, rate-limited)
 - ✅ Thumbnail downloads
 - ✅ Git integration
-- ✅ Git-annex integration
+- ✅ Git-annex integration (URL backend)
+- ✅ **Video URL tracking** (git annex addurl --fast --relaxed)
+- ✅ **Git-annex metadata assignment** (video_id, title, channel, published, duration, source_url)
+- ✅ **Configurable path patterns** ({date}_{video_id}_{sanitized_title})
 - ✅ Error handling
 - ✅ Progress logging
 - ✅ Archive inspection
