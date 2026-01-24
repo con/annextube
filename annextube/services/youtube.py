@@ -61,10 +61,12 @@ class YouTubeService:
 
         ydl_opts = self._get_ydl_opts(download=False)
 
-        # Get full metadata directly (simpler for MVP)
+        # Get full metadata directly
         ydl_opts.update(
             {
                 "playlistend": limit if limit else None,
+                "ignoreerrors": True,  # Continue on errors
+                "no_warnings": False,  # Show warnings for debugging
             }
         )
 
@@ -80,19 +82,34 @@ class YouTubeService:
                 # Get entries (videos) - full metadata included
                 entries = info.get("entries", [])
 
+                if not entries:
+                    logger.warning("Channel has no videos or videos are not accessible")
+                    return []
+
+                logger.info(f"Found {len(entries)} video(s) in channel")
+
                 if limit:
                     entries = entries[:limit]
+                    logger.info(f"Limited to {len(entries)} video(s)")
 
-                logger.info(f"Found {len(entries)} video(s)")
+                # Filter out None entries and extract metadata
+                videos = []
+                for entry in entries:
+                    if entry is None:
+                        continue
 
-                # Filter out None entries
-                videos = [e for e in entries if e is not None]
+                    # Some entries might be incomplete, skip them
+                    if not entry.get("id"):
+                        logger.warning(f"Skipping entry without ID: {entry.get('title', 'Unknown')}")
+                        continue
+
+                    videos.append(entry)
 
                 logger.info(f"Successfully fetched metadata for {len(videos)} video(s)")
                 return videos
 
             except Exception as e:
-                logger.error(f"Failed to fetch channel videos: {e}")
+                logger.error(f"Failed to fetch channel videos: {e}", exc_info=True)
                 return []
 
     def get_video_metadata(self, video_url: str) -> Optional[Dict[str, Any]]:
@@ -202,7 +219,10 @@ class YouTubeService:
         # Parse published date
         published_str = metadata.get("upload_date", "")
         if published_str:
-            published_at = datetime.strptime(published_str, "%Y%m%d")
+            try:
+                published_at = datetime.strptime(published_str, "%Y%m%d")
+            except ValueError:
+                published_at = datetime.now()
         else:
             published_at = datetime.now()
 
@@ -211,23 +231,34 @@ class YouTubeService:
         auto_captions = metadata.get("automatic_captions", {})
         all_captions = set(list(subtitles.keys()) + list(auto_captions.keys()))
 
+        # Get tags, handle both list and None
+        tags = metadata.get("tags")
+        if tags is None:
+            tags = []
+        elif not isinstance(tags, list):
+            tags = []
+
+        # Get category
+        category = metadata.get("category", "")
+        categories = [category] if category else []
+
         return Video(
             video_id=metadata["id"],
             title=metadata.get("title", "Unknown"),
             description=metadata.get("description", ""),
-            channel_id=metadata.get("channel_id", ""),
-            channel_name=metadata.get("channel", ""),
+            channel_id=metadata.get("channel_id", metadata.get("uploader_id", "")),
+            channel_name=metadata.get("channel", metadata.get("uploader", "")),
             published_at=published_at,
-            duration=metadata.get("duration", 0),
-            view_count=metadata.get("view_count", 0),
-            like_count=metadata.get("like_count", 0),
-            comment_count=metadata.get("comment_count", 0),
+            duration=int(metadata.get("duration", 0) or 0),
+            view_count=int(metadata.get("view_count", 0) or 0),
+            like_count=int(metadata.get("like_count", 0) or 0),
+            comment_count=int(metadata.get("comment_count", 0) or 0),
             thumbnail_url=metadata.get("thumbnail", ""),
             license=metadata.get("license", "standard"),
             privacy_status="public",  # yt-dlp doesn't expose this easily
             availability=metadata.get("availability", "public"),
-            tags=metadata.get("tags", []),
-            categories=[metadata.get("category", "")],
+            tags=tags,
+            categories=categories,
             language=metadata.get("language"),
             captions_available=list(all_captions),
             has_auto_captions=len(auto_captions) > 0,

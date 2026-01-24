@@ -62,8 +62,9 @@ class Archiver:
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
             # Process each video
-            for video_meta in videos_metadata:
+            for i, video_meta in enumerate(videos_metadata, 1):
                 try:
+                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
                     video = self.youtube.metadata_to_video(video_meta)
                     self._process_video(video)
 
@@ -72,7 +73,7 @@ class Archiver:
                     stats["metadata_saved"] += 1
 
                 except Exception as e:
-                    logger.error(f"Failed to process video {video_meta.get('id', 'unknown')}: {e}")
+                    logger.error(f"Failed to process video {video_meta.get('id', 'unknown')}: {e}", exc_info=True)
                     stats["errors"].append(str(e))
 
             # Commit changes
