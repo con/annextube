@@ -117,10 +117,10 @@ annextube backup
 - [X] T007 Create JSON Schema for data models in annextube/schema/models.json
 - [X] T008 [P] Implement logging configuration in annextube/lib/logging_config.py (structured JSON + human-readable)
 - [X] T009 [P] Implement configuration file handling in annextube/lib/config.py (load from .annextube/config.toml or ~/.config/annextube/config.toml, TOML format like mykrok)
-- [ ] T010 [P] Create base models in annextube/models/ (Channel, Video, Playlist, Caption, Comment, SyncState, FilterConfig per data-model.md)
-- [ ] T011 Implement GitAnnexService in annextube/services/git_annex.py (datasalad wrapper for git-annex operations)
-- [ ] T012 Implement YouTubeService in annextube/services/youtube.py (YouTube Data API v3 + yt-dlp wrapper, lazy download + archive file support, limit=N returns N most recent by upload date)
-- [ ] T013 [P] Create CLI entry point in annextube/cli/__main__.py with global options (--config, --log-level, --json, --quiet, --help, --version)
+- [X] T010 [P] Create base models in annextube/models/ (Channel, Video, Playlist, Caption, Comment, SyncState, FilterConfig per data-model.md)
+- [X] T011 Implement GitAnnexService in annextube/services/git_annex.py (datasalad wrapper for git-annex operations)
+- [X] T012 Implement YouTubeService in annextube/services/youtube.py (YouTube Data API v3 + yt-dlp wrapper, lazy download + archive file support, limit=N returns N most recent by upload date)
+- [X] T013 [P] Create CLI entry point in annextube/cli/__main__.py with global options (--config, --log-level, --json, --quiet, --help, --version)
 - [ ] T014 [P] Setup frontend project structure (frontend/src/ with Svelte components, services, types)
 - [ ] T015 [P] Configure frontend build tooling (Vite for Svelte, TypeScript, hash-based routing for file:// support)
 
@@ -144,10 +144,10 @@ annextube backup
 
 ### Implementation for User Story 1
 
-- [ ] T016 [P] [US1] Implement init command in annextube/cli/init.py (FR-048, initialize git-annex repo in current directory with URL backend)
-- [ ] T016a [US1] Create config template generator in annextube/lib/config.py (generate .annextube/config.toml with sources, components, filters sections)
-- [ ] T017 [P] [US1] Implement backup command in annextube/cli/backup.py (FR-049, load config, backup configured sources or ad-hoc URL, --limit option for testing)
-- [ ] T018 [US1] Implement Archiver service in annextube/services/archiver.py (core archival logic coordinating git-annex + YouTube services, reads config for sources/filters/components)
+- [X] T016 [P] [US1] Implement init command in annextube/cli/init.py (FR-048, initialize git-annex repo in current directory with URL backend)
+- [X] T016a [US1] Create config template generator in annextube/lib/config.py (generate .annextube/config.toml with sources, components, filters sections)
+- [X] T017 [P] [US1] Implement backup command in annextube/cli/backup.py (FR-049, load config, backup configured sources or ad-hoc URL, --limit option for testing)
+- [X] T018 [US1] Implement Archiver service in annextube/services/archiver.py (core archival logic coordinating git-annex + YouTube services, reads config for sources/filters/components)
 - [ ] T019 [US1] Add channel metadata fetching to YouTubeService in annextube/services/youtube.py (use YouTube Data API v3 channels.list)
 - [ ] T020 [US1] Add video listing with limit support to YouTubeService in annextube/services/youtube.py (API search.list, if limit=N return N most recent by publishedAt desc)
 - [ ] T020a [US1] Add video metadata fetching to YouTubeService in annextube/services/youtube.py (API videos.list, NOT yt-dlp for metadata)

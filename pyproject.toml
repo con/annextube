@@ -28,6 +28,7 @@ dependencies = [
     "google-auth-httplib2>=0.2.0",
     "google-auth-oauthlib>=1.0.0",
     "jsonschema>=4.0.0",
+    "click>=8.0.0",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
 

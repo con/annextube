@@ -1,0 +1,148 @@
+"""Backup command for annextube."""
+
+from pathlib import Path
+
+import click
+
+from annextube.lib.config import load_config
+from annextube.lib.logging_config import get_logger
+from annextube.services.archiver import Archiver
+from annextube.services.git_annex import GitAnnexService
+
+logger = get_logger(__name__)
+
+
+@click.command()
+@click.argument("url", required=False)
+@click.option(
+    "--output-dir",
+    type=click.Path(path_type=Path),
+    default=Path.cwd(),
+    help="Archive directory (default: current directory)",
+)
+@click.option("--limit", type=int, help="Limit number of videos (most recent)")
+@click.pass_context
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int):
+    """Backup YouTube channel or playlist.
+
+    If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
+    Otherwise, backs up all enabled sources from configuration file.
+
+    Examples:
+
+        # Backup configured sources
+        annextube backup
+
+        # Backup specific channel (ad-hoc)
+        annextube backup https://www.youtube.com/@RickAstleyYT
+
+        # Backup with limit
+        annextube backup --limit 10
+    """
+    logger.info("Starting backup operation")
+
+    # Check if this is a git-annex repo
+    git_annex = GitAnnexService(output_dir)
+    if not git_annex.is_annex_repo():
+        click.echo(
+            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
+            err=True,
+        )
+        raise click.Abort()
+
+    try:
+        # Load configuration
+        config_path = ctx.obj.get("config_path")
+        config = load_config(config_path)
+
+        # Override limit if specified
+        if limit:
+            config.filters.limit = limit
+
+        # Initialize archiver
+        archiver = Archiver(output_dir, config)
+
+        # Determine what to backup
+        if url:
+            # Ad-hoc mode: backup single URL
+            click.echo(f"Backing up: {url}")
+            if config.filters.limit:
+                click.echo(f"Limit: {config.filters.limit} most recent videos")
+
+            stats = archiver.backup_channel(url)
+            _print_stats(stats)
+
+        else:
+            # Config mode: backup all enabled sources
+            enabled_sources = [s for s in config.sources if s.enabled]
+
+            if not enabled_sources:
+                click.echo("No enabled sources found in configuration", err=True)
+                click.echo("Edit .annextube/config.toml to add sources")
+                raise click.Abort()
+
+            click.echo(f"Found {len(enabled_sources)} enabled source(s)")
+            if config.filters.limit:
+                click.echo(f"Limit: {config.filters.limit} videos per source (most recent)")
+            click.echo()
+
+            total_stats = {
+                "sources_processed": 0,
+                "videos_processed": 0,
+                "videos_tracked": 0,
+                "metadata_saved": 0,
+                "errors": [],
+            }
+
+            for i, source in enumerate(enabled_sources, 1):
+                click.echo(f"[{i}/{len(enabled_sources)}] Backing up: {source.url}")
+
+                stats = archiver.backup_channel(source.url)
+                _print_stats(stats, prefix="  ")
+
+                total_stats["sources_processed"] += 1
+                total_stats["videos_processed"] += stats["videos_processed"]
+                total_stats["videos_tracked"] += stats["videos_tracked"]
+                total_stats["metadata_saved"] += stats["metadata_saved"]
+                total_stats["errors"].extend(stats["errors"])
+
+                click.echo()
+
+            # Print total summary
+            click.echo("=" * 60)
+            click.echo("Total Summary:")
+            click.echo(f"  Sources processed: {total_stats['sources_processed']}")
+            click.echo(f"  Videos tracked: {total_stats['videos_tracked']}")
+            click.echo(f"  Metadata files saved: {total_stats['metadata_saved']}")
+
+            if total_stats["errors"]:
+                click.echo(f"  Errors: {len(total_stats['errors'])}")
+
+        click.echo()
+        click.echo("✓ Backup complete!")
+
+    except FileNotFoundError as e:
+        click.echo(f"Error: {e}", err=True)
+        click.echo("Edit .annextube/config.toml to configure sources")
+        raise click.Abort()
+
+    except Exception as e:
+        logger.error(f"Backup failed: {e}")
+        click.echo(f"Error: {e}", err=True)
+        raise click.Abort()
+
+
+def _print_stats(stats: dict, prefix: str = ""):
+    """Print backup statistics.
+
+    Args:
+        stats: Statistics dictionary
+        prefix: Optional prefix for each line
+    """
+    click.echo(f"{prefix}Summary:")
+    click.echo(f"{prefix}  Videos processed: {stats['videos_processed']}")
+    click.echo(f"{prefix}  Videos tracked: {stats['videos_tracked']}")
+    click.echo(f"{prefix}  Metadata saved: {stats['metadata_saved']}")
+
+    if stats["errors"]:
+        click.echo(f"{prefix}  Errors: {len(stats['errors'])}")
