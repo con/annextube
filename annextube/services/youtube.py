@@ -61,41 +61,34 @@ class YouTubeService:
 
         ydl_opts = self._get_ydl_opts(download=False)
 
-        # Add playlist options for channel
+        # Get full metadata directly (simpler for MVP)
         ydl_opts.update(
             {
-                "extract_flat": "in_playlist",  # Get video IDs from playlist
                 "playlistend": limit if limit else None,
             }
         )
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
-                # Extract channel info (this gets the uploads playlist)
+                # Extract channel info (this gets the uploads playlist with full metadata)
                 info = ydl.extract_info(channel_url, download=False)
 
                 if not info:
                     logger.warning(f"No information found for channel: {channel_url}")
                     return []
 
-                # Get entries (videos)
+                # Get entries (videos) - full metadata included
                 entries = info.get("entries", [])
 
                 if limit:
                     entries = entries[:limit]
 
-                # Now get full metadata for each video
-                videos = []
-                for entry in entries:
-                    if not entry:
-                        continue
+                logger.info(f"Found {len(entries)} video(s)")
 
-                    video_url = f"https://www.youtube.com/watch?v={entry['id']}"
-                    video_info = self.get_video_metadata(video_url)
-                    if video_info:
-                        videos.append(video_info)
+                # Filter out None entries
+                videos = [e for e in entries if e is not None]
 
-                logger.info(f"Found {len(videos)} videos")
+                logger.info(f"Successfully fetched metadata for {len(videos)} video(s)")
                 return videos
 
             except Exception as e:
