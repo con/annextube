@@ -174,13 +174,14 @@ class Archiver:
 
         # Track video URL with git-annex
         # Always track URL (even if videos=false), download only if videos=true
-        video_url = self.youtube.extract_video_url(video.video_id)
+        # Use the YouTube watch URL directly - git-annex will invoke yt-dlp with --no-raw
+        video_url = video.source_url  # YouTube watch URL, not extracted manifest URL
         if video_url:
             # Use configurable filename
             video_file = video_dir / self.config.organization.video_filename
             try:
                 # Track URL without downloading (--fast --relaxed --no-raw)
-                # --no-raw ensures yt-dlp is used instead of downloading raw HTML
+                # --no-raw tells git-annex to use yt-dlp to resolve the YouTube URL
                 self.git_annex.addurl(
                     url=video_url, file_path=video_file, relaxed=True, fast=True, no_raw=True
                 )
