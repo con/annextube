@@ -48,66 +48,142 @@ Expected output: `annextube version 1.0.0`
 
 ## Step 2: Create Your First Archive
 
-Initialize a new YouTube archive repository:
+Create a directory and initialize the archive:
 
 ```bash
-annextube create-dataset ~/my-youtube-archive
+mkdir ~/my-youtube-archive
+cd ~/my-youtube-archive
+annextube init
 ```
 
 **What this does**:
-- Creates a new directory at `~/my-youtube-archive`
-- Initializes git repository
+- Initializes git repository in current directory
 - Initializes git-annex with URL backend (for video URLs)
+- Creates `.annextube/config.toml` template with common settings
 - Configures file tracking (.gitattributes):
   - Metadata files (*.json, *.tsv, *.md, *.vtt) → git
   - Media files (*.mp4, *.webm, *.jpg, *.png) → git-annex
 
 **Output**:
 ```
-Initialized YouTube archive repository at: /home/user/my-youtube-archive
+Initialized YouTube archive repository in current directory
 Git-annex backend: URL (for video URLs)
 Tracking configuration:
   - *.json, *.tsv, *.md, *.vtt → git
   - *.mp4, *.webm, *.jpg, *.png → git-annex
+
+Template configuration created: .annextube/config.toml
+Edit this file to configure channels, playlists, and filters.
+
+Next steps:
+  1. Edit .annextube/config.toml to add channels/playlists
+  2. Run: annextube backup
+```
+
+**Directory structure created**:
+```
+my-youtube-archive/
+├── .git/               # Git repository
+├── .git-annex/         # Git-annex metadata
+├── .annextube/         # annextube config
+│   └── config.toml     # Configuration file (EDIT THIS!)
+├── .gitattributes      # File tracking rules
+├── videos/             # Video content (created on first backup)
+├── playlists/          # Playlist content
+└── channels/           # Channel metadata
 ```
 
 ---
 
-## Step 3: Backup Your First Channel
+## Step 2.5: Configure Sources
 
-Let's backup a YouTube channel (metadata only, no video downloads):
+Edit `.annextube/config.toml` to add channels/playlists you want to archive:
 
 ```bash
-annextube backup \
-  --output-dir ~/my-youtube-archive \
-  https://www.youtube.com/@RickAstleyYT
+vim .annextube/config.toml  # or nano, or your favorite editor
+```
+
+**Add your channels** (example config):
+
+```toml
+# YouTube Data API v3 key (REQUIRED)
+# Get from: https://console.cloud.google.com/apis/credentials
+api_key = "YOUR_API_KEY_HERE"
+
+# Quick test configuration (~10 videos)
+[[sources]]
+url = "https://www.youtube.com/@RickAstleyYT"
+type = "channel"
+enabled = true
+
+# HIGH PRIORITY: Liked Videos playlist test case
+# [[sources]]
+# url = "https://www.youtube.com/playlist?list=LL"  # LL = Liked Videos
+# type = "playlist"
+# enabled = true
+
+# Add more sources as needed
+# [[sources]]
+# url = "https://youtube.com/c/datalad"
+# type = "channel"
+# enabled = true
+
+[components]
+videos = false       # Track URLs only (no video downloads)
+metadata = true
+comments = true
+captions = true
+thumbnails = true
+
+[filters]
+limit = 10  # For quick testing: 10 most recent videos by upload date (newest first)
+# date_start = "2024-01-01"  # Uncomment to filter by date
+```
+
+**Save the file** and you're ready to backup!
+
+---
+
+## Step 3: Backup Configured Channels
+
+Now run the backup command (it will use sources from your config):
+
+```bash
+annextube backup
 ```
 
 **What this does**:
+- Reads `.annextube/config.toml` for sources and settings
 - Fetches channel metadata (name, description, subscriber count)
-- Lists all public videos in the channel
+- Lists videos (limited to 10 if you set `filters.limit = 10`)
 - Downloads video metadata (title, description, views, likes, etc.)
 - Downloads comments for each video
 - Downloads captions in all available languages
 - Downloads thumbnails
-- Tracks video URLs (but doesn't download video files)
+- Tracks video URLs with git-annex (--relaxed mode: URL-only, no video file download)
 
-**Progress output**:
+**Progress output** (with config: limit = 10):
 ```
-Backing up channel: Rick Astley (UCuAXFkgsw1L7xaCfnd5JJOw)
-  Videos found: 42
-  Playlists found: 5
+Loading config: .annextube/config.toml
+Found 1 enabled source
 
-Progress: [████████████████████] 42/42 videos (100%)
+Backing up [1/1]: https://www.youtube.com/@RickAstleyYT
+  Channel: Rick Astley (UCuAXFkgsw1L7xaCfnd5JJOw)
+  Videos found: 42 (limiting to 10 via config.filters.limit)
 
-Summary:
-  Videos tracked: 42
-  Videos downloaded: 0 (metadata only)
-  Comments fetched: 1,234
-  Captions downloaded: 84 (2 languages avg)
-  Duration: 2m 34s
+  Progress: [████████████████████] 10/10 videos (100%)
 
-Repository updated: /home/user/my-youtube-archive
+  Summary:
+    Videos tracked: 10 (URL-only via git-annex --relaxed)
+    Comments fetched: 234
+    Captions downloaded: 20 (2 languages avg)
+
+Total summary:
+  Sources processed: 1
+  Videos tracked: 10
+  Comments fetched: 234
+  Captions downloaded: 20
+  Duration: 45s
 ```
 
 **What you have now**:
@@ -124,26 +200,25 @@ Repository updated: /home/user/my-youtube-archive
 Generate TSV (tab-separated values) files for efficient browsing:
 
 ```bash
-annextube export --output-dir ~/my-youtube-archive
+annextube export
 ```
 
 **Output**:
 ```
 Exporting metadata...
-  Videos: 42 entries → videos.tsv
-  Playlists: 5 entries → playlists.tsv
+  Videos: 10 entries → videos.tsv
+  Playlists: 0 entries → playlists.tsv
 
 Export complete.
 ```
 
 **What this does**:
-- Creates `videos.tsv` (summary of all videos)
+- Creates `videos.tsv` (summary of all videos) in current directory
 - Creates `playlists.tsv` (summary of all playlists)
 - Both files can be opened in Excel, Visidata, DuckDB, etc.
 
 **Example: View with Visidata** (if installed):
 ```bash
-cd ~/my-youtube-archive
 visidata videos.tsv
 ```
 
@@ -154,31 +229,31 @@ visidata videos.tsv
 Generate a web interface to browse videos offline:
 
 ```bash
-annextube generate-web --output-dir ~/my-youtube-archive
+annextube generate-web
 ```
 
 **Output**:
 ```
 Generating web interface...
-  Loading metadata: 42 videos, 5 playlists
+  Loading metadata: 10 videos, 0 playlists
   Building index...
   Generating pages...
   Copying assets...
 
-Web interface generated: /home/user/my-youtube-archive/web/
+Web interface generated: web/
   Open: file:///home/user/my-youtube-archive/web/index.html
 ```
 
 **Open in browser**:
 ```bash
 # Linux
-xdg-open ~/my-youtube-archive/web/index.html
+xdg-open web/index.html
 
 # macOS
-open ~/my-youtube-archive/web/index.html
+open web/index.html
 
 # Windows (WSL)
-explorer.exe $(wslpath -w ~/my-youtube-archive/web/index.html)
+explorer.exe $(wslpath -w web/index.html)
 ```
 
 **Web interface features**:
@@ -197,11 +272,13 @@ Run daily updates to catch new videos and comments:
 
 ### Manual update
 ```bash
-annextube update --output-dir ~/my-youtube-archive
+cd ~/my-youtube-archive
+annextube update
 ```
 
 **What this does**:
-- Checks all tracked channels/playlists for new videos
+- Reads sources from `.annextube/config.toml`
+- Checks all configured channels/playlists for new videos
 - Fetches new comments on existing videos
 - Fetches updated captions
 - Only downloads what's new (efficient)
@@ -211,7 +288,7 @@ annextube update --output-dir ~/my-youtube-archive
 Add to your crontab (`crontab -e`):
 ```bash
 # Update archive daily at 2 AM
-0 2 * * * /usr/bin/annextube update --output-dir ~/my-youtube-archive
+0 2 * * * cd ~/my-youtube-archive && /usr/bin/annextube update
 ```
 
 ### Automatic updates (GitHub Actions)
@@ -224,55 +301,133 @@ See [CI/CD workflow guide](../how-to/setup-ci-workflow.md) for automated updates
 
 ### Download Video Files
 
-By default, annextube only tracks video URLs (metadata-only mode). To download videos:
+By default, annextube only tracks video URLs (metadata-only mode via git-annex --relaxed). To actually download video content, edit your config:
 
-```bash
-annextube backup \
-  --output-dir ~/my-youtube-archive \
-  --download-videos \
-  https://www.youtube.com/@RickAstleyYT
+```toml
+# In .annextube/config.toml
+[components]
+videos = true  # Change to true to download video files
+
+[filters]
+limit = 5  # Limit for testing (videos are large!)
 ```
 
-**Note**: Video files are large! A channel with 100 videos can easily be 50GB+.
+Then run:
+```bash
+annextube backup
+```
+
+**Note**: Video files are large! A channel with 100 videos can easily be 50GB+. Use `limit` for testing.
+
+### Recommended Test Channels
+
+For development and testing, configure these channels in `.annextube/config.toml`:
+
+**Example config with test channels**:
+
+```toml
+# Quick testing (~10 videos)
+[[sources]]
+url = "https://www.youtube.com/@RickAstleyYT"
+type = "channel"
+enabled = true
+
+# Playlist testing (DataLad has many playlists)
+[[sources]]
+url = "https://youtube.com/c/datalad"
+type = "channel"
+enabled = true
+
+# ReproNim
+[[sources]]
+url = "https://www.youtube.com/@repronim"
+type = "channel"
+enabled = true
+
+# Andriy Popyk (see /home/yoh/proj/TrueTube/Andriy_Popyk for prototype reference)
+[[sources]]
+url = "https://www.youtube.com/@apopyk"
+type = "channel"
+enabled = true
+
+# Center for Open Neuroscience
+[[sources]]
+url = "https://www.youtube.com/@centeropenneuro"
+type = "channel"
+enabled = true
+
+[components]
+videos = false  # Track URLs only (no downloads)
+metadata = true
+comments = true
+captions = true
+thumbnails = true
+
+[filters]
+limit = 10  # Limit each source to 10 most recent videos (by upload date) for testing
+```
+
+Then backup all:
+```bash
+annextube backup
+```
 
 ### Apply Filters
 
-Backup only videos matching specific criteria:
+Configure filters in `.annextube/config.toml`:
 
 **Creative Commons only**:
-```bash
-annextube backup \
-  --output-dir ~/my-youtube-archive \
-  --license creativeCommon \
-  https://www.youtube.com/@SomeChannel
+```toml
+[filters]
+license = "creativeCommon"
 ```
 
 **Date range** (2024 videos only):
-```bash
-annextube backup \
-  --output-dir ~/my-youtube-archive \
-  --date-start 2024-01-01 \
-  --date-end 2024-12-31 \
-  https://www.youtube.com/@SomeChannel
+```toml
+[filters]
+date_start = "2024-01-01"
+date_end = "2024-12-31"
 ```
 
 **Skip components** (metadata + thumbnails only, no comments/captions):
+```toml
+[components]
+videos = false
+metadata = true
+comments = false  # Skip comments
+captions = false  # Skip captions
+thumbnails = true
+```
+
+Then backup:
 ```bash
-annextube backup \
-  --output-dir ~/my-youtube-archive \
-  --no-comments \
-  --no-captions \
-  https://www.youtube.com/@SomeChannel
+annextube backup
+```
+
+**Override config with CLI flags** (for one-time use):
+```bash
+annextube backup --license creativeCommon --limit 5
 ```
 
 ### Backup Playlists
 
-Backup a specific playlist:
+Add playlist to config:
 
+```toml
+[[sources]]
+url = "https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
+type = "playlist"
+enabled = true
+```
+
+Then backup:
 ```bash
-annextube backup \
-  --output-dir ~/my-youtube-archive \
-  https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf
+annextube backup
+```
+
+Or backup ad-hoc without config:
+```bash
+annextube backup https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf
 ```
 
 ### Configure git-annex Remotes
@@ -280,6 +435,7 @@ annextube backup \
 Store video files on S3, WebDAV, or other remotes:
 
 ```bash
+# Navigate to archive
 cd ~/my-youtube-archive
 
 # Example: S3 remote
@@ -307,17 +463,17 @@ git annex info
 
 ### View logs (if errors occur)
 ```bash
-annextube backup --log-level debug --output-dir ~/my-youtube-archive <URL>
+annextube backup --log-level debug
 ```
 
 ### Force re-fetch metadata (if something changed)
 ```bash
-annextube update --force --output-dir ~/my-youtube-archive
+annextube update --force
 ```
 
-### Export for analysis (JSON format)
+### Export config for reference
 ```bash
-annextube export --json --output-dir ~/my-youtube-archive > export.json
+cat .annextube/config.toml
 ```
 
 ---

@@ -218,14 +218,22 @@ class GitAnnexService:
         # Use datasalad to initialize git-annex repo
         pass
 
-    def add_url(self, url, file_path, backend='URL'):
+    def add_url(self, url, file_path, backend='URL', relaxed=True):
         # Use datasalad to add URL to git-annex
+        # relaxed=True: track URL without downloading content (--relaxed flag)
+        # This is the default mode for annextube (metadata-only archival)
         pass
 
     def set_metadata(self, file_path, metadata):
         # Use datasalad for git-annex metadata operations
         pass
 ```
+
+**Note on --relaxed mode**:
+- git-annex addurl --relaxed: Tracks URL without verifying/downloading content
+- Default mode for annextube: track video URLs, download metadata/comments/captions only
+- Video content can be fetched later via git-annex get or --download-videos flag
+- Enables efficient metadata-only archival for large channels
 
 ---
 
@@ -288,47 +296,67 @@ class GitAnnexService:
    - Respect YouTube's rate limits (built into yt-dlp)
    - Consider `playlist_items` for filtering (reduce API calls)
 
-**Decision**: Use yt-dlp Python API with lazy download strategy and archive file tracking
+**Decision**: Use YouTube Data API v3 + yt-dlp Python API with lazy download strategy
 
 **Rationale**:
-- Python API provides better control and error handling than CLI
+- **YouTube Data API v3**: For metadata, playlist enumeration, comments (official API, reliable)
+- **yt-dlp Python API**: For video URLs, caption files (handles edge cases, format extraction)
+- **NOT git-annex importfeed**: RSS feeds limited to 15 videos, insufficient for full channels
+- **Prototype reference**: `/home/yoh/proj/TrueTube/Andriy_Popyk/code/` demonstrates working cron-based updates
 - Archive file enables efficient incremental updates (Principle XI: Resource Efficiency)
 - Lazy download aligns with FR-004 and storage efficiency
+
+**Prototype Patterns to Adopt**:
+- Config in `.datalad/config` (we'll use `.annextube/config.toml` for TOML benefits)
+- Filename format: `{upload_date}-{title}.mkv` (date prefix for chronological sorting)
+- Separate caption fetching: `yt-dlp --write-subs --write-auto-subs`
+- Lock file pattern: `flock -n -E 0 .git/update.lck` to prevent concurrent runs
 
 **Implementation pattern**:
 ```python
 # annextube/services/youtube.py
+from googleapiclient.discovery import build
 import yt_dlp
 
 class YouTubeService:
-    """Wrapper around yt-dlp for YouTube operations."""
+    """Wrapper around YouTube Data API v3 + yt-dlp."""
 
-    def __init__(self, archive_file, rate_limit):
+    def __init__(self, api_key, archive_file, rate_limit):
+        self.youtube = build('youtube', 'v3', developerKey=api_key)
         self.archive_file = archive_file
         self.rate_limit = rate_limit
 
     def get_channel_videos(self, channel_url, filters):
-        # Extract channel metadata
+        # Use YouTube Data API v3 to list videos
         # Apply filters (date, license, etc.)
+        # If filters.limit: return N most recent by upload date (newest first)
         # Return video list without downloading
         pass
 
     def get_video_metadata(self, video_id):
-        # Extract full metadata for a video
-        # Download=False (metadata only)
+        # Use YouTube Data API v3 for metadata
+        # Extract: title, description, publishedAt, statistics, etc.
         pass
 
-    def download_video_content(self, video_id, output_path):
-        # Download video file via git-annex addurl
-        # Use yt-dlp to get direct URL, pass to git-annex
+    def get_video_url(self, video_id):
+        # Use yt-dlp to get video URL (for git-annex addurl)
+        # Download=False (URL extraction only)
         pass
 
     def get_comments(self, video_id):
+        # Use YouTube Data API v3 commentThreads.list
         # Extract comments with threading
         pass
 
     def get_captions(self, video_id, output_dir):
-        # Download all available captions
+        # Use yt-dlp --write-subs --write-auto-subs
+        # Download all available captions to VTT
+        pass
+
+    def get_playlist_videos(self, playlist_id, limit=None):
+        # Use YouTube Data API v3 playlistItems.list
+        # Return videos in playlist order (or limit to N most recent)
+        # NOTE: "Liked Videos" is a special playlist type
         pass
 ```
 

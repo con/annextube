@@ -28,10 +28,11 @@ A researcher wants to create a complete archive of a YouTube channel for preserv
 
 **Acceptance Scenarios**:
 
-1. **Given** a YouTube channel URL, **When** user initiates backup with default settings, **Then** system creates repository structure, tracks all public videos from the channel, and stores metadata for each video
+1. **Given** a YouTube channel URL, **When** user initiates backup with default settings, **Then** system creates repository structure, tracks all public videos from the channel (ordered by upload date, newest first), and stores metadata for each video
 2. **Given** a channel with multiple playlists, **When** backup completes, **Then** system organizes videos logically and creates both playlist and video-centric views
-3. **Given** limited disk space, **When** backup is initiated, **Then** system tracks video URLs without downloading content, allowing selective download later
-4. **Given** a video with multiple caption languages, **When** backup runs, **Then** system downloads all available captions as separate files per language
+3. **Given** limited disk space, **When** backup is initiated, **Then** system tracks video URLs without downloading content (via git-annex addurl --relaxed --fast), allowing selective download later
+4. **Given** a video with multiple caption languages, **When** backup runs, **Then** system downloads all available captions as separate VTT files per language (using yt-dlp --write-subs)
+5. **Given** a "Liked Videos" playlist, **When** user initiates backup with proper API credentials, **Then** system archives all liked videos with full metadata (HIGH PRIORITY test case)
 
 ---
 
@@ -353,14 +354,21 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 ## Dependencies
 
 - **git**: Version control system for metadata and repository structure
-- **git-annex**: Large file management and URL backend support
-- **yt-dlp**: YouTube content downloading with metadata extraction
+- **git-annex**: Large file management and URL backend support (git annex addurl --relaxed --fast for URL tracking)
+- **YouTube Data API v3**: Primary method for metadata, playlists, comments (requires API key)
+- **yt-dlp**: Video URL extraction and caption downloading (NOT for metadata - API is preferred)
 - **datasalad**: Core library for efficient git/git-annex command execution (https://hub.datalad.org/datalad/datasalad)
 - **Python**: Runtime for CLI and library implementation (version 3.10+)
+- **google-api-python-client**: For YouTube Data API v3 access
 - **Modern web browser**: For web interface (Chrome, Firefox, Safari, Edge)
-- **YouTube Data API**: For efficient metadata queries (optional, can fallback to scraping)
 - **Hugo**: Static site generator for documentation (with congo theme recommended)
 - **GitHub Pages / Codeberg Pages / Forgejo**: For demo and public archive hosting (optional)
+
+**Prototype Reference**: `/home/yoh/proj/TrueTube/Andriy_Popyk/code/` - Working cron-based backup scripts demonstrating:
+- Direct API usage (not git-annex importfeed - RSS limited to 15 videos)
+- Separate caption fetching workflow
+- Lock file pattern for cron safety
+- Config storage in .datalad/config
 
 ## Out of Scope
 

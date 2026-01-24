@@ -20,12 +20,21 @@ The annextube CLI follows Unix philosophy and Constitution Principle II (Multi-I
 All commands support these global options:
 
 ```
+--config PATH          Configuration file path (default: .annextube/config.toml or ~/.config/annextube/config.toml)
 --log-level LEVEL      Set logging level: debug, info, warning, error (default: info)
 --json                 Output in JSON format instead of human-readable
 --quiet                Suppress non-error output
 --help                 Show help message and exit
 --version              Show version and exit
 ```
+
+**Config File Search Order**:
+1. `--config PATH` if specified
+2. `.annextube/config.toml` in current directory (local dataset config)
+3. `~/.config/annextube/config.toml` (global user config)
+4. Default values
+
+**Working Directory Context**: Commands operate on the current directory's git-annex repository by default. The `.annextube/config.toml` file defines channels, filters, and behavior.
 
 ## Exit Codes
 
@@ -42,17 +51,16 @@ All commands support these global options:
 
 ## Commands
 
-### 1. create-dataset
+### 1. init
 
-Initialize a new YouTube archive repository.
+Initialize a new YouTube archive repository in the current directory.
 
 **Usage**:
 ```bash
-annextube create-dataset [OPTIONS] PATH
+annextube init [OPTIONS]
 ```
 
-**Arguments**:
-- `PATH`: Path to create repository (required)
+**Arguments**: None (operates in current directory)
 
 **Options**:
 ```
@@ -63,21 +71,36 @@ annextube create-dataset [OPTIONS] PATH
 --description TEXT          Repository description
 ```
 
+**What this does**:
+- Initializes git repository in current directory
+- Initializes git-annex with URL backend
+- Creates `.annextube/config.toml` template with common settings
+- Configures .gitattributes for file tracking rules
+- Creates basic directory structure (videos/, playlists/, channels/)
+
 **Output** (human-readable):
 ```
-Initialized YouTube archive repository at: /path/to/repo
+Initialized YouTube archive repository in current directory
 Git-annex backend: URL (for video URLs)
 Tracking configuration:
   - *.json, *.tsv, *.md, *.vtt → git
   - *.mp4, *.webm, *.jpg, *.png → git-annex
+
+Template configuration created: .annextube/config.toml
+Edit this file to configure channels, playlists, and filters.
+
+Next steps:
+  1. Edit .annextube/config.toml to add channels/playlists
+  2. Run: annextube backup
 ```
 
 **Output** (JSON):
 ```json
 {
   "status": "success",
-  "path": "/path/to/repo",
+  "path": ".",
   "git_annex_backend": "URL",
+  "config_file": ".annextube/config.toml",
   "tracking_config": {
     "git": ["*.json", "*.tsv", "*.md", "*.vtt"],
     "annex": ["*.mp4", "*.webm", "*.jpg", "*.png"]
@@ -87,75 +110,192 @@ Tracking configuration:
 
 **Exit codes**:
 - `0`: Repository created successfully
-- `2`: Invalid path or arguments
+- `2`: Directory already initialized (use --force to reinitialize)
 - `4`: Git/git-annex initialization failed
-- `5`: Filesystem error (permissions, exists, etc.)
+- `5`: Filesystem error (permissions, etc.)
+
+**Config Template** (`.annextube/config.toml`):
+```toml
+# annextube configuration
+# Edit this file to configure your archive
+
+# YouTube Data API v3 key (required for metadata, comments, playlists)
+# Get from: https://console.cloud.google.com/apis/credentials
+api_key = "YOUR_API_KEY_HERE"
+
+# Channels to archive (can add multiple)
+[[sources]]
+url = "https://www.youtube.com/@YourChannel"
+type = "channel"  # or "playlist"
+enabled = true
+
+# Example: Liked Videos playlist (HIGH PRIORITY test case)
+# [[sources]]
+# url = "https://www.youtube.com/playlist?list=LL"  # Liked Videos special ID
+# type = "playlist"
+# enabled = true
+
+# Example: Add more sources
+# [[sources]]
+# url = "https://youtube.com/c/datalad"
+# type = "channel"
+# enabled = true
+
+# [[sources]]
+# url = "https://www.youtube.com/playlist?list=PLxxx..."
+# type = "playlist"
+# enabled = true
+
+# What to backup (components)
+[components]
+videos = false       # Download video files (default: track URLs only)
+metadata = true      # Fetch video metadata
+comments = true      # Fetch comments
+captions = true      # Fetch captions
+thumbnails = true    # Download thumbnails
+
+# Filters (optional)
+# date_start = "2024-01-01"
+# date_end = "2024-12-31"
+# license = "creativeCommon"  # or "standard"
+# limit = 10  # For testing: limit to N most recent videos (by upload date, newest first)
+
+# Organization (optional)
+[organization]
+# hierarchy = "videos/{year}/{video_id}/"  # Custom path template
+# use_symlinks = true  # Symlink videos in multiple playlists
+
+# Rate limiting (optional)
+[rate_limit]
+sleep_interval = 1.0  # Seconds between requests
+max_sleep_interval = 5.0
+```
 
 ---
 
 ### 2. backup
 
-Backup a YouTube channel, playlist, or video(s).
+Backup YouTube channels/playlists configured in `.annextube/config.toml`, or a specific URL.
 
 **Usage**:
 ```bash
+# Backup all sources from config
+annextube backup [OPTIONS]
+
+# Backup specific URL (not in config)
 annextube backup [OPTIONS] URL
 ```
 
 **Arguments**:
-- `URL`: YouTube channel, playlist, or video URL (required)
+- `URL`: YouTube channel, playlist, or video URL (optional - if omitted, backs up all enabled sources from config)
 
 **Options**:
 ```
---filter NAME              Apply named filter from .config/filters.json
---date-start DATE          Start date for filtering (ISO 8601)
---date-end DATE            End date for filtering (ISO 8601)
---license TYPE             Filter by license: standard, creativeCommon
---download-videos          Download video files (default: metadata only)
---no-comments              Skip comment fetching
---no-captions              Skip caption fetching
---no-thumbnails            Skip thumbnail fetching
---output-dir PATH          Repository path (default: current directory)
+--source NAME              Backup only specific named source from config
+--date-start DATE          Override date filter from config (ISO 8601)
+--date-end DATE            Override date filter from config (ISO 8601)
+--license TYPE             Override license filter: standard, creativeCommon
+--limit N                  Limit to N most recent videos by upload date (for testing, deterministic ordering)
+--download-videos          Download video files (overrides config)
+--no-download-videos       Track URLs only (overrides config)
+--no-comments              Skip comment fetching (overrides config)
+--no-captions              Skip caption fetching (overrides config)
+--no-thumbnails            Skip thumbnail fetching (overrides config)
 ```
 
-**Output** (human-readable):
+**Behavior**:
+- **With config**: Backs up all enabled sources from `.annextube/config.toml`
+- **With URL**: Backs up specific URL (uses config filters/components as defaults)
+- **Operates in current directory**: Requires git-annex repository (run `annextube init` first)
+
+**Output** (human-readable - backing up from config):
 ```
-Backing up channel: Rick Astley (UCuAXFkgsw1L7xaCfnd5JJOw)
-  Videos found: 42
-  Playlists found: 5
-  Applying filter: date-start=2024-01-01
+Loading config: .annextube/config.toml
+Found 3 enabled sources
 
-Progress: [████████████████████] 42/42 videos (100%)
+Backing up [1/3]: https://www.youtube.com/@RickAstleyYT
+  Channel: Rick Astley (UCuAXFkgsw1L7xaCfnd5JJOw)
+  Videos found: 42 (limiting to 10 via config.filters.limit)
 
-Summary:
-  Videos tracked: 42
-  Videos downloaded: 0 (metadata only)
-  Comments fetched: 1,234
-  Captions downloaded: 84 (2 languages avg)
-  Duration: 2m 34s
+  Progress: [████████████████████] 10/10 videos (100%)
 
-Repository updated: /path/to/repo
+  Summary:
+    Videos tracked: 10 (URL-only via git-annex --relaxed)
+    Comments fetched: 234
+    Captions downloaded: 20 (2 languages avg)
+
+Backing up [2/3]: https://youtube.com/c/datalad
+  Channel: DataLad (UCxxx...)
+  Videos found: 156
+  Playlists found: 8
+
+  Progress: [████████████████████] 156/156 videos (100%)
+
+  Summary:
+    Videos tracked: 156 (URL-only)
+    Comments fetched: 3,421
+    Captions downloaded: 312
+
+Backing up [3/3]: https://www.youtube.com/@repronim
+  Channel: ReproNim (UCyyy...)
+  Videos found: 67
+
+  Progress: [████████████████████] 67/67 videos (100%)
+
+  Summary:
+    Videos tracked: 67 (URL-only)
+    Comments fetched: 892
+    Captions downloaded: 134
+
+Total summary:
+  Sources processed: 3
+  Videos tracked: 233
+  Comments fetched: 4,547
+  Captions downloaded: 466
+  Duration: 8m 23s
 ```
 
-**Output** (JSON):
+**Output** (JSON - backing up from config):
 ```json
 {
   "status": "success",
-  "source": {
-    "type": "channel",
-    "id": "UCuAXFkgsw1L7xaCfnd5JJOw",
-    "name": "Rick Astley",
-    "url": "https://www.youtube.com/channel/UCuAXFkgsw1L7xaCfnd5JJOw"
-  },
+  "config_file": ".annextube/config.toml",
+  "sources_processed": 3,
+  "sources": [
+    {
+      "url": "https://www.youtube.com/@RickAstleyYT",
+      "type": "channel",
+      "id": "UCuAXFkgsw1L7xaCfnd5JJOw",
+      "name": "Rick Astley",
+      "videos_tracked": 10,
+      "comments_fetched": 234,
+      "captions_downloaded": 20
+    },
+    {
+      "url": "https://youtube.com/c/datalad",
+      "type": "channel",
+      "id": "UCxxx...",
+      "name": "DataLad",
+      "videos_tracked": 156,
+      "comments_fetched": 3421,
+      "captions_downloaded": 312
+    },
+    {
+      "url": "https://www.youtube.com/@repronim",
+      "type": "channel",
+      "id": "UCyyy...",
+      "name": "ReproNim",
+      "videos_tracked": 67,
+      "comments_fetched": 892,
+      "captions_downloaded": 134
+    }
+  ],
   "summary": {
-    "videos_found": 42,
-    "videos_tracked": 42,
-    "videos_downloaded": 0,
-    "comments_fetched": 1234,
-    "captions_downloaded": 84,
-    "duration_seconds": 154
-  },
-  "repository_path": "/path/to/repo"
+    "videos_tracked": 233,
+    "comments_fetched": 4547,
+    "captions_downloaded": 466,
+    "duration_seconds": 503
+  }
 }
 ```
 
@@ -170,41 +310,61 @@ Repository updated: /path/to/repo
 
 ### 3. update
 
-Run incremental update on existing archive.
+Run incremental update on existing archive (fetch new videos, comments, captions).
 
 **Usage**:
 ```bash
-annextube update [OPTIONS] [SOURCE]
+# Update all sources from config
+annextube update [OPTIONS]
+
+# Update specific source
+annextube update [OPTIONS] --source NAME
 ```
 
-**Arguments**:
-- `SOURCE`: Channel/playlist URL to update (optional; updates all if omitted)
+**Arguments**: None (operates on current directory)
 
 **Options**:
 ```
---output-dir PATH          Repository path (default: current directory)
+--source NAME              Update only specific named source from config
 --force                    Force re-fetch even if no changes detected
 --force-date DATE          Force update for videos published after DATE
 ```
 
+**Behavior**:
+- Loads sources from `.annextube/config.toml`
+- Checks for new videos published since last sync
+- Fetches updated comments and captions
+- Skips already-processed content via yt-dlp archive file
+
 **Output** (human-readable):
 ```
-Updating archive: /path/to/repo
-  Checking 3 sources for updates...
+Loading config: .annextube/config.toml
+Checking 3 sources for updates...
 
-Channel: Rick Astley
+Source [1/3]: Rick Astley
+  Last sync: 2026-01-20 10:00:00
   New videos: 2
   Updated comments: 5 videos
   Updated captions: 1 video
 
-Progress: [████████████████████] 8/8 items (100%)
+Source [2/3]: DataLad
+  Last sync: 2026-01-20 10:00:00
+  New videos: 0
+  Updated comments: 2 videos
+
+Source [3/3]: ReproNim
+  Last sync: 2026-01-20 10:00:00
+  New videos: 1
+  Updated comments: 1 video
+
+Progress: [████████████████████] 11/11 items (100%)
 
 Summary:
-  New videos: 2
-  Updated metadata: 6 videos
-  New comments: 145
-  Updated captions: 2
-  Duration: 1m 12s
+  Sources checked: 3
+  New videos: 3
+  Updated comments: 8 videos (290 new comments)
+  Updated captions: 1 video
+  Duration: 1m 45s
 ```
 
 **Output** (JSON):
@@ -240,12 +400,17 @@ Export metadata to TSV files.
 annextube export [OPTIONS]
 ```
 
+**Arguments**: None (operates on current directory)
+
 **Options**:
 ```
---output-dir PATH          Repository path (default: current directory)
 --videos-file PATH         Output path for videos.tsv (default: videos.tsv)
 --playlists-file PATH      Output path for playlists.tsv (default: playlists.tsv)
 ```
+
+**Behavior**:
+- Reads all metadata from current repository
+- Generates videos.tsv and playlists.tsv in repository root
 
 **Output** (human-readable):
 ```
@@ -289,12 +454,18 @@ Generate static web interface for browsing archive.
 annextube generate-web [OPTIONS]
 ```
 
+**Arguments**: None (operates on current directory)
+
 **Options**:
 ```
---output-dir PATH          Repository path (default: current directory)
 --web-dir PATH             Web interface output dir (default: web/)
---base-url URL             Base URL for absolute links (optional)
+--base-url URL             Base URL for absolute links (for publishing)
 ```
+
+**Behavior**:
+- Reads metadata from current repository
+- Generates static Svelte-based web UI in web/ directory
+- Works offline via file:// protocol
 
 **Output** (human-readable):
 ```
@@ -402,43 +573,136 @@ Structured logging to stderr:
 
 ## Examples
 
-### Create new archive and backup channel
+### Typical Workflow (Config-Based)
+
+```bash
+# 1. Create archive directory and initialize
+mkdir my-youtube-archive
+cd my-youtube-archive
+annextube init
+
+# 2. Edit config to add sources
+vim .annextube/config.toml
+# Add channels/playlists to [[sources]] sections
+
+# 3. Backup all configured sources
+annextube backup
+
+# 4. Export metadata for browsing
+annextube export
+
+# 5. Generate web interface
+annextube generate-web
+
+# 6. Open in browser
+xdg-open web/index.html  # Linux
+# or: open web/index.html  # macOS
+```
+
+### Quick Test Setup (Single Channel)
+
+```bash
+# Initialize and backup single channel for testing
+mkdir test-archive
+cd test-archive
+annextube init
+
+# Edit .annextube/config.toml:
+#   [[sources]]
+#   url = "https://www.youtube.com/@RickAstleyYT"
+#   type = "channel"
+#
+#   [filters]
+#   limit = 10
+
+annextube backup
+```
+
+### Ad-hoc Backup (Without Config)
+
 ```bash
 # Initialize repository
-annextube create-dataset ~/youtube-archive
+mkdir archive
+cd archive
+annextube init
 
-# Backup channel (metadata only)
-annextube backup --output-dir ~/youtube-archive https://www.youtube.com/@RickAstleyYT
-
-# Export TSV files
-annextube export --output-dir ~/youtube-archive
-
-# Generate web interface
-annextube generate-web --output-dir ~/youtube-archive
+# Backup specific URL directly (uses default config settings)
+annextube backup --limit 10 https://www.youtube.com/@RickAstleyYT
 ```
 
-### Incremental updates
+### Test with Recommended Channels
+
 ```bash
-# Daily cron job
-annextube update --output-dir ~/youtube-archive
+# Initialize once
+mkdir test-archive && cd test-archive
+annextube init
+
+# Edit .annextube/config.toml to add test channels:
+# [[sources]]
+# url = "https://www.youtube.com/@RickAstleyYT"
+# [filters]
+# limit = 10  # Quick testing
+
+# [[sources]]
+# url = "https://youtube.com/c/datalad"  # Playlist testing
+
+# [[sources]]
+# url = "https://www.youtube.com/@repronim"
+
+# [[sources]]
+# url = "https://www.youtube.com/@apopyk"
+
+# [[sources]]
+# url = "https://www.youtube.com/@centeropenneuro"
+
+# Backup all
+annextube backup
+```
+
+### Incremental Updates
+
+```bash
+# Navigate to archive directory
+cd ~/my-youtube-archive
+
+# Daily update (fetch new videos/comments/captions)
+annextube update
 
 # Force re-fetch recent videos
-annextube update --output-dir ~/youtube-archive --force-date 2026-01-20
+annextube update --force-date 2026-01-20
+
+# Daily cron job
+0 2 * * * cd ~/my-youtube-archive && /usr/bin/annextube update
 ```
 
-### Filtered backups
-```bash
-# Creative Commons videos only
-annextube backup --license creativeCommon https://www.youtube.com/@SomeChannel
+### Filtered Backups
 
-# Date range filter
-annextube backup --date-start 2024-01-01 --date-end 2024-12-31 https://www.youtube.com/@SomeChannel
+```bash
+# Set filters in config (.annextube/config.toml):
+# [filters]
+# license = "creativeCommon"
+# date_start = "2024-01-01"
+# date_end = "2024-12-31"
+# limit = 10
+
+# Then backup (uses config filters)
+annextube backup
+
+# Or override config with CLI flags
+annextube backup --license creativeCommon --limit 10
+
+# Ad-hoc URL with filters
+annextube backup --date-start 2024-01-01 https://www.youtube.com/@SomeChannel
 ```
 
-### CI/CD usage (JSON output)
+### CI/CD Usage (JSON Output)
+
 ```bash
+# In GitHub Actions / cron
+cd $ARCHIVE_DIR
+
 # JSON output for parsing
-annextube update --output-dir ~/youtube-archive --json > update-result.json
+annextube update --json > update-result.json
 
 # Check exit code
 if [ $? -eq 0 ]; then
