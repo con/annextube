@@ -23,11 +23,12 @@ def sanitize_filename(text: str) -> str:
         text: Text to sanitize
 
     Returns:
-        Sanitized text safe for filesystem
+        Sanitized text safe for filesystem (uses '-' for word separation)
     """
-    # Replace spaces and special chars with underscores
+    # Replace special chars (except spaces and hyphens)
     text = re.sub(r'[^\w\s-]', '', text)
-    text = re.sub(r'[-\s]+', '_', text)
+    # Replace spaces with hyphens (keep underscores for field separation)
+    text = re.sub(r'[-\s]+', '-', text)
     # Limit length and lowercase
     text = text.lower()[:100]
     return text
@@ -175,11 +176,13 @@ class Archiver:
         # Always track URL (even if videos=false), download only if videos=true
         video_url = self.youtube.extract_video_url(video.video_id)
         if video_url:
-            video_file = video_dir / f"{video.video_id}.mp4"
+            # Use configurable filename
+            video_file = video_dir / self.config.organization.video_filename
             try:
-                # Track URL without downloading (--fast --relaxed)
+                # Track URL without downloading (--fast --relaxed --no-raw)
+                # --no-raw ensures yt-dlp is used instead of downloading raw HTML
                 self.git_annex.addurl(
-                    url=video_url, file_path=video_file, relaxed=True, fast=True
+                    url=video_url, file_path=video_file, relaxed=True, fast=True, no_raw=True
                 )
                 logger.debug(f"Tracked video URL: {video_file}")
 

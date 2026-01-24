@@ -1,6 +1,7 @@
 """YouTube service using yt-dlp for metadata and video operations."""
 
 import json
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -11,6 +12,11 @@ from annextube.lib.logging_config import get_logger
 from annextube.models.video import Video
 
 logger = get_logger(__name__)
+
+# Retry configuration for rate limits
+MAX_RETRIES = 3
+INITIAL_BACKOFF = 5  # seconds
+BACKOFF_MULTIPLIER = 2
 
 
 class YouTubeService:
@@ -23,6 +29,36 @@ class YouTubeService:
             archive_file: Optional path to yt-dlp archive file for tracking
         """
         self.archive_file = archive_file
+
+    def _retry_on_rate_limit(self, func, *args, **kwargs):
+        """Retry function on rate limit errors with exponential backoff.
+
+        Args:
+            func: Function to retry
+            *args: Arguments to pass to function
+            **kwargs: Keyword arguments to pass to function
+
+        Returns:
+            Function result
+
+        Raises:
+            Exception: If all retries exhausted
+        """
+        backoff = INITIAL_BACKOFF
+        for attempt in range(MAX_RETRIES):
+            try:
+                return func(*args, **kwargs)
+            except Exception as e:
+                error_str = str(e)
+                # Check if it's a rate limit error (429)
+                if "429" in error_str or "Too Many Requests" in error_str:
+                    if attempt < MAX_RETRIES - 1:
+                        logger.warning(f"Rate limit hit, retrying in {backoff}s (attempt {attempt + 1}/{MAX_RETRIES})")
+                        time.sleep(backoff)
+                        backoff *= BACKOFF_MULTIPLIER
+                        continue
+                # Not a rate limit error or exhausted retries
+                raise
 
     def _get_ydl_opts(self, download: bool = False) -> Dict[str, Any]:
         """Get yt-dlp options.
@@ -197,20 +233,24 @@ class YouTubeService:
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
+        def _download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([video_url])
 
-                # Find downloaded caption files
-                caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
-                languages = [f.stem.split(".")[-1] for f in caption_files]
+        try:
+            # Retry on rate limits
+            self._retry_on_rate_limit(_download)
 
-                logger.info(f"Downloaded {len(languages)} captions: {languages}")
-                return languages
+            # Find downloaded caption files
+            caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
+            languages = [f.stem.split(".")[-1] for f in caption_files]
 
-            except Exception as e:
-                logger.error(f"Failed to download captions: {e}")
-                return []
+            logger.info(f"Downloaded {len(languages)} captions: {languages}")
+            return languages
+
+        except Exception as e:
+            logger.error(f"Failed to download captions: {e}")
+            return []
 
     def metadata_to_video(self, metadata: Dict[str, Any]) -> Video:
         """Convert yt-dlp metadata to Video model.

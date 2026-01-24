@@ -57,6 +57,7 @@ class OrganizationConfig:
     video_path_pattern: str = "{date}_{video_id}_{sanitized_title}"
     channel_path_pattern: str = "{channel_id}"
     playlist_path_pattern: str = "{playlist_id}"
+    video_filename: str = "video.mkv"  # Filename for video file within video directory
 
 
 @dataclass
@@ -109,6 +110,7 @@ class Config:
             ),
             channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
             playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_id}"),
+            video_filename=organization_data.get("video_filename", "video.mkv"),
         )
 
         return cls(
@@ -217,6 +219,8 @@ video_path_pattern = "{date}_{video_id}_{sanitized_title}"  # Path pattern for v
 
 channel_path_pattern = "{channel_id}"  # Path pattern for channels
 playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists
+
+video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
 
 # Filters for selective archival
 [filters]

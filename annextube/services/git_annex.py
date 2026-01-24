@@ -74,7 +74,7 @@ class GitAnnexService:
         logger.info("Configured .gitattributes for file tracking")
 
     def addurl(
-        self, url: str, file_path: Path, relaxed: bool = True, fast: bool = True
+        self, url: str, file_path: Path, relaxed: bool = True, fast: bool = True, no_raw: bool = True
     ) -> None:
         """Add URL to git-annex without downloading content.
 
@@ -83,6 +83,7 @@ class GitAnnexService:
             file_path: Path where file would be stored
             relaxed: Use --relaxed mode (track URL without verifying)
             fast: Use --fast mode (no content verification)
+            no_raw: Use --no-raw mode (ensure yt-dlp is used, not raw download)
         """
         cmd = ["git", "annex", "addurl", url, "--file", str(file_path)]
 
@@ -90,6 +91,8 @@ class GitAnnexService:
             cmd.append("--relaxed")
         if fast:
             cmd.append("--fast")
+        if no_raw:
+            cmd.append("--no-raw")
 
         logger.debug(f"Adding URL to git-annex: {url} -> {file_path}")
 
