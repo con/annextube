@@ -183,7 +183,7 @@ class Archiver:
                     'video_id': video.video_id,
                     'title': video.title,
                     'channel': video.channel_name,
-                    'published': video.published_at[:10],  # Just date
+                    'published': video.published_at.strftime('%Y-%m-%d'),  # Just date
                     'duration': str(video.duration),
                     'source_url': video.source_url,
                 }
@@ -222,16 +222,8 @@ class Archiver:
             urllib.request.urlretrieve(video.thumbnail_url, thumbnail_path)
             logger.debug(f"Downloaded thumbnail: {thumbnail_path}")
 
-            # Set git-annex metadata for thumbnail
-            try:
-                metadata = {
-                    'video_id': video.video_id,
-                    'title': video.title,
-                    'type': 'thumbnail',
-                }
-                self.git_annex.set_metadata(thumbnail_path, metadata)
-            except Exception as e:
-                logger.warning(f"Failed to set thumbnail metadata: {e}")
+            # Note: Thumbnail metadata could be set after git add, but skipping for now
+            # to avoid complexity with git-annex metadata timing
 
         except Exception as e:
             logger.warning(f"Failed to download thumbnail: {e}")
