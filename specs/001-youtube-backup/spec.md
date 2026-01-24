@@ -5,6 +5,17 @@
 **Status**: Draft
 **Input**: User description: "We would like to backup and keep updating such a backup (with new videos, closed captures, and comments) a collection of videos from YouTube. It might be an entire channel (with some filters on what to include or exclude) with all or selected set of playlists, or a specific playlist, like e.g. liked videos. What to backup (just videos or may be comments etc) should be configurable, and backup solution should be efficient in its detection on what has changed in a given source to fetch updates etc. Filters could also be dates based, or other metadata based (e.g. backup only content under specific licenses like creative commons etc). Underlying backup would be a datalad repository with git-annex, and git-annex would need to have files added via its support of downloads from youtube, so later videos could be re-fetched using yt-dlp (relaxed URL annex backend to be used for them). File tree hierarchy would be configurable to allow for customization, generally would allow to separate out all videos from playlists. Likely to have a folder per youtube video in most of the cases, to keep nearby all relevant to that video data, like closed captions in various languages, metadata dump, comments. git-annex will also have metadata for the video associated with the original file. Also potentially have a top level videos/ folder where to collect all folders per posted video, and then playlists/ folder where per playlist just assemble symlinks to the folders under videos/ so we could scale for the cases where the same video is present in multiple playlists. Specific attention to be payed to updates since comments and closed captions would be updating. Ideally we should plan also for workflows to update automatically generated closed captions for upload back into youtube having them fixed up, so it would not only be a backup but curation platform. Similarly to mykrok project, we would like to establish top level aggregates of summary metadata across videos and playlists which would have most important metadata propagated and summarized at the top level for efficient navigation of the collection. For the web frontend we want a purely client-based software like we did in mykrok with interfaces for filtering based on time range on when videos were released or updated, tags, authors or people associated with them. CLI and library interfaces should allow for logging control to troubleshoot, forcing updates for older dates/videos. Web frontend should provide convenient means to navigate the collection, search, see comments, and potentially integrate with external services to edit closed captions or pass them to LLMs for tune ups. Detailed documentation following the principle https://diataxis.fr/ and having demo served through gh-pages."
 
+## Clarifications
+
+### Session 2026-01-24
+
+- Q: What should be the core dependency for git/git-annex operations? → A: Use datasalad (https://hub.datalad.org/datalad/datasalad) as the core library for efficient git/git-annex command execution, prioritizing its interfaces for external command execution where possible
+- Q: What documentation system should be used? → A: Hugo static site generator with congo theme (https://github.com/jpanther/congo)
+- Q: How should git vs git-annex configuration be managed? → A: Initial configuration specified via create-dataset command options, with persistent rules stored in .gitattributes file
+- Q: How should subdataset structure be supported? → A: Support subdataset creation when path specification contains '//' separator (similar to CON/tinuous pattern, e.g., 'videos/{year}//{month}' creates year-based subdatasets)
+- Q: What CI/CD platforms should be supported? → A: GitHub Actions, Codeberg Actions, and Forgejo instances (e.g., https://codeberg.org/forgejo-aneksajo/forgejo-aneksajo/), with two modes: index-only updates (fetch metadata/comments) and full backup (push content to git-annex remotes)
+- Q: How should git-annex storage be handled in CI? → A: Support configuration of git-annex special remotes (S3, WebDAV, directory, etc.) for automated content storage, allowing content to be pushed to pre-configured remotes while updating index on git hosting
+
 ## User Scenarios & Testing
 
 ### User Story 1 - Initial Channel Archive (Priority: P1)
@@ -194,9 +205,9 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Repository Structure and Organization
 
-- **FR-023**: System MUST create and maintain git-annex repository for content storage
-- **FR-024**: System MUST use git for text metadata and git-annex for binary/large files
-- **FR-025**: System MUST organize video content in configurable hierarchy (by date, by playlist, by channel, custom)
+- **FR-023**: System MUST create and maintain git-annex repository for content storage, with initial configuration option to specify what content types go under git vs git-annex
+- **FR-024**: System MUST use git for text metadata (JSON, TSV, VTT, markdown) and git-annex for binary/large files (videos, thumbnails), configured via .gitattributes file that persists rules for the repository
+- **FR-025**: System MUST organize video content in configurable hierarchy templates (by date, by playlist, by channel, custom), supporting subdataset creation when path specification contains '//' separator (e.g., 'videos/{year}//{month}' creates year-based subdatasets)
 - **FR-026**: System MUST support per-video folder structure containing video file, captions, metadata, comments
 - **FR-027**: System MUST support symlink-based organization for videos in multiple playlists
 - **FR-028**: System MUST store file naming templates in configuration for customization
@@ -228,7 +239,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Command-Line Interface
 
-- **FR-048**: System MUST provide CLI command to initialize new archive repository
+- **FR-048**: System MUST provide CLI command to initialize new archive repository (create-dataset) with options for git/git-annex configuration (what files go under git vs git-annex)
 - **FR-049**: System MUST provide CLI command to backup channel by URL
 - **FR-050**: System MUST provide CLI command to backup playlist by URL
 - **FR-051**: System MUST provide CLI command to run incremental update
@@ -275,6 +286,26 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-080**: System MUST validate downloaded content integrity
 - **FR-081**: System MUST log all errors with sufficient context for troubleshooting
 - **FR-082**: System MUST maintain operation state to support idempotent operations
+
+#### CI/CD and Automation
+
+- **FR-083**: System MUST support running as GitHub Actions workflow for automated updates
+- **FR-084**: System MUST support running on Codeberg Actions and Forgejo instances (e.g., https://codeberg.org/forgejo-aneksajo/forgejo-aneksajo/)
+- **FR-085**: System MUST provide CI workflow modes: (1) index-only updates (fetch metadata/comments without video content), (2) full backup with content push to configured git-annex remotes
+- **FR-086**: System MUST allow configuration of git-annex special remotes (S3, WebDAV, directory, etc.) for automated content storage
+- **FR-087**: System MUST support scheduled CI runs (e.g., daily/weekly) for automatic archive updates
+- **FR-088**: System MUST provide workflow templates for common CI platforms (GitHub Actions, Codeberg Actions, Forgejo)
+- **FR-089**: CI workflows MUST handle authentication via environment variables or secrets management
+- **FR-090**: System MUST support pushing updated index/metadata to git hosting while storing content on separate git-annex remotes
+
+#### Git-Annex Storage Backends
+
+- **FR-091**: System MUST support configuration of multiple git-annex special remotes in repository config
+- **FR-092**: System MUST support standard git-annex special remote types (such as directory, S3, WebDAV, rsync, rclone) but overall be able to just specify which configured remote to use to push to
+- **FR-093**: System MUST allow specifying preferred remotes for content storage and retrieval
+- **FR-094**: System MUST support storing video content on special remotes while maintaining URL keys for re-downloading
+- **FR-095**: System MUST provide commands to verify content availability on configured remotes
+- **FR-096**: System MUST support initializing common special remote configurations via CLI
 
 ### Key Entities
 
@@ -324,12 +355,12 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **git**: Version control system for metadata and repository structure
 - **git-annex**: Large file management and URL backend support
 - **yt-dlp**: YouTube content downloading with metadata extraction
-- **DataLad**: Optional but recommended for reproducible operations
+- **datasalad**: Core library for efficient git/git-annex command execution (https://hub.datalad.org/datalad/datasalad)
 - **Python**: Runtime for CLI and library implementation (version 3.10+)
 - **Modern web browser**: For web interface (Chrome, Firefox, Safari, Edge)
 - **YouTube Data API**: For efficient metadata queries (optional, can fallback to scraping)
-- **MkDocs**: Documentation generation with Material theme
-- **GitHub Pages**: For demo and public archive hosting (optional)
+- **Hugo**: Static site generator for documentation (with congo theme recommended)
+- **GitHub Pages / Codeberg Pages / Forgejo**: For demo and public archive hosting (optional)
 
 ## Out of Scope
 
