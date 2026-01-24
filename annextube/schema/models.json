@@ -1,0 +1,539 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "annextube Data Models",
+  "description": "JSON Schema for annextube YouTube archive data models",
+  "definitions": {
+    "Channel": {
+      "type": "object",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "description": "YouTube channel ID (unique identifier)"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Channel name"
+        },
+        "description": {
+          "type": "string",
+          "description": "Channel description"
+        },
+        "custom_url": {
+          "type": "string",
+          "description": "Custom channel URL (e.g., @username)"
+        },
+        "subscriber_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Subscriber count at last fetch"
+        },
+        "video_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total public videos"
+        },
+        "avatar_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Channel avatar/thumbnail URL"
+        },
+        "banner_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Channel banner URL"
+        },
+        "country": {
+          "type": "string",
+          "description": "Channel country"
+        },
+        "videos": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of video IDs in this channel"
+        },
+        "playlists": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of playlist IDs in this channel"
+        },
+        "last_sync": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 timestamp of last sync"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Channel creation date (ISO 8601)"
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When this metadata was fetched (ISO 8601)"
+        }
+      },
+      "required": ["channel_id", "name", "subscriber_count", "video_count", "avatar_url", "videos", "playlists", "last_sync", "created_at", "fetched_at"]
+    },
+    "Video": {
+      "type": "object",
+      "properties": {
+        "video_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{11}$",
+          "description": "YouTube video ID (unique identifier)"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Video title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Video description"
+        },
+        "channel_id": {
+          "type": "string",
+          "description": "Parent channel ID"
+        },
+        "channel_name": {
+          "type": "string",
+          "description": "Channel name (denormalized for convenience)"
+        },
+        "published_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Publication date (ISO 8601)"
+        },
+        "duration": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Duration in seconds"
+        },
+        "view_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "View count at fetch time"
+        },
+        "like_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Like count at fetch time"
+        },
+        "comment_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Comment count at fetch time"
+        },
+        "thumbnail_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Highest resolution thumbnail URL"
+        },
+        "license": {
+          "type": "string",
+          "enum": ["standard", "creativeCommon"],
+          "description": "YouTube license type"
+        },
+        "privacy_status": {
+          "type": "string",
+          "enum": ["public", "unlisted", "private"],
+          "description": "Privacy status"
+        },
+        "availability": {
+          "type": "string",
+          "enum": ["public", "private", "deleted", "unavailable"],
+          "description": "Current availability"
+        },
+        "tags": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Video tags"
+        },
+        "categories": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Video categories"
+        },
+        "language": {
+          "type": "string",
+          "description": "Primary language (ISO 639-1)"
+        },
+        "captions_available": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "List of caption language codes"
+        },
+        "has_auto_captions": {
+          "type": "boolean",
+          "description": "Whether auto-generated captions exist"
+        },
+        "file_path": {
+          "type": "string",
+          "description": "Path to video file (if downloaded)"
+        },
+        "file_size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "File size in bytes (if downloaded)"
+        },
+        "download_status": {
+          "type": "string",
+          "enum": ["not_downloaded", "tracked", "downloaded", "failed"],
+          "description": "Download status"
+        },
+        "source_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Original YouTube URL"
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When metadata was fetched (ISO 8601)"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When metadata was last updated (ISO 8601)"
+        }
+      },
+      "required": ["video_id", "title", "channel_id", "channel_name", "published_at", "duration", "view_count", "like_count", "comment_count", "thumbnail_url", "license", "privacy_status", "availability", "tags", "categories", "captions_available", "has_auto_captions", "download_status", "source_url", "fetched_at", "updated_at"]
+    },
+    "Playlist": {
+      "type": "object",
+      "properties": {
+        "playlist_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$",
+          "description": "YouTube playlist ID (unique identifier)"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Playlist title"
+        },
+        "description": {
+          "type": "string",
+          "description": "Playlist description"
+        },
+        "channel_id": {
+          "type": "string",
+          "description": "Parent channel ID"
+        },
+        "channel_name": {
+          "type": "string",
+          "description": "Channel name (denormalized)"
+        },
+        "video_ids": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Ordered list of video IDs"
+        },
+        "video_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of videos in playlist"
+        },
+        "total_duration": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total duration in seconds"
+        },
+        "privacy_status": {
+          "type": "string",
+          "enum": ["public", "unlisted", "private"],
+          "description": "Privacy status"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Playlist creation date (ISO 8601)"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last modified date (ISO 8601)"
+        },
+        "last_sync": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last sync timestamp (ISO 8601)"
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When metadata was fetched (ISO 8601)"
+        }
+      },
+      "required": ["playlist_id", "title", "channel_id", "channel_name", "video_ids", "video_count", "total_duration", "privacy_status", "created_at", "updated_at", "last_sync", "fetched_at"]
+    },
+    "Caption": {
+      "type": "object",
+      "properties": {
+        "video_id": {
+          "type": "string",
+          "description": "Parent video ID"
+        },
+        "language_code": {
+          "type": "string",
+          "pattern": "^[a-z]{2}$",
+          "description": "ISO 639-1 language code (e.g., 'en', 'es')"
+        },
+        "language_name": {
+          "type": "string",
+          "description": "Human-readable language name (e.g., 'English')"
+        },
+        "auto_generated": {
+          "type": "boolean",
+          "description": "Whether captions are auto-generated"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["vtt", "srt"],
+          "description": "Caption file format"
+        },
+        "file_path": {
+          "type": "string",
+          "description": "Path to caption file"
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When captions were fetched (ISO 8601)"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When captions were last updated (ISO 8601)"
+        }
+      },
+      "required": ["video_id", "language_code", "language_name", "auto_generated", "format", "file_path", "fetched_at", "updated_at"]
+    },
+    "Comment": {
+      "type": "object",
+      "properties": {
+        "comment_id": {
+          "type": "string",
+          "description": "YouTube comment ID (unique identifier)"
+        },
+        "video_id": {
+          "type": "string",
+          "description": "Parent video ID"
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Comment author name"
+        },
+        "author_channel_id": {
+          "type": "string",
+          "description": "Author's channel ID"
+        },
+        "author_thumbnail": {
+          "type": "string",
+          "format": "uri",
+          "description": "Author profile picture URL"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Comment text content"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Comment creation time (ISO 8601)"
+        },
+        "like_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Like count for this comment"
+        },
+        "parent_id": {
+          "type": "string",
+          "description": "Parent comment ID (for replies)"
+        },
+        "reply_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of replies to this comment"
+        },
+        "replies": {
+          "type": "array",
+          "items": {"$ref": "#/definitions/Comment"},
+          "description": "Nested reply comments (if fetched)"
+        },
+        "fetched_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When comment was fetched (ISO 8601)"
+        }
+      },
+      "required": ["comment_id", "video_id", "author", "author_channel_id", "text", "timestamp", "like_count", "reply_count", "fetched_at"]
+    },
+    "SyncState": {
+      "type": "object",
+      "properties": {
+        "source_url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Channel or playlist URL (unique identifier)"
+        },
+        "source_type": {
+          "type": "string",
+          "enum": ["channel", "playlist"],
+          "description": "Type of source"
+        },
+        "source_id": {
+          "type": "string",
+          "description": "Channel ID or playlist ID"
+        },
+        "last_sync": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last successful sync timestamp (ISO 8601)"
+        },
+        "last_video_id": {
+          "type": "string",
+          "description": "Last processed video ID (for pagination)"
+        },
+        "last_video_published": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Publication date of last video (ISO 8601)"
+        },
+        "error_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Consecutive error count"
+        },
+        "last_error": {
+          "type": "string",
+          "description": "Last error message (if any)"
+        },
+        "next_retry": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Next retry timestamp (ISO 8601, if in error state)"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["active", "error", "paused"],
+          "description": "Sync status"
+        },
+        "videos_tracked": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total videos tracked from this source"
+        },
+        "videos_downloaded": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total videos downloaded from this source"
+        }
+      },
+      "required": ["source_url", "source_type", "source_id", "last_sync", "error_count", "status", "videos_tracked", "videos_downloaded"]
+    },
+    "FilterConfig": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Filter configuration name"
+        },
+        "date_range": {
+          "type": "object",
+          "properties": {
+            "start": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Start date (ISO 8601)"
+            },
+            "end": {
+              "type": "string",
+              "format": "date-time",
+              "description": "End date (ISO 8601)"
+            }
+          }
+        },
+        "license_types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["standard", "creativeCommon"]
+          },
+          "description": "Allowed licenses"
+        },
+        "playlists": {
+          "type": "object",
+          "properties": {
+            "include": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Playlist IDs to include"
+            },
+            "exclude": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Playlist IDs to exclude"
+            }
+          }
+        },
+        "metadata_filters": {
+          "type": "object",
+          "properties": {
+            "min_duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Minimum duration in seconds"
+            },
+            "max_duration": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Maximum duration in seconds"
+            },
+            "min_views": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Minimum view count"
+            },
+            "tags": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "Required tags (OR logic)"
+            }
+          }
+        },
+        "components": {
+          "type": "object",
+          "properties": {
+            "videos": {
+              "type": "boolean",
+              "description": "Download video files"
+            },
+            "metadata": {
+              "type": "boolean",
+              "description": "Fetch metadata"
+            },
+            "comments": {
+              "type": "boolean",
+              "description": "Fetch comments"
+            },
+            "captions": {
+              "type": "boolean",
+              "description": "Fetch captions"
+            },
+            "thumbnails": {
+              "type": "boolean",
+              "description": "Download thumbnails"
+            }
+          },
+          "required": ["videos", "metadata", "comments", "captions", "thumbnails"]
+        }
+      },
+      "required": ["name", "components"]
+    }
+  }
+}

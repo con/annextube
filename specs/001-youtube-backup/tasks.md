@@ -99,12 +99,12 @@ annextube backup
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Create Python package structure (annextube/, tests/, frontend/, docs/)
-- [ ] T002 Initialize pyproject.toml with dependencies (datasalad, yt-dlp, google-api-python-client, Python 3.10+)
-- [ ] T003 [P] Configure ruff for linting and code formatting
-- [ ] T004 [P] Configure mypy for type checking
-- [ ] T005 [P] Setup tox.ini for test automation (pytest environments)
-- [ ] T006 [P] Add LICENSE file (OSI-approved open source license)
+- [X] T001 Create Python package structure (annextube/, tests/, frontend/, docs/)
+- [X] T002 Initialize pyproject.toml with dependencies (datasalad, yt-dlp, google-api-python-client, Python 3.10+)
+- [X] T003 [P] Configure ruff for linting and code formatting
+- [X] T004 [P] Configure mypy for type checking
+- [X] T005 [P] Setup tox.ini for test automation (pytest environments)
+- [X] T006 [P] Add LICENSE file (OSI-approved open source license)
 
 ---
 
@@ -114,9 +114,9 @@ annextube backup
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T007 Create JSON Schema for data models in annextube/schema/models.json
-- [ ] T008 [P] Implement logging configuration in annextube/lib/logging_config.py (structured JSON + human-readable)
-- [ ] T009 [P] Implement configuration file handling in annextube/lib/config.py (load from .annextube/config.toml or ~/.config/annextube/config.toml, TOML format like mykrok)
+- [X] T007 Create JSON Schema for data models in annextube/schema/models.json
+- [X] T008 [P] Implement logging configuration in annextube/lib/logging_config.py (structured JSON + human-readable)
+- [X] T009 [P] Implement configuration file handling in annextube/lib/config.py (load from .annextube/config.toml or ~/.config/annextube/config.toml, TOML format like mykrok)
 - [ ] T010 [P] Create base models in annextube/models/ (Channel, Video, Playlist, Caption, Comment, SyncState, FilterConfig per data-model.md)
 - [ ] T011 Implement GitAnnexService in annextube/services/git_annex.py (datasalad wrapper for git-annex operations)
 - [ ] T012 Implement YouTubeService in annextube/services/youtube.py (YouTube Data API v3 + yt-dlp wrapper, lazy download + archive file support, limit=N returns N most recent by upload date)
