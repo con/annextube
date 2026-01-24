@@ -38,11 +38,31 @@ open web/index.html
 - **Quick Start**: See [specs/001-youtube-backup/quickstart.md](specs/001-youtube-backup/quickstart.md)
 - **API Reference**: See [docs/reference/](docs/content/reference/)
 
-## Requirements
+## System Requirements
 
-- Python 3.10+
-- git-annex 8.0+
-- YouTube Data API v3 key (free from Google Cloud Console)
+### Required
+
+- **Python 3.10+**: Runtime for annextube
+- **git**: Version control
+- **git-annex 8.0+**: Large file management
+- **yt-dlp** (command-line): MUST be in PATH for git-annex --no-raw
+  ```bash
+  sudo pip install yt-dlp
+  # Or download binary to /usr/local/bin
+  ```
+
+### Strongly Recommended
+
+- **ffmpeg**: Video processing and best quality downloads
+  ```bash
+  sudo apt-get install ffmpeg  # Debian/Ubuntu
+  brew install ffmpeg          # macOS
+  ```
+
+### Optional
+
+- **YouTube Data API v3 key**: For API-based metadata (free from Google Cloud Console)
+- **deno or node**: JavaScript runtime for modern YouTube features
 
 ## Development
 

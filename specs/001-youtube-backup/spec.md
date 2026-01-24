@@ -353,12 +353,37 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 ## Dependencies
 
+### System Requirements (must be installed on system)
+
 - **git**: Version control system for metadata and repository structure
-- **git-annex**: Large file management and URL backend support (git annex addurl --relaxed --fast for URL tracking)
-- **YouTube Data API v3**: Primary method for metadata, playlists, comments (requires API key)
-- **yt-dlp**: Video URL extraction and caption downloading (NOT for metadata - API is preferred)
-- **datasalad**: Core library for efficient git/git-annex command execution (https://hub.datalad.org/datalad/datasalad)
+- **git-annex**: Large file management and URL backend support
+  - Uses `git annex addurl --fast --relaxed --no-raw` for video URL tracking
+  - Requires yt-dlp in PATH for --no-raw to work properly
+- **yt-dlp** (command-line tool): REQUIRED in PATH for git-annex --no-raw flag
+  - Used by git-annex to resolve YouTube URLs to actual video URLs
+  - Without it, git-annex downloads raw HTML instead of video URLs
+  - Install: `sudo pip install yt-dlp` or download binary to /usr/local/bin
+  - Both Python package AND command-line tool needed
+- **ffmpeg** (strongly recommended): Video processing and format conversion
+  - Used by yt-dlp for merging audio/video streams (DASH formats)
+  - Enables best quality video downloads
+  - Without it: limited to single-file formats (lower quality)
+  - Install: `sudo apt-get install ffmpeg` (Debian/Ubuntu) or `brew install ffmpeg` (macOS)
+- **JavaScript runtime** (optional): deno or node for modern YouTube features
+  - Improves compatibility with some YouTube videos
+  - Install deno: `curl -fsSL https://deno.land/install.sh | sh`
+
+### Python Requirements
+
 - **Python**: Runtime for CLI and library implementation (version 3.10+)
+- **datasalad**: Core library for efficient git/git-annex command execution (https://hub.datalad.org/datalad/datasalad)
+- **yt-dlp** (Python package): For metadata extraction and caption downloading in Python code
+- **click**: CLI framework
+- **tomli**: TOML parsing (Python <3.11)
+
+### Optional Dependencies
+
+- **YouTube Data API v3**: For using API-based metadata extraction (requires API key)
 - **google-api-python-client**: For YouTube Data API v3 access
 - **Modern web browser**: For web interface (Chrome, Firefox, Safari, Edge)
 - **Hugo**: Static site generator for documentation (with congo theme recommended)
