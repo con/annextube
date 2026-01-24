@@ -1,24 +1,38 @@
 <!--
-Sync Impact Report - Constitution v1.0.0
+Sync Impact Report - Constitution v1.3.0
 ════════════════════════════════════════
-Version Change: Initial → 1.0.0
-Rationale: Initial constitution establishing foundational principles for FOSS multi-interface project
+Version Change: 1.2.0 → 1.3.0
+Rationale: MINOR - Added FOSS principles and resource efficiency requirements
+           Inspired by mykrok constitution review
+           Enhanced CLI requirements with idempotency and exit codes
 
 Modified Principles:
-  - All principles newly defined (initial version)
+  - II. Multi-Interface Exposure → Added CLI idempotency, exit codes, progress indication
+  - Added X. FOSS Principles (new principle) - licensing, privacy, transparency, offline capability
+  - Added XI. Resource Efficiency (new principle) - network, disk, memory, CPU, energy efficiency
 
 Added Sections:
-  - Core Principles (I-VII)
-  - Quality Standards
-  - Contribution & Community
-  - Governance
+  - None (new principles added)
+
+Previous Changes:
+  v1.2.0:
+    - VIII. DRY Principle - No Code Duplication
+    - Code Review Standards → Enhanced with duplication detection
+  v1.1.0:
+    - II. Multi-Interface Exposure → Frontend MVC architecture
+    - IV. Integration Testing → Frontend component testing
+    - IX. Shared Data Schema
+    - Frontend Architecture subsection
 
 Templates Requiring Updates:
-  ⚠ .specify/templates/plan-template.md - pending validation
-  ⚠ .specify/templates/spec-template.md - pending validation
-  ⚠ .specify/templates/tasks-template.md - pending validation
+  ⚠ .specify/templates/plan-template.md - pending validation (FOSS compliance, resource limits)
+  ⚠ .specify/templates/spec-template.md - pending validation (privacy requirements, offline scenarios)
+  ⚠ .specify/templates/tasks-template.md - pending validation (license checks, performance tasks)
 
-Follow-up TODOs: None
+Follow-up TODOs:
+  - Add LICENSE file to repository
+  - Configure license compatibility checking in CI
+  - Add resource profiling to performance tests
 -->
 
 # Annextube Constitution
@@ -47,8 +61,20 @@ CLI text I/O protocol requirements:
 - Output primary results to stdout
 - Output errors and warnings to stderr
 - Support both JSON and human-readable formats
+- **Meaningful exit codes**: 0 for success, non-zero for errors (follow conventions)
+- **Idempotency**: Same command with same inputs produces same result (safe to retry)
+- **Machine-parseable output**: JSON mode for automation integration
+- **Progress indication**: Show progress for long-running operations (when TTY detected)
 
-**Rationale**: Multiple interfaces serve different user needs (automation, integration, human interaction) and make the project accessible to diverse audiences.
+**Frontend UI Architecture (MVC Pattern)**:
+- **Model**: Data structures defined by shared schema (consumed from library output)
+- **View**: UI components rendering data (React, Vue, Svelte, or similar)
+- **Controller**: Frontend logic handling user interactions and state management
+- Frontend MUST operate standalone without backend dependency (client-side rendering)
+- Frontend consumes library output via CLI or direct API calls
+- Separation of concerns: UI components, business logic, and data layer clearly delineated
+
+**Rationale**: Multiple interfaces serve different user needs (automation, integration, human interaction). Clean MVC separation ensures maintainability and testability of frontend components. Frontend independence enables flexible deployment (static hosting, CDN, offline use).
 
 ### III. Test-First Development (NON-NEGOTIABLE)
 
@@ -69,8 +95,14 @@ Integration tests are REQUIRED for:
 - Inter-component communication (CLI ↔ library, library ↔ web UI)
 - Shared schemas and data formats
 - End-to-end user workflows
+- **Frontend components**:
+  - Component integration tests (parent-child component interactions)
+  - State management integration (store/context updates reflecting in UI)
+  - Data schema consumption (frontend correctly parsing library output)
+  - User interaction flows (multi-step workflows through UI)
+  - Browser compatibility testing (if supporting multiple browsers)
 
-**Rationale**: Integration tests ensure components work together correctly in real-world scenarios, catching issues unit tests miss.
+**Rationale**: Integration tests ensure components work together correctly in real-world scenarios, catching issues unit tests miss. Frontend integration tests verify UI components interact correctly with data models and handle user workflows end-to-end.
 
 ### V. Code Efficiency & Conciseness
 
@@ -108,14 +140,162 @@ Breaking changes REQUIRE:
 
 **Rationale**: Predictable versioning builds trust with users and integrators. Clear migration paths enable safe upgrades.
 
+### VIII. DRY Principle - No Code Duplication
+
+**Duplication is evil.** Code MUST NOT contain duplicated logic or functionality:
+
+**Before writing new code**:
+- Introspect existing codebase for similar functionality
+- Search for patterns that solve the same or related problems
+- Identify opportunities to extract common functionality
+- Prefer reusing existing functions over creating new ones
+
+**When duplication is detected**:
+- Extract common functionality into reusable functions/modules
+- Refactor immediately (do not defer "for later")
+- Create utility functions for repeated patterns
+- Use composition and higher-order functions for variations
+- Document extracted functions with clear purpose and examples
+
+**Code review MUST**:
+- Actively check for code duplication (copy-paste, similar logic)
+- Identify opportunities to refactor into reusable components
+- Reject PRs with obvious duplication without justification
+- Suggest existing functions/modules that solve the same problem
+- Require refactoring before approval if duplication detected
+
+**Allowed exceptions** (duplication is acceptable):
+- **Automated generation**: Generated code (summaries, documentation, type definitions from schema)
+- **Build artifacts**: Compiled output, bundled assets, generated types
+- **Test fixtures**: Similar test setup where abstraction reduces readability
+- **Configuration**: Environment-specific configs with overlapping values
+- **Explicit performance**: Inlining for performance (must be justified and measured)
+
+All exceptions MUST be documented with rationale.
+
+**Tools and enforcement**:
+- Use linters to detect code duplication (e.g., `jscpd`, `pylint --duplicate-code`)
+- Enforce maximum duplication threshold in CI (e.g., <3% duplicated code)
+- Regular refactoring sprints to address accumulated duplication
+
+**Rationale**: Code duplication multiplies maintenance burden, bugs, and inconsistencies. Every duplicated line is a potential source of divergence and technical debt. Extracting common functionality makes codebases smaller, more maintainable, and easier for new contributors to understand.
+
+### IX. Shared Data Schema
+
+Data structures MUST be defined in a common schema shared between library and frontend:
+- **Single source of truth**: Schema definition file(s) maintained in library
+- **Format**: JSON Schema, TypeScript interfaces, Protocol Buffers, or language-agnostic format
+- **Validation**: Both library output and frontend input MUST validate against schema
+- **Versioning**: Schema changes follow semantic versioning independently
+- **Documentation**: Auto-generated docs from schema (types, constraints, examples)
+- **Type safety**: Frontend generates types from schema (no manual duplication)
+
+Schema changes REQUIRE:
+- Compatibility testing between library and frontend
+- Migration path if breaking schema changes
+- Clear documentation of added/removed/modified fields
+
+**Rationale**: Shared schema eliminates data contract drift between library and frontend. Automated type generation prevents manual synchronization errors and ensures frontend always consumes valid data structures.
+
+### X. FOSS Principles
+
+The project MUST remain Free and Open Source Software:
+
+**Licensing**:
+- All code licensed under OSI-approved open source license
+- Dependencies MUST use compatible licenses (no proprietary, GPL-compatible)
+- License compatibility MUST be verified in CI
+- Clear LICENSE file in repository root
+- License headers in source files (where applicable)
+
+**Privacy & User Control**:
+- No telemetry or tracking without explicit user consent
+- No data sent to third parties without user knowledge
+- User data stays local unless explicitly configured otherwise
+- Opt-in (not opt-out) for any external communication
+- Clear privacy policy if any data collection occurs
+
+**Transparency & Auditability**:
+- All functionality auditable from source code
+- No obfuscation or hidden behavior
+- Security practices documented openly
+- Dependency supply chain transparent (lock files, SBOMs)
+
+**Offline Capability**:
+- Core functionality MUST work offline (no mandatory cloud dependencies)
+- Graceful degradation when network unavailable
+- Local configuration files (no mandatory remote config)
+- Documentation available offline
+
+**Community Ownership**:
+- Governance documented and transparent
+- Contributor License Agreement (CLA) avoided unless legally necessary
+- Project accepts community contributions
+- Roadmap publicly visible
+
+**Rationale**: FOSS principles ensure user autonomy, trust, and long-term sustainability. Open source projects handling user data or workflows must be fully auditable and respect user freedom.
+
+### XI. Resource Efficiency
+
+All components MUST minimize resource consumption:
+
+**Network Efficiency**:
+- Incremental operations (avoid re-fetching unchanged data)
+- Compression for data transfer
+- API rate limiting and backoff strategies
+- Batch requests where possible
+- Connection reuse and keep-alive
+
+**Disk Efficiency**:
+- Avoid unnecessary file writes
+- Use streaming for large files (no full in-memory loads)
+- Clean up temporary files promptly
+- Efficient storage formats (avoid bloat)
+- Configurable cache size limits
+
+**Memory Efficiency**:
+- Bounded memory usage via streaming and pagination
+- Avoid loading entire datasets into memory
+- Release resources promptly (close file handles, connections)
+- Memory profiling for large-scale operations
+- Configurable memory limits
+
+**CPU Efficiency**:
+- Avoid unnecessary computation
+- Use efficient algorithms (O(n) vs O(n²) matters)
+- Lazy evaluation where appropriate
+- Parallel processing for independent tasks (where beneficial)
+- Profiling for performance-critical paths
+
+**Energy Awareness**:
+- Minimize polling (use event-driven patterns)
+- Avoid busy-waiting loops
+- Efficient data structures
+- Consider environmental impact of compute-intensive operations
+
+**Rationale**: Efficient resource usage enables deployment on resource-constrained environments (edge devices, CI runners, shared hosting), reduces costs, and minimizes environmental impact. Responsible computing practices make the project accessible to more users.
+
 ## Quality Standards
 
 ### Testing Coverage
 
+**Backend/Library Testing**:
 - Unit tests: MUST cover all public APIs and error paths
 - Integration tests: MUST cover component interactions
 - Regression tests: MUST be added for every bug fix
 - Performance tests: SHOULD be added for performance-critical paths
+
+**Frontend Testing**:
+- Component unit tests: MUST cover individual UI components in isolation
+- Integration tests: MUST cover component interactions and state management
+- User workflow tests: MUST cover end-to-end user scenarios (E2E testing)
+- Visual regression tests: SHOULD be added for UI components
+- Accessibility tests: MUST verify WCAG 2.1 AA compliance
+- Schema validation tests: MUST verify frontend correctly consumes library output
+
+**Testing Frameworks**:
+- Backend: pytest, Jest, cargo test, or language-appropriate framework
+- Frontend: Vitest/Jest (unit), Testing Library (integration), Playwright/Cypress (E2E)
 
 ### Documentation Requirements
 
@@ -133,6 +313,51 @@ All changes MUST:
 - Update relevant documentation
 - Be reviewed by at least one maintainer
 - Follow existing code style and patterns
+
+**Duplication Detection (Principle VIII enforcement)**:
+
+Reviewers MUST actively check for:
+1. **Copy-paste code**: Identical or near-identical code blocks
+2. **Similar logic**: Different implementations solving the same problem
+3. **Missed opportunities**: New code duplicating existing functionality
+4. **Refactoring needs**: Existing functions that could be reused
+
+Review checklist:
+- [ ] Search codebase for similar functionality before approving new code
+- [ ] Verify no existing function/module provides the same capability
+- [ ] Check for repeated patterns that could be abstracted
+- [ ] Suggest specific existing code to reuse if found
+- [ ] Require refactoring if duplication detected (no "TODO: refactor later")
+
+**Automated duplication checks**:
+- CI MUST run duplication detection tools
+- CI MUST fail if duplication threshold exceeded (>3% recommended)
+- Reports MUST highlight specific duplicated blocks with line numbers
+
+### Frontend Architecture
+
+**Component Structure**:
+- **Presentational components**: Pure UI rendering (no business logic)
+- **Container components**: Connect presentational components to data/state
+- **Custom hooks**: Reusable logic extraction (React) or composables (Vue)
+- **Services layer**: API calls and data transformation separated from components
+
+**State Management**:
+- Local state for component-specific UI state
+- Shared state for cross-component data (Context, Redux, Vuex, etc.)
+- Derived state computed from source data (no duplication)
+- State updates MUST be predictable and debuggable
+
+**Data Flow**:
+```
+Library Output (JSON/CLI) → Schema Validation → Data Models → State Management → UI Components
+```
+
+**Frontend Independence**:
+- No backend API dependency (operates on library output)
+- Static build deployable to CDN/static hosting
+- Offline-capable where feasible
+- Progressive enhancement (works without JavaScript for core content)
 
 ## Contribution & Community
 
@@ -177,4 +402,4 @@ Constitution amendments REQUIRE:
 
 For agent-specific development instructions, refer to `.claude/CLAUDE.md` (or equivalent guidance files for other AI assistants). These files provide runtime context while the constitution remains tool-agnostic.
 
-**Version**: 1.0.0 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-01-24
+**Version**: 1.3.0 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-01-24
