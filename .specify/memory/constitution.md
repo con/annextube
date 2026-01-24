@@ -1,20 +1,22 @@
 <!--
-Sync Impact Report - Constitution v1.3.0
+Sync Impact Report - Constitution v1.3.1
 ════════════════════════════════════════
-Version Change: 1.2.0 → 1.3.0
-Rationale: MINOR - Added FOSS principles and resource efficiency requirements
-           Inspired by mykrok constitution review
-           Enhanced CLI requirements with idempotency and exit codes
+Version Change: 1.3.0 → 1.3.1
+Rationale: PATCH - Enhanced Resource Efficiency principle with Storage Simplicity requirement
+           Clarified preference for file-based storage over database engines
+           Aligns with mykrok pattern and FOSS offline-first philosophy
 
 Modified Principles:
-  - II. Multi-Interface Exposure → Added CLI idempotency, exit codes, progress indication
-  - Added X. FOSS Principles (new principle) - licensing, privacy, transparency, offline capability
-  - Added XI. Resource Efficiency (new principle) - network, disk, memory, CPU, energy efficiency
-
-Added Sections:
-  - None (new principles added)
+  - XI. Resource Efficiency → Added "Storage Simplicity" subsection
+    * Prefer file-based storage (TSV, JSON, YAML, Markdown) over databases
+    * No database engines required as dependencies (PostgreSQL, MySQL, MongoDB, etc.)
+    * Exception: Only when file-based storage cannot meet performance requirements (must justify)
 
 Previous Changes:
+  v1.3.0:
+    - II. Multi-Interface Exposure → Added CLI idempotency, exit codes, progress indication
+    - Added X. FOSS Principles (new principle) - licensing, privacy, transparency, offline capability
+    - Added XI. Resource Efficiency (new principle) - network, disk, memory, CPU, energy efficiency
   v1.2.0:
     - VIII. DRY Principle - No Code Duplication
     - Code Review Standards → Enhanced with duplication detection
@@ -25,14 +27,15 @@ Previous Changes:
     - Frontend Architecture subsection
 
 Templates Requiring Updates:
-  ⚠ .specify/templates/plan-template.md - pending validation (FOSS compliance, resource limits)
-  ⚠ .specify/templates/spec-template.md - pending validation (privacy requirements, offline scenarios)
+  ⚠ .specify/templates/plan-template.md - pending validation (storage simplicity, FOSS compliance, resource limits)
+  ⚠ .specify/templates/spec-template.md - pending validation (storage approach, privacy requirements, offline scenarios)
   ⚠ .specify/templates/tasks-template.md - pending validation (license checks, performance tasks)
 
 Follow-up TODOs:
   - Add LICENSE file to repository
   - Configure license compatibility checking in CI
   - Add resource profiling to performance tests
+  - Verify all new features use file-based storage (no database dependencies)
 -->
 
 # Annextube Constitution
@@ -273,7 +276,14 @@ All components MUST minimize resource consumption:
 - Efficient data structures
 - Consider environmental impact of compute-intensive operations
 
-**Rationale**: Efficient resource usage enables deployment on resource-constrained environments (edge devices, CI runners, shared hosting), reduces costs, and minimizes environmental impact. Responsible computing practices make the project accessible to more users.
+**Storage Simplicity**:
+- **Prefer file-based storage** over databases for metadata and indexes
+- Use simple formats (TSV, JSON, YAML, Markdown) that are human-readable and version-controllable
+- Database engines (PostgreSQL, MySQL, MongoDB, etc.) MUST NOT be required dependencies
+- Exceptions allowed: When file-based storage demonstrably cannot meet performance requirements (must be justified)
+- Rationale: File-based storage aligns with FOSS principles (git-trackable, transparent, no server dependencies), enables offline operation, simplifies deployment, and reduces resource overhead
+
+**Rationale**: Efficient resource usage enables deployment on resource-constrained environments (edge devices, CI runners, shared hosting), reduces costs, and minimizes environmental impact. Responsible computing practices make the project accessible to more users. File-based storage eliminates infrastructure dependencies and aligns with version control workflows.
 
 ## Quality Standards
 
@@ -402,4 +412,4 @@ Constitution amendments REQUIRE:
 
 For agent-specific development instructions, refer to `.claude/CLAUDE.md` (or equivalent guidance files for other AI assistants). These files provide runtime context while the constitution remains tool-agnostic.
 
-**Version**: 1.3.0 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-01-24
+**Version**: 1.3.1 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-01-24
