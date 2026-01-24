@@ -87,8 +87,16 @@ interface Video {
 ```
 
 **File locations**:
-- Individual metadata: `videos/{video_id}/metadata.json`
+- Individual metadata: `videos/{path_pattern}/metadata.json` where `{path_pattern}` is configurable (default: `{date}_{video_id}_{sanitized_title}`, e.g., `2026-01-23_FE-hM1kRK4Y_why_laplace_transforms_are_so_useful`)
 - Summary TSV: `videos.tsv` (root level)
+
+**Configurable Path Patterns**:
+- `{date}`: Publication date in ISO format (YYYY-MM-DD)
+- `{video_id}`: YouTube video ID (persistent, unique)
+- `{sanitized_title}`: Video title with special characters removed/replaced for filesystem safety
+- `{channel_id}`: Channel ID
+- `{channel_name}`: Sanitized channel name
+- Example pattern: `{date}_{video_id}_{sanitized_title}` → `2026-01-23_FE-hM1kRK4Y_why_laplace_transforms_are_so_useful`
 
 **Validation**:
 - `video_id`: Required, matches regex `^[A-Za-z0-9_-]{11}$` (YouTube video ID format)

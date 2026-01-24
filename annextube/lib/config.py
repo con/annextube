@@ -51,6 +51,15 @@ class FiltersConfig:
 
 
 @dataclass
+class OrganizationConfig:
+    """Configuration for repository organization and file paths."""
+
+    video_path_pattern: str = "{date}_{video_id}_{sanitized_title}"
+    channel_path_pattern: str = "{channel_id}"
+    playlist_path_pattern: str = "{playlist_id}"
+
+
+@dataclass
 class Config:
     """Main configuration for annextube."""
 
@@ -58,6 +67,7 @@ class Config:
     sources: List[SourceConfig] = field(default_factory=list)
     components: ComponentsConfig = field(default_factory=ComponentsConfig)
     filters: FiltersConfig = field(default_factory=FiltersConfig)
+    organization: OrganizationConfig = field(default_factory=OrganizationConfig)
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Config":
@@ -92,11 +102,21 @@ class Config:
             tags=filters_data.get("tags", []),
         )
 
+        organization_data = data.get("organization", {})
+        organization = OrganizationConfig(
+            video_path_pattern=organization_data.get(
+                "video_path_pattern", "{date}_{video_id}_{sanitized_title}"
+            ),
+            channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
+            playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_id}"),
+        )
+
         return cls(
             api_key=data.get("api_key"),
             sources=sources,
             components=components,
             filters=filters,
+            organization=organization,
         )
 
 
@@ -180,6 +200,23 @@ metadata = true      # Fetch video metadata
 comments = true      # Fetch comments
 captions = true      # Fetch captions in all languages
 thumbnails = true    # Download thumbnails
+
+# Repository organization and file paths
+[organization]
+video_path_pattern = "{date}_{video_id}_{sanitized_title}"  # Path pattern for videos
+# Available placeholders:
+#   {date} - Publication date (YYYY-MM-DD)
+#   {video_id} - YouTube video ID
+#   {sanitized_title} - Video title (filesystem-safe)
+#   {channel_id} - Channel ID
+#   {channel_name} - Channel name (sanitized)
+# Examples:
+#   "{video_id}" - Just video ID (compact)
+#   "{date}_{video_id}" - Date + video ID
+#   "{date}_{video_id}_{sanitized_title}" - Full (recommended)
+
+channel_path_pattern = "{channel_id}"  # Path pattern for channels
+playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists
 
 # Filters for selective archival
 [filters]

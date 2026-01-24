@@ -1,6 +1,7 @@
 """Archiver service - core archival logic."""
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -13,6 +14,23 @@ from annextube.services.git_annex import GitAnnexService
 from annextube.services.youtube import YouTubeService
 
 logger = get_logger(__name__)
+
+
+def sanitize_filename(text: str) -> str:
+    """Sanitize text for use in filename.
+
+    Args:
+        text: Text to sanitize
+
+    Returns:
+        Sanitized text safe for filesystem
+    """
+    # Replace spaces and special chars with underscores
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '_', text)
+    # Limit length and lowercase
+    text = text.lower()[:100]
+    return text
 
 
 class Archiver:
@@ -29,6 +47,40 @@ class Archiver:
         self.config = config
         self.git_annex = GitAnnexService(repo_path)
         self.youtube = YouTubeService()
+
+    def _get_video_path(self, video: Video) -> Path:
+        """Generate video directory path from pattern.
+
+        Args:
+            video: Video model instance
+
+        Returns:
+            Path to video directory
+        """
+        pattern = self.config.organization.video_path_pattern
+
+        # Extract date from published_at (ISO 8601 format)
+        try:
+            date_obj = datetime.fromisoformat(video.published_at.replace('Z', '+00:00'))
+            date_str = date_obj.strftime('%Y-%m-%d')
+        except Exception:
+            date_str = 'unknown'
+
+        # Build placeholders
+        placeholders = {
+            'date': date_str,
+            'video_id': video.video_id,
+            'sanitized_title': sanitize_filename(video.title),
+            'channel_id': video.channel_id,
+            'channel_name': sanitize_filename(video.channel_name),
+        }
+
+        # Replace placeholders in pattern
+        path_str = pattern
+        for key, value in placeholders.items():
+            path_str = path_str.replace(f'{{{key}}}', value)
+
+        return self.repo_path / "videos" / path_str
 
     def backup_channel(self, channel_url: str) -> dict:
         """Backup a YouTube channel.
@@ -102,9 +154,10 @@ class Archiver:
         logger.debug(f"Processing video: {video.video_id} - {video.title}")
         caption_count = 0
 
-        # Create video directory
-        video_dir = self.repo_path / "videos" / video.video_id
+        # Create video directory using configurable pattern
+        video_dir = self._get_video_path(video)
         video_dir.mkdir(parents=True, exist_ok=True)
+        logger.debug(f"Video directory: {video_dir}")
 
         # Save metadata
         metadata_path = video_dir / "metadata.json"
@@ -113,18 +166,37 @@ class Archiver:
 
         logger.debug(f"Saved metadata: {metadata_path}")
 
-        # Track video URL (if videos component enabled)
-        if self.config.components.videos:
-            video_url = self.youtube.extract_video_url(video.video_id)
-            if video_url:
-                video_file = video_dir / "video.mp4"
-                try:
-                    self.git_annex.addurl(
-                        url=video_url, file_path=video_file, relaxed=True, fast=True
-                    )
-                    logger.debug(f"Tracked video URL: {video_file}")
-                except Exception as e:
-                    logger.warning(f"Failed to track video URL: {e}")
+        # Track video URL with git-annex
+        # Always track URL (even if videos=false), download only if videos=true
+        video_url = self.youtube.extract_video_url(video.video_id)
+        if video_url:
+            video_file = video_dir / f"{video.video_id}.mp4"
+            try:
+                # Track URL without downloading (--fast --relaxed)
+                self.git_annex.addurl(
+                    url=video_url, file_path=video_file, relaxed=True, fast=True
+                )
+                logger.debug(f"Tracked video URL: {video_file}")
+
+                # Set git-annex metadata for the video file
+                metadata = {
+                    'video_id': video.video_id,
+                    'title': video.title,
+                    'channel': video.channel_name,
+                    'published': video.published_at[:10],  # Just date
+                    'duration': str(video.duration),
+                    'source_url': video.source_url,
+                }
+                self.git_annex.set_metadata(video_file, metadata)
+                logger.debug(f"Set git-annex metadata for: {video_file}")
+
+                # If videos component enabled, download the content
+                if self.config.components.videos:
+                    logger.info(f"Downloading video content: {video_file}")
+                    self.git_annex.get_file(video_file)
+
+            except Exception as e:
+                logger.warning(f"Failed to track video URL: {e}")
 
         # Download thumbnail (if enabled)
         if self.config.components.thumbnails and video.thumbnail_url:
@@ -149,6 +221,17 @@ class Archiver:
             thumbnail_path = video_dir / "thumbnail.jpg"
             urllib.request.urlretrieve(video.thumbnail_url, thumbnail_path)
             logger.debug(f"Downloaded thumbnail: {thumbnail_path}")
+
+            # Set git-annex metadata for thumbnail
+            try:
+                metadata = {
+                    'video_id': video.video_id,
+                    'title': video.title,
+                    'type': 'thumbnail',
+                }
+                self.git_annex.set_metadata(thumbnail_path, metadata)
+            except Exception as e:
+                logger.warning(f"Failed to set thumbnail metadata: {e}")
 
         except Exception as e:
             logger.warning(f"Failed to download thumbnail: {e}")

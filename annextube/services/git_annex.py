@@ -134,3 +134,15 @@ class GitAnnexService:
         git_dir = self.repo_path / ".git"
         annex_dir = git_dir / "annex"
         return git_dir.exists() and annex_dir.exists()
+
+    def set_metadata(self, file_path: Path, metadata: dict[str, str]) -> None:
+        """Set git-annex metadata for a file.
+
+        Args:
+            file_path: Path to file
+            metadata: Dictionary of metadata key-value pairs
+        """
+        for key, value in metadata.items():
+            cmd = ["git", "annex", "metadata", str(file_path), "-s", f"{key}={value}"]
+            logger.debug(f"Setting metadata: {key}={value} for {file_path}")
+            subprocess.run(cmd, cwd=self.repo_path, check=True, capture_output=True)

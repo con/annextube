@@ -211,7 +211,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-025**: System MUST organize video content in configurable hierarchy templates (by date, by playlist, by channel, custom), supporting subdataset creation when path specification contains '//' separator (e.g., 'videos/{year}//{month}' creates year-based subdatasets)
 - **FR-026**: System MUST support per-video folder structure containing video file, captions, metadata, comments
 - **FR-027**: System MUST support symlink-based organization for videos in multiple playlists
-- **FR-028**: System MUST store file naming templates in configuration for customization
+- **FR-028**: System MUST store file naming templates in configuration for customization, supporting patterns like `{date}_{video_id}_{sanitized_title}/` that combine publication date, persistent video ID, and sanitized title
 - **FR-029**: System MUST store video files with source URL references to enable re-downloading from original source
 - **FR-030**: System MUST store metadata for videos including source URL, fetch date, video ID
 
