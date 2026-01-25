@@ -11,6 +11,7 @@ from annextube.lib.logging_config import get_logger
 from annextube.models.channel import Channel
 from annextube.models.playlist import Playlist
 from annextube.models.video import Video
+from annextube.services.export import ExportService
 from annextube.services.git_annex import GitAnnexService
 from annextube.services.youtube import YouTubeService
 
@@ -49,6 +50,7 @@ class Archiver:
         self.config = config
         self.git_annex = GitAnnexService(repo_path)
         self.youtube = YouTubeService()
+        self.export = ExportService(repo_path)
 
     def _get_video_path(self, video: Video) -> Path:
         """Generate video directory path from pattern.
@@ -92,12 +94,16 @@ class Archiver:
     def _get_playlist_path(self, playlist: Playlist) -> Path:
         """Generate playlist directory path from pattern.
 
+        Uses sanitized playlist title for filesystem-friendly browsing.
+
         Args:
             playlist: Playlist model instance
 
         Returns:
             Path to playlist directory
         """
+        # Use sanitized title for filesystem-friendly names
+        # Pattern support kept for backward compatibility
         pattern = self.config.organization.playlist_path_pattern
 
         # Build placeholders
@@ -112,6 +118,10 @@ class Archiver:
         path_str = pattern
         for key, value in placeholders.items():
             path_str = path_str.replace(f'{{{key}}}', value)
+
+        # If still using default {playlist_id}, use sanitized title instead
+        if path_str == playlist.playlist_id:
+            path_str = sanitize_filename(playlist.title)
 
         return self.repo_path / "playlists" / path_str
 
@@ -169,6 +179,14 @@ class Archiver:
 
             logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
 
+            # Generate TSV metadata files
+            try:
+                logger.info("Generating TSV metadata files")
+                self.export.generate_all()
+                self.git_annex.add_and_commit("Update TSV metadata files")
+            except Exception as e:
+                logger.warning(f"Failed to generate TSV files: {e}")
+
         except Exception as e:
             logger.error(f"Channel backup failed: {e}")
             stats["errors"].append(str(e))
@@ -224,12 +242,40 @@ class Archiver:
 
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
-            # Process each video
+            # Get prefix width for ordered symlinks
+            prefix_width = self.config.organization.playlist_prefix_width
+
+            # Process each video and create ordered symlinks
             for i, video_meta in enumerate(videos_metadata, 1):
                 try:
                     logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
                     video = self.youtube.metadata_to_video(video_meta)
+
+                    # Process video (creates video directory with content)
                     caption_count = self._process_video(video)
+
+                    # Create ordered symlink in playlist directory
+                    video_dir = self._get_video_path(video)
+                    if video_dir.exists():
+                        # Create symlink with zero-padded numeric prefix
+                        # Format: {NNNN}-{video_dir_name} -> ../../videos/{video_dir_name}
+                        prefix = f"{i:0{prefix_width}d}-"
+                        symlink_name = f"{prefix}{video_dir.name}"
+                        symlink_path = playlist_dir / symlink_name
+
+                        # Create relative symlink (for repository portability)
+                        # From: playlists/{playlist_name}/{symlink}
+                        # To:   videos/{video_dir_name}
+                        relative_target = Path("..") / ".." / "videos" / video_dir.name
+
+                        # Remove existing symlink if present
+                        if symlink_path.exists() or symlink_path.is_symlink():
+                            symlink_path.unlink()
+
+                        symlink_path.symlink_to(relative_target)
+                        logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
+                    else:
+                        logger.warning(f"Video directory not found, skipping symlink: {video_dir}")
 
                     stats["videos_processed"] += 1
                     stats["videos_tracked"] += 1
@@ -246,6 +292,14 @@ class Archiver:
             )
 
             logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
+
+            # Generate TSV metadata files
+            try:
+                logger.info("Generating TSV metadata files")
+                self.export.generate_all()
+                self.git_annex.add_and_commit("Update TSV metadata files")
+            except Exception as e:
+                logger.warning(f"Failed to generate TSV files: {e}")
 
         except Exception as e:
             logger.error(f"Playlist backup failed: {e}")
