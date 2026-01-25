@@ -128,12 +128,15 @@ class GitAnnexService:
             check=True,
         )
 
-    def add_and_commit(self, message: str, files: Optional[list[Path]] = None) -> None:
+    def add_and_commit(self, message: str, files: Optional[list[Path]] = None) -> bool:
         """Add files and commit changes.
 
         Args:
             message: Commit message
             files: Optional list of specific files to add (None = add all)
+
+        Returns:
+            True if commit was made, False if nothing to commit
         """
         if files:
             for f in files:
@@ -141,9 +144,18 @@ class GitAnnexService:
         else:
             subprocess.run(["git", "add", "."], cwd=self.repo_path, check=True)
 
-        subprocess.run(["git", "commit", "-m", message], cwd=self.repo_path, check=True)
-
-        logger.info(f"Committed changes: {message}")
+        try:
+            subprocess.run(["git", "commit", "-m", message], cwd=self.repo_path, check=True,
+                         capture_output=True, text=True)
+            logger.info(f"Committed changes: {message}")
+            return True
+        except subprocess.CalledProcessError as e:
+            # Check if it's just "nothing to commit"
+            if "nothing to commit" in e.stdout or "nothing to commit" in e.stderr:
+                logger.debug("No changes to commit")
+                return False
+            # Re-raise if it's a real error
+            raise
 
     def is_annex_repo(self) -> bool:
         """Check if directory is a git-annex repository.
