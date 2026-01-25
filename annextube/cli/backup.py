@@ -21,8 +21,13 @@ logger = get_logger(__name__)
     help="Archive directory (default: current directory)",
 )
 @click.option("--limit", type=int, help="Limit number of videos (most recent)")
+@click.option(
+    "--skip-existing",
+    is_flag=True,
+    help="Skip videos that have already been processed (incremental update mode)",
+)
 @click.pass_context
-def backup(ctx: click.Context, url: str, output_dir: Path, limit: int):
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, skip_existing: bool):
     """Backup YouTube channel or playlist.
 
     If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
@@ -60,7 +65,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int):
             config.filters.limit = limit
 
         # Initialize archiver
-        archiver = Archiver(output_dir, config)
+        archiver = Archiver(output_dir, config, skip_existing=skip_existing)
 
         # Determine what to backup
         if url:

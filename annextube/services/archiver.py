@@ -39,17 +39,24 @@ def sanitize_filename(text: str) -> str:
 class Archiver:
     """Core archival logic coordinating git-annex and YouTube services."""
 
-    def __init__(self, repo_path: Path, config: Config):
+    def __init__(self, repo_path: Path, config: Config, skip_existing: bool = False):
         """Initialize Archiver.
 
         Args:
             repo_path: Path to archive repository
             config: Configuration object
+            skip_existing: If True, skip videos that have already been processed
         """
         self.repo_path = repo_path
         self.config = config
+        self.skip_existing = skip_existing
         self.git_annex = GitAnnexService(repo_path)
         self.youtube = YouTubeService()
+
+        # Initialize sync state service
+        from .sync_state import SyncStateService
+        self.sync_state = SyncStateService(repo_path)
+        self.sync_state.load()
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache = None  # Cache for video ID to path mapping
 
@@ -295,6 +302,9 @@ class Archiver:
             except Exception as e:
                 logger.warning(f"Failed to generate TSV files: {e}")
 
+            # Save sync state
+            self.sync_state.save()
+
         except Exception as e:
             logger.error(f"Channel backup failed: {e}")
             stats["errors"].append(str(e))
@@ -410,6 +420,9 @@ class Archiver:
             except Exception as e:
                 logger.warning(f"Failed to generate TSV files: {e}")
 
+            # Save sync state
+            self.sync_state.save()
+
         except Exception as e:
             logger.error(f"Playlist backup failed: {e}")
             stats["errors"].append(str(e))
@@ -427,6 +440,13 @@ class Archiver:
         """
         logger.debug(f"Processing video: {video.video_id} - {video.title}")
         caption_count = 0
+
+        # Check if we should skip this video
+        if self.skip_existing:
+            video_state = self.sync_state.get_video_state(video.video_id)
+            if video_state and video_state.last_metadata_fetch:
+                logger.info(f"Skipping already-processed video: {video.video_id}")
+                return 0
 
         # Calculate expected path using configurable pattern
         expected_path = self._get_video_path(video)
@@ -490,13 +510,26 @@ class Archiver:
             caption_count = self._download_captions(video, video_dir)
 
         # Download comments (if enabled)
+        comments_fetched = False
         if self.config.components.comments_depth > 0:
             comments_path = video_dir / "comments.json"
-            self.youtube.download_comments(
+            comments_fetched = self.youtube.download_comments(
                 video.video_id,
                 comments_path,
                 max_depth=self.config.components.comments_depth
             )
+
+        # Update sync state
+        self.sync_state.update_video_state(
+            video_id=video.video_id,
+            published_at=video.published_at,
+            comment_count=video.comment_count,
+            view_count=video.view_count,
+            like_count=video.like_count,
+            metadata_fetched=True,
+            comments_fetched=comments_fetched,
+            captions_fetched=(caption_count > 0),
+        )
 
         return caption_count
 
