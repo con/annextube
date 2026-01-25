@@ -98,10 +98,11 @@ A power user wants to customize how videos are organized on disk (e.g., by year,
 
 **Acceptance Scenarios**:
 
-1. **Given** configuration for "videos/ + playlists/ with symlinks", **When** backup runs, **Then** videos are stored once under videos/ and playlists contain symlinks
+1. **Given** configuration for "videos/ + playlists/ with symlinks", **When** backup runs, **Then** videos are stored once under videos/ and playlists contain ordered symlinks with numeric prefixes (e.g., `0023-{video_path}`)
 2. **Given** a date-based hierarchy template "videos/{year}/{video_id}/", **When** backup runs, **Then** videos are organized into year folders
-3. **Given** a video in multiple playlists, **When** organized with symlink strategy, **Then** video content exists once with symlinks from each playlist folder
+3. **Given** a video in multiple playlists, **When** organized with symlink strategy, **Then** video content exists once with symlinks from each playlist folder preserving playlist-specific ordering
 4. **Given** custom file naming template, **When** backup runs, **Then** files follow specified naming convention
+5. **Given** playlist with 50 videos, **When** browsing playlists/ directory, **Then** playlist folder uses sanitized name (not ID), contains numbered symlinks in playlist order, and playlists.tsv maps folder name to playlist ID
 
 ---
 
@@ -115,10 +116,11 @@ A data analyst wants to export high-level metadata about all videos and playlist
 
 **Acceptance Scenarios**:
 
-1. **Given** an archive with 100 videos, **When** user runs metadata export, **Then** videos.tsv is created with one row per video containing key fields
-2. **Given** an archive with playlists, **When** export runs, **Then** playlists.tsv is created with playlist-level aggregates
-3. **Given** TSV files exist, **When** user opens in Visidata, **Then** data is properly formatted and filterable
+1. **Given** an archive with 100 videos, **When** user runs metadata export (or backup completes), **Then** videos.tsv is created at top-level with one row per video containing key fields for quick loading by web interface
+2. **Given** an archive with playlists, **When** backup runs, **Then** playlists.tsv is created at top-level mapping sanitized folder names to playlist IDs, titles, and counts
+3. **Given** TSV files exist, **When** user opens in Visidata, **Then** data is properly formatted and filterable (tab-separated, UTF-8 encoded)
 4. **Given** exported TSV, **When** user queries with SQL tool, **Then** metadata is accessible for analysis
+5. **Given** web interface loads, **When** displaying archive overview, **Then** interface reads videos.tsv and playlists.tsv files for fast initial page load without parsing all JSON files
 
 ---
 
@@ -210,7 +212,8 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-024**: System MUST use git for text metadata (JSON, TSV, VTT, markdown) and git-annex for binary/large files (videos, thumbnails), configured via .gitattributes file that persists rules for the repository
 - **FR-025**: System MUST organize video content in configurable hierarchy templates (by date, by playlist, by channel, custom), supporting subdataset creation when path specification contains '//' separator (e.g., 'videos/{year}//{month}' creates year-based subdatasets)
 - **FR-026**: System MUST support per-video folder structure containing video file, captions, metadata, comments
-- **FR-027**: System MUST support symlink-based organization for videos in multiple playlists
+- **FR-027**: System MUST support symlink-based organization for videos in playlists with zero-padded numeric prefixes to preserve playlist order (e.g., `playlists/Select-Lectures/0023-2020-01-10_0VH1Lim8gL8_deep-learning... -> ../../videos/2020-01-10_0VH1Lim8gL8_.../`), where prefix width is configurable (default: 4 digits)
+- **FR-027a**: System MUST use sanitized playlist names for playlist directory names (not playlist IDs), making filesystem browsing immediately informative and user-friendly
 - **FR-028**: System MUST store file naming templates in configuration for customization, supporting patterns like `{date}_{video_id}_{sanitized_title}/` that combine publication date, persistent video ID, and sanitized title
 - **FR-029**: System MUST store video files with source URL references to enable re-downloading from original source
 - **FR-030**: System MUST store metadata for videos including source URL, fetch date, video ID
@@ -219,12 +222,12 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Metadata Aggregation and Export
 
-- **FR-032**: System MUST generate top-level videos.tsv file with summary metadata for all videos
-- **FR-033**: System MUST generate playlists.tsv file with summary metadata for all playlists
-- **FR-034**: System MUST include in videos.tsv: video ID, title, channel, published date, duration, view count, like count, comment count, has captions, file path
-- **FR-035**: System MUST include in playlists.tsv: playlist ID, title, channel, video count, total duration, last updated
+- **FR-032**: System MUST generate top-level videos.tsv file with summary metadata for all videos, enabling fast loading by web interface without parsing individual JSON files
+- **FR-033**: System MUST generate top-level playlists.tsv file mapping sanitized playlist folder names to playlist IDs and metadata, allowing web interface to resolve playlist identities and handle playlist renames
+- **FR-034**: System MUST include in videos.tsv: video ID, title, channel, published date, duration, view count, like count, comment count, has captions, file path (relative to repository root)
+- **FR-035**: System MUST include in playlists.tsv: folder_name (sanitized), playlist_id (YouTube ID), title (original), channel, video_count, total_duration, last_updated, enabling mapping between filesystem structure and YouTube metadata
 - **FR-036**: System MUST regenerate TSV files during updates to reflect current state
-- **FR-037**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB
+- **FR-037**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB (tab-separated, UTF-8 encoded, with header row)
 
 #### Web Interface
 
@@ -276,6 +279,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-070**: Configuration MUST support filter specifications
 - **FR-071**: Configuration MUST support organizational hierarchy templates
 - **FR-072**: Configuration MUST support file naming templates
+- **FR-072a**: Configuration MUST support playlist symlink numeric prefix width (default: 4 digits, supporting playlists up to 9999 videos)
 - **FR-073**: Configuration MUST support component selection (what to backup)
 - **FR-074**: Configuration MUST support rate limiting and retry settings
 - **FR-075**: Configuration file containing sensitive data MUST be stored securely and not in plain version control
@@ -319,6 +323,68 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **Comment**: Represents a comment on a video with attributes including comment ID, author, author channel, text, timestamp, like count, parent comment ID (for replies), reply count
 - **SyncState**: Tracks synchronization state with attributes including source URL (channel/playlist), last sync timestamp, last video ID processed, error count, next retry timestamp
 - **FilterConfig**: Defines filtering rules with attributes including date range, license types, playlist inclusion/exclusion, metadata constraints, component selection flags
+
+### Repository Structure
+
+The archive follows a dual-view organizational pattern, optimizing for both storage efficiency (videos stored once) and browsing convenience (playlists with ordered views):
+
+```
+archive/
+├── .git/                          # Git repository
+├── .git/annex/                    # Git-annex object store
+│   └── objects/
+│       └── {backend}/             # URL backend for video URLs
+├── .annextube/
+│   └── config.toml                # Configuration file
+├── .gitattributes                 # File tracking rules (JSON/TSV/VTT→git, videos/images→annex)
+│
+├── videos.tsv                     # Top-level video index (for web interface)
+├── playlists.tsv                  # Top-level playlist index (folder_name → playlist_id mapping)
+│
+├── videos/                        # Canonical video storage (one copy per video)
+│   └── {date}_{video_id}_{sanitized_title}/
+│       ├── video.mkv              # Symlink to git-annex (URL tracked)
+│       ├── metadata.json          # Complete video metadata
+│       ├── thumbnail.jpg          # Video thumbnail
+│       ├── comments.json          # Video comments with threading (if enabled)
+│       ├── captions.tsv           # Caption manifest (language, auto-generated, path, fetched_at)
+│       └── captions/
+│           ├── {video_id}.en.vtt
+│           ├── {video_id}.es.vtt
+│           └── ...
+│
+└── playlists/                     # Playlist-centric views (symlinks to videos/)
+    ├── {sanitized_playlist_name}/
+    │   ├── playlist.json          # Playlist metadata (includes playlist_id)
+    │   ├── {NNNN}-{video_path} -> ../../videos/{video_path}/
+    │   ├── {NNNN}-{video_path} -> ../../videos/{video_path}/
+    │   └── ...
+    └── ...
+
+Example playlist structure:
+playlists/Select-Lectures/
+├── playlist.json                  # Contains playlist_id: "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
+├── 0001-2020-01-10_0VH1Lim8gL8_deep-learning-state-of-the-art-2020 -> ../../videos/2020-01-10_0VH1Lim8gL8_.../
+├── 0002-2023-02-15_O5xeyoRL95U_autonomous-vehicles-lecture -> ../../videos/2023-02-15_O5xeyoRL95U_.../
+└── ...
+
+playlists.tsv format (tab-separated):
+folder_name    playlist_id                        title             channel       video_count  total_duration  last_updated
+Select-Lectures PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf Select Lectures  Lex Fridman   2            5672            2023-02-17T00:00:00
+
+videos.tsv format (tab-separated):
+video_id        title                           channel      published    duration  views   likes  comments  has_captions  file_path
+0VH1Lim8gL8     Deep Learning State of the Art  Lex Fridman  2020-01-10   5261      100000  5000   200       true          videos/2020-01-10_0VH1Lim8gL8_.../
+```
+
+**Key Design Principles**:
+
+1. **Single Video Storage**: Videos stored once under `videos/`, symlinked from playlists
+2. **Playlist Ordering Preserved**: Numeric prefixes (zero-padded) maintain playlist sequence
+3. **Filesystem Browsing**: Sanitized names make playlists immediately navigable
+4. **ID Mapping**: `playlists.tsv` maps folder names to YouTube playlist IDs (handles renames)
+5. **Fast Web Loading**: TSV files enable quick frontend initialization without parsing all JSON
+6. **Git-Annex Efficiency**: Large files (videos, thumbnails) in annex; text files (JSON, TSV, VTT) in git
 
 ## Success Criteria
 

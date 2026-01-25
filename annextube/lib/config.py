@@ -58,6 +58,7 @@ class OrganizationConfig:
     channel_path_pattern: str = "{channel_id}"
     playlist_path_pattern: str = "{playlist_id}"
     video_filename: str = "video.mkv"  # Filename for video file within video directory
+    playlist_prefix_width: int = 4  # Zero-padded width for playlist symlink prefixes (e.g., 0001)
 
 
 @dataclass
@@ -111,6 +112,7 @@ class Config:
             channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
             playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_id}"),
             video_filename=organization_data.get("video_filename", "video.mkv"),
+            playlist_prefix_width=organization_data.get("playlist_prefix_width", 4),
         )
 
         return cls(
@@ -218,9 +220,14 @@ video_path_pattern = "{date}_{video_id}_{sanitized_title}"  # Path pattern for v
 #   "{date}_{video_id}_{sanitized_title}" - Full (recommended)
 
 channel_path_pattern = "{channel_id}"  # Path pattern for channels
-playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists
+playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists (NOTE: currently uses ID, will use sanitized name in future)
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
+
+# Playlist organization
+playlist_prefix_width = 4  # Zero-padding width for playlist symlinks (e.g., 0001-, 0023-)
+                           # Supports playlists up to 10^width - 1 videos
+                           # 4 digits = up to 9999 videos per playlist
 
 # Filters for selective archival
 [filters]
