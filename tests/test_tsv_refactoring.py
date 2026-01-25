@@ -292,10 +292,10 @@ def test_video_path_without_id():
         assert "test_id_123" not in path_str, \
             "Path should not contain video_id by default"
         assert "2020-01-10" in path_str, "Path should contain date"
-        assert "test-video-title" in path_str, "Path should contain sanitized title"
+        assert "Test-Video-Title" in path_str, "Path should contain sanitized title (with preserved casing)"
 
         # Expected format: {date}_{sanitized_title}
-        expected = "2020-01-10_test-video-title"
+        expected = "2020-01-10_Test-Video-Title"
         assert path_str == expected, \
             f"Expected '{expected}', got '{path_str}'"
 
