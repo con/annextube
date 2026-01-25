@@ -34,6 +34,7 @@ class ComponentsConfig:
     comments: bool = True
     captions: bool = True
     thumbnails: bool = True
+    caption_languages: str = ".*"  # Regex pattern for caption languages (default: all)
 
 
 @dataclass
@@ -54,11 +55,12 @@ class FiltersConfig:
 class OrganizationConfig:
     """Configuration for repository organization and file paths."""
 
-    video_path_pattern: str = "{date}_{video_id}_{sanitized_title}"
+    video_path_pattern: str = "{date}_{sanitized_title}"  # Default: no video_id (tracked in TSV)
     channel_path_pattern: str = "{channel_id}"
     playlist_path_pattern: str = "{playlist_id}"
     video_filename: str = "video.mkv"  # Filename for video file within video directory
     playlist_prefix_width: int = 4  # Zero-padded width for playlist symlink prefixes (e.g., 0001)
+    playlist_prefix_separator: str = "_"  # Separator between index and path (underscore, not hyphen)
 
 
 @dataclass
@@ -90,6 +92,7 @@ class Config:
             comments=components_data.get("comments", True),
             captions=components_data.get("captions", True),
             thumbnails=components_data.get("thumbnails", True),
+            caption_languages=components_data.get("caption_languages", ".*"),
         )
 
         filters_data = data.get("filters", {})
@@ -107,12 +110,13 @@ class Config:
         organization_data = data.get("organization", {})
         organization = OrganizationConfig(
             video_path_pattern=organization_data.get(
-                "video_path_pattern", "{date}_{video_id}_{sanitized_title}"
+                "video_path_pattern", "{date}_{sanitized_title}"
             ),
             channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
             playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_id}"),
             video_filename=organization_data.get("video_filename", "video.mkv"),
             playlist_prefix_width=organization_data.get("playlist_prefix_width", 4),
+            playlist_prefix_separator=organization_data.get("playlist_prefix_separator", "_"),
         )
 
         return cls(
@@ -127,6 +131,8 @@ class Config:
 def load_config(config_path: Optional[Path] = None) -> Config:
     """Load configuration from TOML file.
 
+    API key is read from YOUTUBE_API_KEY environment variable, not from config file.
+
     Args:
         config_path: Optional path to config file. If not provided, searches:
             1. .annextube/config.toml (current directory)
@@ -139,6 +145,8 @@ def load_config(config_path: Optional[Path] = None) -> Config:
         FileNotFoundError: If no config file found
         ValueError: If config file is invalid
     """
+    import os
+
     if config_path is None:
         # Search for config file
         local_config = Path.cwd() / ".annextube" / "config.toml"
@@ -161,7 +169,14 @@ def load_config(config_path: Optional[Path] = None) -> Config:
     except Exception as e:
         raise ValueError(f"Failed to parse config file {config_path}: {e}")
 
-    return Config.from_dict(data)
+    config = Config.from_dict(data)
+
+    # Override api_key with environment variable (never store in config!)
+    api_key = os.environ.get('YOUTUBE_API_KEY')
+    if api_key:
+        config.api_key = api_key
+
+    return config
 
 
 def generate_config_template() -> str:
@@ -175,7 +190,11 @@ def generate_config_template() -> str:
 
 # YouTube Data API v3 key (REQUIRED)
 # Get from: https://console.cloud.google.com/apis/credentials
-api_key = "YOUR_API_KEY_HERE"
+# IMPORTANT: Set via environment variable, DO NOT store in this file!
+#
+#   export YOUTUBE_API_KEY="your-api-key-here"
+#
+# Never commit API keys to version control!
 
 # Sources to backup (channels or playlists)
 # Add multiple [[sources]] sections for multiple sources
@@ -201,33 +220,43 @@ enabled = true
 [components]
 videos = false       # Track URLs only (no video downloads) - saves storage
 metadata = true      # Fetch video metadata
-comments = true      # Fetch comments
-captions = true      # Fetch captions in all languages
+comments = true      # Fetch comments (stored as comments.json per video)
+captions = true      # Fetch captions matching language filter
 thumbnails = true    # Download thumbnails
+
+caption_languages = ".*"  # Regex pattern for caption languages to download
+                          # Examples:
+                          #   ".*" - All available languages (default)
+                          #   "en.*" - All English variants (en, en-US, en-GB, etc.)
+                          #   "en|es|fr" - English, Spanish, French only
+                          #   "en-US" - US English only
 
 # Repository organization and file paths
 [organization]
-video_path_pattern = "{date}_{video_id}_{sanitized_title}"  # Path pattern for videos
+video_path_pattern = "{date}_{sanitized_title}"  # Path pattern for videos (video_id tracked in TSV)
 # Available placeholders:
 #   {date} - Publication date (YYYY-MM-DD)
-#   {video_id} - YouTube video ID
-#   {sanitized_title} - Video title (filesystem-safe)
+#   {video_id} - YouTube video ID (optional, tracked in videos.tsv)
+#   {sanitized_title} - Video title (filesystem-safe, hyphens for words)
 #   {channel_id} - Channel ID
 #   {channel_name} - Channel name (sanitized)
 # Examples:
+#   "{date}_{sanitized_title}" - Date + title (default, ID in TSV)
+#   "{date}_{video_id}_{sanitized_title}" - Include ID (legacy)
 #   "{video_id}" - Just video ID (compact)
-#   "{date}_{video_id}" - Date + video ID
-#   "{date}_{video_id}_{sanitized_title}" - Full (recommended)
 
 channel_path_pattern = "{channel_id}"  # Path pattern for channels
-playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists (NOTE: currently uses ID, will use sanitized name in future)
+playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists (uses sanitized name in practice)
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
 
 # Playlist organization
-playlist_prefix_width = 4  # Zero-padding width for playlist symlinks (e.g., 0001-, 0023-)
+playlist_prefix_width = 4  # Zero-padding width for playlist symlinks (e.g., 0001_, 0023_)
                            # Supports playlists up to 10^width - 1 videos
                            # 4 digits = up to 9999 videos per playlist
+
+playlist_prefix_separator = "_"  # Separator between index and path (underscore, not hyphen)
+                                 # Example: 0001_2020-01-10_video-title (not 0001-2020-01-10...)
 
 # Filters for selective archival
 [filters]

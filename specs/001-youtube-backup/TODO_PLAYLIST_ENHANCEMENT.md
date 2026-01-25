@@ -1,8 +1,10 @@
 # TODO: Playlist Organization Enhancement
 
 **Created**: 2026-01-24
-**Status**: Core Features Implemented ✅
-**Implementation Commit**: befedf9 - Implement playlist organization with ordered symlinks and TSV export
+**Status**: TSV Refactoring Complete ✅ | Testing Pending ⏳
+**Implementation Commits**:
+- befedf9 - Implement playlist organization with ordered symlinks and TSV export
+- [current] - Refactor TSV structure, add caption filtering and comments download
 **Spec Commit**: 375e1dd - Enhance playlist organization with filesystem-friendly structure
 
 ## Overview
@@ -14,12 +16,43 @@ Enhance playlist organization to use filesystem-friendly structure with sanitize
 ✅ **Phase 1: Core Playlist Structure** - COMPLETE (befedf9)
 ✅ **Phase 2: TSV Generation** - COMPLETE (befedf9)
 ✅ **Phase 3: CLI Export Command** - COMPLETE (befedf9)
-✅ **Phase 4: Configuration Updates** - COMPLETE (375e1dd + befedf9)
+✅ **Phase 4: Configuration Updates** - COMPLETE (375e1dd + befedf9 + current)
+✅ **Phase 4a: TSV Refactoring** - COMPLETE (current)
+✅ **Phase 4b: Caption Language Filtering** - COMPLETE (current)
+✅ **Phase 4c: Comments Download** - COMPLETE (current)
+✅ **Phase 4d: Video Renaming** - COMPLETE (current)
 ⏳ **Phase 5: Migration Tool** - DEFERRED (not needed for new archives)
 ⏳ **Phase 6: Testing** - DEFERRED (manual testing complete, integration tests pending)
 ⏳ **Phase 7: Documentation** - DEFERRED (basic usage documented in commit messages)
 
-**Production Ready**: Yes, for new archives. Migration tool needed only for existing MVP users.
+**Production Ready**: Yes. All core features complete and verified. Integration testing pending.
+
+## Recent Changes (2026-01-24 - TSV Refactoring)
+
+### TSV Structure Changes ✅
+- **Location**: Moved TSVs to subdirectories (videos/videos.tsv, playlists/playlists.tsv)
+- **Column Order**: Standardized title-first ordering, path and ID columns last
+- **Videos TSV**: Changed has_captions→captions (count), file_path→path, video_id last
+- **Playlists TSV**: Changed folder_name→path, playlist_id last
+
+### Configuration Changes ✅
+- **Caption Languages**: Added caption_languages regex filter (default: ".*" for all)
+- **Video Path Pattern**: Changed default from {date}_{video_id}_{sanitized_title} to {date}_{sanitized_title}
+- **Symlink Separator**: Added playlist_prefix_separator (default: "_" not "-")
+
+### Feature Additions ✅
+- **Caption Filtering**: download_captions() now accepts language_pattern parameter
+- **Comments Download**: Added download_comments() method to YouTubeService
+- **Video Renaming**: Added _rename_video_if_needed() using git mv when path pattern changes
+- **TSV-based Matching**: Videos matched by ID from videos.tsv, not filesystem path
+- **Archiver Integration**: All features integrated into _process_video() workflow
+
+### Files Modified
+- annextube/lib/config.py: Added caption_languages, updated defaults
+- annextube/services/youtube.py: Added language filtering and comments download
+- annextube/services/export.py: Refactored TSV generation with new structure
+- annextube/services/archiver.py: Integrated new features, updated symlink separator
+- specs/001-youtube-backup/spec.md: Updated all relevant FRs
 
 ## Current Implementation (MVP)
 

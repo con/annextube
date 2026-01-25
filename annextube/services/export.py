@@ -21,19 +21,19 @@ class ExportService:
         self.repo_path = repo_path
 
     def generate_videos_tsv(self, output_path: Path = None) -> Path:
-        """Generate videos.tsv with summary metadata for all videos.
+        """Generate videos/videos.tsv with summary metadata for all videos.
 
         Scans videos/ directory and extracts key metadata from each
         video's metadata.json file.
 
         Args:
-            output_path: Optional custom output path (default: repo_path/videos.tsv)
+            output_path: Optional custom output path (default: repo_path/videos/videos.tsv)
 
         Returns:
             Path to generated TSV file
         """
         if output_path is None:
-            output_path = self.repo_path / "videos.tsv"
+            output_path = self.repo_path / "videos" / "videos.tsv"
 
         logger.info(f"Generating videos.tsv at {output_path}")
 
@@ -58,9 +58,12 @@ class ExportService:
                 with open(metadata_path, "r") as f:
                     metadata = json.load(f)
 
-                # Extract key fields for TSV
+                # Count available captions
+                captions_available = metadata.get("captions_available", [])
+                caption_count = len(captions_available) if isinstance(captions_available, list) else 0
+
+                # Extract key fields for TSV (title-first column order)
                 video_entry = {
-                    "video_id": metadata.get("video_id", ""),
                     "title": metadata.get("title", ""),
                     "channel": metadata.get("channel_name", ""),
                     "published": metadata.get("published_at", "")[:10] if metadata.get("published_at") else "",
@@ -68,8 +71,9 @@ class ExportService:
                     "views": str(metadata.get("view_count", 0)),
                     "likes": str(metadata.get("like_count", 0)),
                     "comments": str(metadata.get("comment_count", 0)),
-                    "has_captions": str(bool(metadata.get("captions_available"))).lower(),
-                    "file_path": str(video_dir.relative_to(self.repo_path)),
+                    "captions": str(caption_count),  # Count, not boolean
+                    "path": video_dir.name,  # Relative to videos/ directory
+                    "video_id": metadata.get("video_id", ""),
                 }
                 videos.append(video_entry)
 
@@ -83,20 +87,20 @@ class ExportService:
         return output_path
 
     def generate_playlists_tsv(self, output_path: Path = None) -> Path:
-        """Generate playlists.tsv mapping folder names to playlist metadata.
+        """Generate playlists/playlists.tsv mapping folder names to playlist metadata.
 
         Scans playlists/ directory and extracts metadata from each
         playlist's playlist.json file. Maps sanitized folder names to
         YouTube playlist IDs and other metadata.
 
         Args:
-            output_path: Optional custom output path (default: repo_path/playlists.tsv)
+            output_path: Optional custom output path (default: repo_path/playlists/playlists.tsv)
 
         Returns:
             Path to generated TSV file
         """
         if output_path is None:
-            output_path = self.repo_path / "playlists.tsv"
+            output_path = self.repo_path / "playlists" / "playlists.tsv"
 
         logger.info(f"Generating playlists.tsv at {output_path}")
 
@@ -128,15 +132,15 @@ class ExportService:
                 # Calculate total duration from symlinked videos
                 total_duration = self._calculate_playlist_duration(playlist_dir)
 
-                # Extract key fields for TSV
+                # Extract key fields for TSV (title-first column order)
                 playlist_entry = {
-                    "folder_name": playlist_dir.name,
-                    "playlist_id": metadata.get("playlist_id", ""),
                     "title": metadata.get("title", ""),
                     "channel": metadata.get("channel_name", ""),
                     "video_count": str(video_count),
                     "total_duration": str(total_duration),
                     "last_updated": metadata.get("last_modified", metadata.get("updated_at", ""))[:19] if metadata.get("last_modified") or metadata.get("updated_at") else "",
+                    "path": playlist_dir.name,  # Relative folder name
+                    "playlist_id": metadata.get("playlist_id", ""),
                 }
                 playlists.append(playlist_entry)
 
@@ -195,13 +199,12 @@ class ExportService:
             videos: List of video dictionaries
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            # Write header
-            f.write("video_id\ttitle\tchannel\tpublished\tduration\tviews\tlikes\tcomments\thas_captions\tfile_path\n")
+            # Write header (title-first column order, path and video_id last)
+            f.write("title\tchannel\tpublished\tduration\tviews\tlikes\tcomments\tcaptions\tpath\tvideo_id\n")
 
             # Write rows
             for video in videos:
                 f.write(
-                    f"{video['video_id']}\t"
                     f"{video['title']}\t"
                     f"{video['channel']}\t"
                     f"{video['published']}\t"
@@ -209,8 +212,9 @@ class ExportService:
                     f"{video['views']}\t"
                     f"{video['likes']}\t"
                     f"{video['comments']}\t"
-                    f"{video['has_captions']}\t"
-                    f"{video['file_path']}\n"
+                    f"{video['captions']}\t"
+                    f"{video['path']}\t"
+                    f"{video['video_id']}\n"
                 )
 
     def _write_playlists_tsv(self, output_path: Path, playlists: List[Dict[str, str]]) -> None:
@@ -221,19 +225,19 @@ class ExportService:
             playlists: List of playlist dictionaries
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            # Write header
-            f.write("folder_name\tplaylist_id\ttitle\tchannel\tvideo_count\ttotal_duration\tlast_updated\n")
+            # Write header (title-first column order, path and playlist_id last)
+            f.write("title\tchannel\tvideo_count\ttotal_duration\tlast_updated\tpath\tplaylist_id\n")
 
             # Write rows
             for playlist in playlists:
                 f.write(
-                    f"{playlist['folder_name']}\t"
-                    f"{playlist['playlist_id']}\t"
                     f"{playlist['title']}\t"
                     f"{playlist['channel']}\t"
                     f"{playlist['video_count']}\t"
                     f"{playlist['total_duration']}\t"
-                    f"{playlist['last_updated']}\n"
+                    f"{playlist['last_updated']}\t"
+                    f"{playlist['path']}\t"
+                    f"{playlist['playlist_id']}\n"
                 )
 
     def _write_empty_videos_tsv(self, output_path: Path) -> None:

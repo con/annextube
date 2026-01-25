@@ -1,6 +1,7 @@
 """YouTube service using yt-dlp for metadata and video operations."""
 
 import json
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -347,12 +348,18 @@ class YouTubeService:
 
         return video_url  # Fallback
 
-    def download_captions(self, video_id: str, output_dir: Path) -> List[Dict[str, Any]]:
-        """Download captions for a video.
+    def download_captions(
+        self, video_id: str, output_dir: Path, language_pattern: str = ".*"
+    ) -> List[Dict[str, Any]]:
+        """Download captions for a video, filtered by language pattern.
 
         Args:
             video_id: YouTube video ID
             output_dir: Directory to save captions
+            language_pattern: Regex pattern for filtering caption languages
+                             (default: ".*" for all languages)
+                             Examples: "en.*" for English variants,
+                                      "en|es|fr" for specific languages
 
         Returns:
             List of caption metadata dictionaries with keys:
@@ -361,32 +368,72 @@ class YouTubeService:
             - file_path: Path to caption file
             - fetched_at: ISO 8601 timestamp when fetched
         """
-        logger.info(f"Downloading captions for: {video_id}")
+        logger.info(f"Downloading captions for: {video_id} (filter: {language_pattern})")
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "writesubtitles": True,
-            "writeautomaticsub": True,
-            "subtitleslangs": ["all"],
-            "subtitlesformat": "vtt",
-            "outtmpl": str(output_dir / "%(id)s.%(ext)s"),
-        }
-
+        # First, get video info to see available captions
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-        def _download():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Extract info to get subtitle metadata
-                info = ydl.extract_info(video_url, download=True)
-                return info
-
         try:
+            # Get available captions without downloading
+            ydl_opts_info = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+            }
+
+            with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
+                info = ydl.extract_info(video_url, download=False)
+
+            if not info:
+                logger.warning(f"No info available for video: {video_id}")
+                return []
+
+            # Get available subtitles
+            subtitles = info.get('subtitles', {})
+            automatic_captions = info.get('automatic_captions', {})
+            all_available = set(list(subtitles.keys()) + list(automatic_captions.keys()))
+
+            if not all_available:
+                logger.info(f"No captions available for video: {video_id}")
+                return []
+
+            # Filter by language pattern
+            pattern = re.compile(language_pattern)
+            matching_langs = [lang for lang in all_available if pattern.match(lang)]
+
+            if not matching_langs:
+                logger.info(
+                    f"No captions matching pattern '{language_pattern}' "
+                    f"(available: {sorted(all_available)})"
+                )
+                return []
+
+            logger.info(
+                f"Found {len(matching_langs)} matching caption(s): {sorted(matching_langs)} "
+                f"(from {len(all_available)} available)"
+            )
+
+            # Download only matching captions
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "writesubtitles": True,
+                "writeautomaticsub": True,
+                "subtitleslangs": matching_langs,
+                "subtitlesformat": "vtt",
+                "outtmpl": str(output_dir / "%(id)s.%(ext)s"),
+            }
+
+            def _download():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    # Download subtitles
+                    ydl.download([video_url])
+
             # Retry on rate limits
-            info = self._retry_on_rate_limit(_download)
+            self._retry_on_rate_limit(_download)
 
             # Find downloaded caption files
             caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
@@ -394,10 +441,6 @@ class YouTubeService:
             # Build metadata for each caption
             captions_metadata = []
             fetched_at = datetime.now().isoformat()
-
-            # Get subtitle info from video info
-            subtitles = info.get('subtitles', {}) if info else {}
-            automatic_captions = info.get('automatic_captions', {}) if info else {}
 
             for caption_file in caption_files:
                 # Extract language code from filename (video_id.lang.vtt)
@@ -413,12 +456,85 @@ class YouTubeService:
                     'fetched_at': fetched_at
                 })
 
-            logger.info(f"Downloaded {len(captions_metadata)} captions: {[c['language_code'] for c in captions_metadata]}")
+            logger.info(f"Downloaded {len(captions_metadata)} caption(s): {[c['language_code'] for c in captions_metadata]}")
             return captions_metadata
 
         except Exception as e:
             logger.error(f"Failed to download captions: {e}")
             return []
+
+    def download_comments(self, video_id: str, output_path: Path) -> bool:
+        """Download comments for a video.
+
+        Args:
+            video_id: YouTube video ID
+            output_path: Path to save comments JSON file
+
+        Returns:
+            True if successful, False otherwise
+        """
+        logger.info(f"Downloading comments for: {video_id}")
+
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+
+        ydl_opts = {
+            "quiet": True,
+            "no_warnings": True,
+            "skip_download": True,
+            "getcomments": True,
+            "writeinfojson": False,  # Don't write info json
+        }
+
+        def _download():
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                # Extract info with comments
+                info = ydl.extract_info(video_url, download=False)
+                return info
+
+        try:
+            # Retry on rate limits
+            info = self._retry_on_rate_limit(_download)
+
+            if not info:
+                logger.warning(f"No info available for video: {video_id}")
+                return False
+
+            # Extract comments
+            comments = info.get('comments', [])
+
+            if not comments:
+                logger.info(f"No comments available for video: {video_id}")
+                # Still save empty comments file for consistency
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(output_path, 'w', encoding='utf-8') as f:
+                    json.dump([], f, indent=2)
+                return True
+
+            # Format comments for storage
+            formatted_comments = []
+            for comment in comments:
+                formatted_comments.append({
+                    'comment_id': comment.get('id', ''),
+                    'author': comment.get('author', ''),
+                    'author_id': comment.get('author_id', ''),
+                    'text': comment.get('text', ''),
+                    'timestamp': comment.get('timestamp'),
+                    'like_count': comment.get('like_count', 0),
+                    'is_favorited': comment.get('is_favorited', False),
+                    'parent': comment.get('parent', 'root'),  # 'root' or parent comment ID
+                })
+
+            # Save comments to JSON file
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(output_path, 'w', encoding='utf-8') as f:
+                json.dump(formatted_comments, f, indent=2, ensure_ascii=False)
+
+            logger.info(f"Downloaded {len(formatted_comments)} comment(s) to {output_path}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to download comments: {e}")
+            return False
 
     def metadata_to_video(self, metadata: Dict[str, Any]) -> Video:
         """Convert yt-dlp metadata to Video model.

@@ -1,16 +1,26 @@
 <!--
-Sync Impact Report - Constitution v1.3.1
+Sync Impact Report - Constitution v1.4.0
 ════════════════════════════════════════
-Version Change: 1.3.0 → 1.3.1
-Rationale: PATCH - Enhanced Resource Efficiency principle with Storage Simplicity requirement
-           Clarified preference for file-based storage over database engines
-           Aligns with mykrok pattern and FOSS offline-first philosophy
+Version Change: 1.3.1 → 1.4.0
+Rationale: MINOR - Added Data Integrity & Authenticity principle
+           CRITICAL: No fake data injection in production code (tests only)
+           Ensures all archived data is authentic and traceable to source
+           Protects user trust and data archive validity
 
-Modified Principles:
-  - XI. Resource Efficiency → Added "Storage Simplicity" subsection
-    * Prefer file-based storage (TSV, JSON, YAML, Markdown) over databases
-    * No database engines required as dependencies (PostgreSQL, MySQL, MongoDB, etc.)
-    * Exception: Only when file-based storage cannot meet performance requirements (must justify)
+New Principles:
+  - XII. Data Integrity & Authenticity (NEW)
+    * No fake/synthetic/mock data in production code
+    * Mock data ONLY in tests, development fixtures, demo scripts
+    * All data traceable to original source with provenance metadata
+    * Code reviews MUST verify no fake data in production paths
+    * CI SHOULD detect hardcoded data arrays
+
+Previous Changes:
+  v1.3.1:
+    - XI. Resource Efficiency → Added "Storage Simplicity" subsection
+      * Prefer file-based storage (TSV, JSON, YAML, Markdown) over databases
+      * No database engines required as dependencies (PostgreSQL, MySQL, MongoDB, etc.)
+      * Exception: Only when file-based storage cannot meet performance requirements (must justify)
 
 Previous Changes:
   v1.3.0:
@@ -412,4 +422,43 @@ Constitution amendments REQUIRE:
 
 For agent-specific development instructions, refer to `.claude/CLAUDE.md` (or equivalent guidance files for other AI assistants). These files provide runtime context while the constitution remains tool-agnostic.
 
-**Version**: 1.3.1 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-01-24
+### XII. Data Integrity & Authenticity
+
+All data produced by the application MUST be authentic and traceable to its source:
+
+**No Fake Data Injection**:
+- Application code MUST NEVER generate fake, synthetic, or mock data during normal operation
+- All data MUST originate from legitimate sources (APIs, user input, files)
+- Mock/fake data is ONLY permitted in:
+  - Unit tests (explicitly marked with test framework)
+  - Integration tests (test fixtures in test directories)
+  - Development fixtures (clearly separated, documented as non-production)
+  - Demo scripts (explicitly labeled as demonstration/mock data)
+
+**Data Source Transparency**:
+- Every data record MUST be traceable to its original source
+- Metadata MUST indicate data source (API endpoint, file path, user input)
+- Timestamps MUST reflect actual fetch/creation time (not fabricated)
+- Data provenance preserved through transformations
+
+**Production Data Requirements**:
+- Production code paths MUST NEVER contain hardcoded data records
+- Configuration defaults are allowed (but not data records)
+- Error examples in logs/docs are exempt (clearly marked as examples)
+- Seed data for databases MUST be documented as such
+
+**Verification & Detection**:
+- Code reviews MUST verify no fake data injection in production paths
+- Data validation MUST check for realistic values (detect obvious fakes)
+- Automated tests SHOULD detect fake data patterns (placeholder IDs, unrealistic timestamps)
+- CI SHOULD scan for hardcoded data arrays in production code
+
+**Exceptions** (must be explicitly documented):
+- Anonymized/sanitized real data (privacy protection)
+- Aggregated statistics (derived from real data)
+- Default values (not complete records)
+- Cached copies of real data (marked with cache metadata)
+
+**Rationale**: Users trust that archived data is authentic and unmodified. Injecting fake data destroys this trust, corrupts archives, and violates data integrity. Only tests may use fake data, and it must be clearly isolated from production code paths.
+
+**Version**: 1.4.0 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-01-24

@@ -51,6 +51,114 @@ class Archiver:
         self.git_annex = GitAnnexService(repo_path)
         self.youtube = YouTubeService()
         self.export = ExportService(repo_path)
+        self._video_id_to_path_cache = None  # Cache for video ID to path mapping
+
+    def _load_video_paths(self) -> dict:
+        """Load existing video ID to path mapping from videos.tsv.
+
+        Returns:
+            Dictionary mapping video_id to current path
+        """
+        videos_tsv = self.repo_path / "videos" / "videos.tsv"
+        if not videos_tsv.exists():
+            return {}
+
+        video_map = {}
+        try:
+            with open(videos_tsv, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+                if len(lines) < 2:  # No data rows
+                    return {}
+
+                # Parse header to find path and video_id columns
+                header = lines[0].strip().split('\t')
+                try:
+                    path_idx = header.index('path')
+                    video_id_idx = header.index('video_id')
+                except ValueError:
+                    logger.warning("videos.tsv missing required columns (path, video_id)")
+                    return {}
+
+                # Parse data rows
+                for line in lines[1:]:
+                    if not line.strip():
+                        continue
+                    fields = line.strip().split('\t')
+                    if len(fields) > max(path_idx, video_id_idx):
+                        video_id = fields[video_id_idx]
+                        path = fields[path_idx]
+                        if video_id and path:
+                            video_map[video_id] = path
+
+        except Exception as e:
+            logger.warning(f"Failed to load videos.tsv: {e}")
+            return {}
+
+        return video_map
+
+    def _rename_video_if_needed(self, video: Video, new_path: Path) -> Path:
+        """Rename video directory if path pattern has changed.
+
+        Uses git mv to preserve history when renaming.
+
+        Args:
+            video: Video model instance
+            new_path: New desired path for video
+
+        Returns:
+            Actual path to use (either new_path or existing path if no rename needed)
+        """
+        # Load video path cache if not already loaded
+        if self._video_id_to_path_cache is None:
+            self._video_id_to_path_cache = self._load_video_paths()
+
+        # Check if this video already exists with a different path
+        existing_rel_path = self._video_id_to_path_cache.get(video.video_id)
+        if not existing_rel_path:
+            # New video, no rename needed
+            return new_path
+
+        existing_path = self.repo_path / "videos" / existing_rel_path
+
+        # If paths are the same, no rename needed
+        if existing_path == new_path:
+            logger.debug(f"Video path unchanged: {existing_rel_path}")
+            return new_path
+
+        # Path has changed - need to rename
+        if not existing_path.exists():
+            logger.warning(f"Existing path not found for {video.video_id}: {existing_path}")
+            return new_path
+
+        logger.info(f"Renaming video {video.video_id}: {existing_rel_path} -> {new_path.name}")
+
+        try:
+            # Ensure parent directory exists
+            new_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Use git mv to preserve history
+            import subprocess
+            result = subprocess.run(
+                ["git", "mv", str(existing_path), str(new_path)],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+            logger.debug(f"git mv successful: {result.stdout}")
+
+            # Update cache
+            self._video_id_to_path_cache[video.video_id] = new_path.relative_to(self.repo_path / "videos").as_posix()
+
+            return new_path
+
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to rename video with git mv: {e.stderr}")
+            # If git mv fails, fall back to existing path
+            return existing_path
+        except Exception as e:
+            logger.error(f"Failed to rename video: {e}")
+            return existing_path
 
     def _get_video_path(self, video: Video) -> Path:
         """Generate video directory path from pattern.
@@ -242,8 +350,9 @@ class Archiver:
 
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
-            # Get prefix width for ordered symlinks
+            # Get prefix width and separator for ordered symlinks
             prefix_width = self.config.organization.playlist_prefix_width
+            separator = self.config.organization.playlist_prefix_separator
 
             # Process each video and create ordered symlinks
             for i, video_meta in enumerate(videos_metadata, 1):
@@ -258,8 +367,8 @@ class Archiver:
                     video_dir = self._get_video_path(video)
                     if video_dir.exists():
                         # Create symlink with zero-padded numeric prefix
-                        # Format: {NNNN}-{video_dir_name} -> ../../videos/{video_dir_name}
-                        prefix = f"{i:0{prefix_width}d}-"
+                        # Format: {NNNN}_{video_dir_name} -> ../../videos/{video_dir_name}
+                        prefix = f"{i:0{prefix_width}d}{separator}"
                         symlink_name = f"{prefix}{video_dir.name}"
                         symlink_path = playlist_dir / symlink_name
 
@@ -319,8 +428,13 @@ class Archiver:
         logger.debug(f"Processing video: {video.video_id} - {video.title}")
         caption_count = 0
 
-        # Create video directory using configurable pattern
-        video_dir = self._get_video_path(video)
+        # Calculate expected path using configurable pattern
+        expected_path = self._get_video_path(video)
+
+        # Check if video needs renaming (path pattern changed)
+        video_dir = self._rename_video_if_needed(video, expected_path)
+
+        # Create directory if it doesn't exist (new videos)
         video_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Video directory: {video_dir}")
 
@@ -375,6 +489,11 @@ class Archiver:
         if self.config.components.captions and video.captions_available:
             caption_count = self._download_captions(video, video_dir)
 
+        # Download comments (if enabled)
+        if self.config.components.comments:
+            comments_path = video_dir / "comments.json"
+            self.youtube.download_comments(video.video_id, comments_path)
+
         return caption_count
 
     def _download_thumbnail(self, video: Video, video_dir: Path) -> None:
@@ -422,7 +541,11 @@ class Archiver:
         """
         try:
             captions_dir = video_dir / "captions"
-            captions_metadata = self.youtube.download_captions(video.video_id, captions_dir)
+            # Use caption language filter from config
+            language_pattern = self.config.components.caption_languages
+            captions_metadata = self.youtube.download_captions(
+                video.video_id, captions_dir, language_pattern=language_pattern
+            )
 
             if captions_metadata:
                 # Create captions.tsv with metadata

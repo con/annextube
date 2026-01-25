@@ -183,8 +183,9 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-004**: System MUST track video URLs without downloading content (lazy download strategy)
 - **FR-005**: System MUST download and store video metadata including title, description, publication date, duration, view count, like count, channel info
 - **FR-006**: System MUST download and store video thumbnails at highest available resolution
-- **FR-007**: System MUST attempt to download closed captions in all available languages as separate VTT files per language, handling YouTube rate limits (HTTP 429) gracefully with retry logic and Retry-After header support
-- **FR-008**: System MUST download video comments including comment text, author, timestamp, like count, and reply threads
+- **FR-007**: System MUST attempt to download closed captions matching configured language filter (regex pattern, default: .* for all) as separate VTT files per language, handling YouTube rate limits (HTTP 429) gracefully with retry logic and Retry-After header support
+- **FR-007a**: System MUST support configurable caption language filtering via regex pattern (e.g., "en.*" for English variants, "en|es|fr" for specific languages, ".*" for all)
+- **FR-008**: System MUST download video comments including comment text, author, timestamp, like count, and reply threads, storing as comments.json per video when comments component is enabled
 - **FR-009**: System MUST support selective download of video content based on user configuration
 
 #### Incremental Updates and Change Detection
@@ -212,9 +213,10 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-024**: System MUST use git for text metadata (JSON, TSV, VTT, markdown) and git-annex for binary/large files (videos, thumbnails), configured via .gitattributes file that persists rules for the repository
 - **FR-025**: System MUST organize video content in configurable hierarchy templates (by date, by playlist, by channel, custom), supporting subdataset creation when path specification contains '//' separator (e.g., 'videos/{year}//{month}' creates year-based subdatasets)
 - **FR-026**: System MUST support per-video folder structure containing video file, captions, metadata, comments
-- **FR-027**: System MUST support symlink-based organization for videos in playlists with zero-padded numeric prefixes to preserve playlist order (e.g., `playlists/Select-Lectures/0023-2020-01-10_0VH1Lim8gL8_deep-learning... -> ../../videos/2020-01-10_0VH1Lim8gL8_.../`), where prefix width is configurable (default: 4 digits)
+- **FR-027**: System MUST support symlink-based organization for videos in playlists with zero-padded numeric prefixes separated by underscore to preserve playlist order (e.g., `playlists/Select-Lectures/0023_2020-01-10_deep-learning... -> ../../videos/2020-01-10_deep-learning.../`), where prefix width is configurable (default: 4 digits) and underscore separates index from path
 - **FR-027a**: System MUST use sanitized playlist names for playlist directory names (not playlist IDs), making filesystem browsing immediately informative and user-friendly
-- **FR-028**: System MUST store file naming templates in configuration for customization, supporting patterns like `{date}_{video_id}_{sanitized_title}/` that combine publication date, persistent video ID, and sanitized title
+- **FR-028**: System MUST store file naming templates in configuration for customization, supporting patterns like `{date}_{sanitized_title}/` (default, ID tracked in TSV) or `{date}_{video_id}_{sanitized_title}/` (legacy) that combine publication date, optional video ID, and sanitized title
+- **FR-028a**: System MUST support video renaming on updates using git mv when video path changes, matching videos by ID from videos.tsv rather than filesystem path
 - **FR-029**: System MUST store video files with source URL references to enable re-downloading from original source
 - **FR-030**: System MUST store metadata for videos including source URL, fetch date, video ID
 - **FR-031**: System MUST assign git-annex metadata to all annexed files (videos, thumbnails, captions if annexed) including: video_id, title, channel, published, and filetype field where filetype is 'video' for video files, 'thumbnail' for thumbnails, and 'caption.{language-code}' for captions
@@ -222,10 +224,10 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Metadata Aggregation and Export
 
-- **FR-032**: System MUST generate top-level videos.tsv file with summary metadata for all videos, enabling fast loading by web interface without parsing individual JSON files
-- **FR-033**: System MUST generate top-level playlists.tsv file mapping sanitized playlist folder names to playlist IDs and metadata, allowing web interface to resolve playlist identities and handle playlist renames
-- **FR-034**: System MUST include in videos.tsv: video ID, title, channel, published date, duration, view count, like count, comment count, has captions, file path (relative to repository root)
-- **FR-035**: System MUST include in playlists.tsv: folder_name (sanitized), playlist_id (YouTube ID), title (original), channel, video_count, total_duration, last_updated, enabling mapping between filesystem structure and YouTube metadata
+- **FR-032**: System MUST generate videos/videos.tsv file with summary metadata for all videos, enabling fast loading by web interface without parsing individual JSON files
+- **FR-033**: System MUST generate playlists/playlists.tsv file mapping sanitized playlist folder names to playlist IDs and metadata, allowing web interface to resolve playlist identities and handle playlist renames
+- **FR-034**: System MUST include in videos.tsv with consistent column order: title, channel, published, duration, views, likes, comments, captions (count, not boolean), path (relative), video_id (last column)
+- **FR-035**: System MUST include in playlists.tsv with consistent column order: title, channel, video_count, total_duration, last_updated, path (relative folder name), playlist_id (last column)
 - **FR-036**: System MUST regenerate TSV files during updates to reflect current state
 - **FR-037**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB (tab-separated, UTF-8 encoded, with header row)
 
@@ -338,11 +340,9 @@ archive/
 │   └── config.toml                # Configuration file
 ├── .gitattributes                 # File tracking rules (JSON/TSV/VTT→git, videos/images→annex)
 │
-├── videos.tsv                     # Top-level video index (for web interface)
-├── playlists.tsv                  # Top-level playlist index (folder_name → playlist_id mapping)
-│
 ├── videos/                        # Canonical video storage (one copy per video)
-│   └── {date}_{video_id}_{sanitized_title}/
+│   ├── videos.tsv                 # Video index (title-first column order, path+id last)
+│   └── {date}_{sanitized_title}/  # Default pattern (no video_id, tracked in TSV)
 │       ├── video.mkv              # Symlink to git-annex (URL tracked)
 │       ├── metadata.json          # Complete video metadata
 │       ├── thumbnail.jpg          # Video thumbnail
@@ -354,27 +354,27 @@ archive/
 │           └── ...
 │
 └── playlists/                     # Playlist-centric views (symlinks to videos/)
-    ├── {sanitized_playlist_name}/
-    │   ├── playlist.json          # Playlist metadata (includes playlist_id)
-    │   ├── {NNNN}-{video_path} -> ../../videos/{video_path}/
-    │   ├── {NNNN}-{video_path} -> ../../videos/{video_path}/
-    │   └── ...
-    └── ...
+    ├── playlists.tsv              # Playlist index (title-first column order, path+id last)
+    └── {sanitized_playlist_name}/
+        ├── playlist.json          # Playlist metadata (includes playlist_id)
+        ├── {NNNN}_{video_path} -> ../../videos/{video_path}/  # Underscore separator
+        ├── {NNNN}_{video_path} -> ../../videos/{video_path}/
+        └── ...
 
 Example playlist structure:
-playlists/Select-Lectures/
+playlists/select-lectures/
 ├── playlist.json                  # Contains playlist_id: "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
-├── 0001-2020-01-10_0VH1Lim8gL8_deep-learning-state-of-the-art-2020 -> ../../videos/2020-01-10_0VH1Lim8gL8_.../
-├── 0002-2023-02-15_O5xeyoRL95U_autonomous-vehicles-lecture -> ../../videos/2023-02-15_O5xeyoRL95U_.../
+├── 0001_2020-01-10_deep-learning-state-of-the-art-2020 -> ../../videos/2020-01-10_deep-learning-state-of-the-art-2020/
+├── 0002_2023-02-15_autonomous-vehicles-lecture -> ../../videos/2023-02-15_autonomous-vehicles-lecture/
 └── ...
 
-playlists.tsv format (tab-separated):
-folder_name    playlist_id                        title             channel       video_count  total_duration  last_updated
-Select-Lectures PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf Select Lectures  Lex Fridman   2            5672            2023-02-17T00:00:00
+playlists/playlists.tsv format (tab-separated, title-first column order):
+title            channel      video_count  total_duration  last_updated         path             playlist_id
+Select Lectures  Lex Fridman  2            5672            2023-02-17T00:00:00  select-lectures  PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf
 
-videos.tsv format (tab-separated):
-video_id        title                           channel      published    duration  views   likes  comments  has_captions  file_path
-0VH1Lim8gL8     Deep Learning State of the Art  Lex Fridman  2020-01-10   5261      100000  5000   200       true          videos/2020-01-10_0VH1Lim8gL8_.../
+videos/videos.tsv format (tab-separated, title-first column order):
+title                           channel      published   duration  views   likes  comments  captions  path                                            video_id
+Deep Learning State of the Art  Lex Fridman  2020-01-10  5261      100000  5000   200       3         2020-01-10_deep-learning-state-of-the-art-2020  0VH1Lim8gL8
 ```
 
 **Key Design Principles**:

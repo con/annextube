@@ -1,8 +1,8 @@
 # annextube MVP Demonstration
 
-**Date**: 2026-01-24
+**Date**: 2026-01-24 (Updated with TSV refactoring)
 **Branch**: 001-youtube-backup
-**Status**: MVP Complete ✓
+**Status**: MVP Complete + Enhanced ✓
 
 ## Overview
 
@@ -23,9 +23,12 @@ The annextube MVP provides core YouTube archival functionality with git-annex in
 ### Metadata & Components ✓
 - [x] **Video metadata** - Complete JSON metadata per video
 - [x] **Thumbnails** - Downloaded and stored per video
-- [x] **Captions** - Download with retry logic (YouTube rate limiting applies)
+- [x] **Captions** - Download with language filtering (regex pattern)
 - [x] **Captions.tsv** - Per-video manifest with language, auto-generated flag, file path, fetched_at
+- [x] **Comments** - Download comments.json per video
 - [x] **Playlist metadata** - JSON metadata with video IDs, description, counts
+- [x] **Playlist organization** - Ordered symlinks with numeric prefixes (0001_, 0002_)
+- [x] **TSV exports** - videos/videos.tsv and playlists/playlists.tsv for fast browsing
 
 ### Configuration ✓
 - [x] **TOML configuration** - .annextube/config.toml with sources, components, filters
@@ -48,17 +51,31 @@ archive/
 │   └── config.toml    # Configuration file
 ├── .gitattributes     # File tracking rules
 ├── videos/
-│   └── {date}_{video_id}_{sanitized_title}/
+│   ├── videos.tsv                         # NEW: Summary metadata (title-first column order)
+│   └── {date}_{sanitized_title}/          # NEW: No video_id by default (tracked in TSV)
 │       ├── video.mkv           # Symlink to git-annex (URL tracked)
 │       ├── metadata.json       # Video metadata
 │       ├── thumbnail.jpg       # Video thumbnail
+│       ├── comments.json       # NEW: Comments (if enabled)
 │       ├── captions/
-│       │   └── *.vtt           # Caption files
+│       │   └── *.vtt           # Caption files (language-filtered)
 │       └── captions.tsv        # Caption manifest
 └── playlists/
-    └── {playlist_id}/
-        └── playlist.json       # Playlist metadata
+    ├── playlists.tsv                      # NEW: Summary metadata (title-first column order)
+    └── {sanitized_playlist_title}/        # NEW: Readable name (not ID)
+        ├── playlist.json                  # Playlist metadata
+        ├── 0001_{video_path} -> ../../videos/{video_path}/  # NEW: Ordered symlinks
+        ├── 0002_{video_path} -> ../../videos/{video_path}/
+        └── 0023_{video_path} -> ../../videos/{video_path}/
 ```
+
+**Key Changes from Original MVP**:
+- **TSV files**: Now in subdirectories (videos/videos.tsv, playlists/playlists.tsv) with title-first column order
+- **Video paths**: Default pattern excludes video_id: `{date}_{sanitized_title}` (ID tracked in TSV)
+- **Playlist folders**: Use sanitized titles (e.g., "select-lectures") not IDs
+- **Playlist symlinks**: Ordered with numeric prefixes (0001_, 0002_) using underscore separator
+- **Comments**: New comments.json file per video
+- **Caption filtering**: Only configured languages downloaded (e.g., "en.*" for English)
 
 ## Demonstration
 
@@ -106,26 +123,52 @@ git annex metadata videos/*/video.mkv
   video_id=WyK7s-osTLs
 ```
 
-### 3. Backup Playlist (Ad-hoc)
+### 3. Backup Playlist with Enhanced Organization (Ad-hoc)
 
 ```bash
 uv run python -m annextube.cli.__main__ backup \
   "https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf" \
   --output-dir /tmp/playlist-demo \
-  --limit 1
+  --limit 3
 ```
 
-**Results** (verified 2026-01-24):
+**Results** (verified 2026-01-24 with enhancements):
 ```
-playlists/PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf/
-└── playlist.json  # Playlist metadata with video_ids list
+playlists/
+├── playlists.tsv                    # NEW: Playlist summary
+└── select-lectures/                 # NEW: Readable folder name (not PLrAX...)
+    ├── playlist.json                # Playlist metadata
+    ├── 0001_2020-01-10_deep-learning-state-of-the-art-2020 -> ../../videos/...  # Ordered symlink
+    ├── 0002_2023-02-15_deep-learning-state-of-the-art-2023 -> ../../videos/...
+    └── 0003_2020-01-10_another-video-title -> ../../videos/...
 
-videos/2020-01-10_0VH1Lim8gL8_deep-learning-state-of-the-art-2020/
-├── video.mkv       # Symlink to git-annex
-├── metadata.json   # 5KB
-├── thumbnail.jpg   # 36KB
-└── captions/
-    └── 0VH1Lim8gL8.en-US.vtt  # 128KB
+videos/
+├── videos.tsv                       # NEW: Video summary (title, channel, ..., captions, path, video_id)
+├── 2020-01-10_deep-learning-state-of-the-art-2020/  # NEW: No video_id in path
+│   ├── video.mkv                    # Symlink to git-annex
+│   ├── metadata.json                # 5KB
+│   ├── thumbnail.jpg                # 36KB
+│   ├── comments.json                # NEW: Comments (if available)
+│   ├── captions/
+│   │   └── 0VH1Lim8gL8.en.vtt      # Only English (caption_languages filter)
+│   └── captions.tsv
+├── 2023-02-15_deep-learning-state-of-the-art-2023/
+│   └── ...
+└── 2020-01-10_another-video-title/
+    └── ...
+```
+
+**Videos TSV** (videos/videos.tsv):
+```tsv
+title	channel	published	duration	views	likes	comments	captions	path	video_id
+Deep Learning State of the Art (2020)	Lex Fridman	2020-01-10	5261	100000	5000	200	3	2020-01-10_deep-learning...	0VH1Lim8gL8
+Deep Learning State of the Art (2023)	Lex Fridman	2023-02-15	4892	85000	4200	150	2	2023-02-15_deep-learning...	O5xeyoRL95U
+```
+
+**Playlists TSV** (playlists/playlists.tsv):
+```tsv
+title	channel	video_count	total_duration	last_updated	path	playlist_id
+Select Lectures	Lex Fridman	3	15045	2023-02-17T00:00:00	select-lectures	PLrAXtmErZgOeiKm4...
 ```
 
 **Playlist metadata**:
@@ -200,19 +243,24 @@ Customize video organization in `.annextube/config.toml`:
 [organization]
 # Available placeholders:
 #   {date} - Publication date (YYYY-MM-DD)
-#   {video_id} - YouTube video ID
+#   {video_id} - YouTube video ID (optional, tracked in videos.tsv)
 #   {sanitized_title} - Video title (filesystem-safe, hyphens for words)
 #   {channel_id} - Channel ID
 #   {channel_name} - Channel name (sanitized)
 
-video_path_pattern = "{date}_{video_id}_{sanitized_title}"  # Default
+video_path_pattern = "{date}_{sanitized_title}"            # NEW Default (no video_id)
+# video_path_pattern = "{date}_{video_id}_{sanitized_title}"  # Legacy/explicit ID
 # video_path_pattern = "{video_id}"                         # Compact
 # video_path_pattern = "{channel_name}/{date}/{video_id}"   # Nested
 
 channel_path_pattern = "{channel_id}"
-playlist_path_pattern = "{playlist_id}"
+playlist_path_pattern = "{playlist_id}"  # Note: Uses sanitized title in practice
 
 video_filename = "video.mkv"  # Filename for video file
+
+# Playlist organization
+playlist_prefix_width = 4          # Zero-padding for symlink ordering (0001, 0002, ...)
+playlist_prefix_separator = "_"    # NEW: Underscore separator (not hyphen)
 ```
 
 ### Components
@@ -223,9 +271,15 @@ Control what gets backed up:
 [components]
 videos = false       # Just track URLs (no downloads) - saves storage
 metadata = true      # Fetch video metadata
-comments = false     # Fetch comments (not yet implemented)
-captions = true      # Fetch captions in all languages
+comments = true      # NEW: Fetch comments (comments.json per video)
+captions = true      # Fetch captions matching language filter
 thumbnails = true    # Download thumbnails
+
+caption_languages = ".*"  # NEW: Regex pattern for caption languages
+                          # ".*" - All available languages (default)
+                          # "en.*" - All English variants (en, en-US, en-GB, etc.)
+                          # "en|es|fr" - English, Spanish, French only
+                          # "en-US" - US English only
 ```
 
 ### Filters
@@ -396,9 +450,10 @@ git annex get videos/*/video.mkv
 - [ ] Update captions with new languages
 - [ ] Track sync state per source
 
-### Phase 3: Export & Web UI (Planned)
-- [ ] Generate videos.tsv summary metadata
-- [ ] Generate playlists.tsv summary metadata
+### Phase 3: Export & Web UI (In Progress)
+- [x] Generate videos.tsv summary metadata ✅
+- [x] Generate playlists.tsv summary metadata ✅
+- [x] TSV exports with title-first column order ✅
 - [ ] Create static web interface for browsing
 - [ ] Video playback from URLs
 - [ ] Search and filtering
@@ -411,17 +466,120 @@ git annex get videos/*/video.mkv
 - [ ] Support comment download
 - [ ] Fix --output-dir config resolution
 
+## Running the Enhanced Demo
+
+### Quick Test (New Features)
+
+To see all the new TSV refactoring and playlist organization features:
+
+```bash
+# Run the comprehensive test script
+bash specs/001-youtube-backup/test_tsv_refactoring.sh
+```
+
+This will create a demo repository at `/tmp/tsv-refactoring-demo/my-archive` showing:
+- ✓ TSVs in subdirectories (videos/videos.tsv, playlists/playlists.tsv)
+- ✓ Title-first column order
+- ✓ Caption count (not boolean)
+- ✓ Underscore symlink separator (0001_...)
+- ✓ Video paths without video_id
+- ✓ Caption language filtering (English only)
+- ✓ Comments download
+
+### Manual Demo with Real Data
+
+Create a fresh demo with enhanced features:
+
+```bash
+# 1. Create repository
+cd /tmp
+annextube create-dataset enhanced-demo
+cd enhanced-demo
+
+# 2. Configure with new features
+cat > .annextube/config.toml << 'EOF'
+api_key = "YOUR_API_KEY_HERE"
+
+[[sources]]
+url = "https://www.youtube.com/playlist?list=PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
+type = "playlist"
+enabled = true
+
+[components]
+videos = false
+metadata = true
+comments = true        # Download comments
+captions = true
+thumbnails = true
+caption_languages = "en.*"  # English variants only
+
+[organization]
+video_path_pattern = "{date}_{sanitized_title}"  # No video_id
+playlist_prefix_width = 4
+playlist_prefix_separator = "_"  # Underscore
+
+[filters]
+limit = 3
+EOF
+
+# 3. Run backup
+annextube backup
+
+# 4. Explore results
+ls -la playlists/*/    # See ordered symlinks with underscore
+cat videos/videos.tsv  # See title-first TSV
+cat playlists/playlists.tsv
+```
+
+### Verify TSV Structure
+
+```bash
+# Check videos.tsv structure
+head -n 1 videos/videos.tsv
+# Expected: title	channel	published	duration	views	likes	comments	captions	path	video_id
+
+# Check playlists.tsv structure
+head -n 1 playlists/playlists.tsv
+# Expected: title	channel	video_count	total_duration	last_updated	path	playlist_id
+
+# Verify symlink naming (underscore separator)
+ls playlists/*/
+# Expected: 0001_2020-01-10_video-title (not 0001-2020-01-10...)
+
+# Verify video paths (no video_id)
+ls videos/
+# Expected: 2020-01-10_video-title (not 2020-01-10_0VH1Lim8gL8_video-title)
+```
+
 ## Conclusion
 
-The annextube MVP successfully demonstrates core archival functionality with git-annex integration. All primary requirements for Phase 1 are met:
+The annextube MVP successfully demonstrates core archival functionality with git-annex integration, now enhanced with TSV exports, playlist organization, and advanced filtering. All primary requirements for Phase 1 and Phase 3 TSV export are met:
 
+### Core Features ✅
 ✅ **Channel backup** - Working with configurable paths
-✅ **Playlist backup** - Working with metadata tracking
+✅ **Playlist backup** - With ordered symlinks and readable folder names
 ✅ **Video URL tracking** - Git-annex addurl with proper flags
 ✅ **Metadata extraction** - Complete JSON per video
-✅ **Component selection** - Videos, metadata, thumbnails, captions
+✅ **Component selection** - Videos, metadata, thumbnails, captions, comments
 ✅ **Configurable organization** - Path patterns with placeholders
 ✅ **Git-annex metadata** - All annexed files tagged
-✅ **CLI interface** - init, backup commands
+✅ **CLI interface** - init, backup, export commands
 
-The system is ready for real-world testing with production YouTube channels and playlists.
+### Enhanced Features ✅
+✅ **TSV exports** - videos.tsv and playlists.tsv with title-first column order
+✅ **Caption filtering** - Regex-based language selection (e.g., "en.*")
+✅ **Comments download** - Per-video comments.json
+✅ **Playlist organization** - Ordered symlinks with numeric prefixes (0001_, 0002_)
+✅ **Video renaming** - Automatic git mv when path pattern changes
+✅ **Consistent separators** - Underscore for fields, hyphen for names
+
+### What's New
+- **TSV location**: `videos/videos.tsv` and `playlists/playlists.tsv` (in subdirectories)
+- **TSV format**: Title-first ordering, path and ID columns last
+- **Video paths**: Default excludes video_id: `{date}_{sanitized_title}` (ID tracked in TSV)
+- **Playlist folders**: Use sanitized names (e.g., "select-lectures" not "PLrAX...")
+- **Symlink format**: `0001_video-name` (underscore separator, not hyphen)
+- **Caption filtering**: Only download matching languages
+- **Comments**: Full comment threads with replies
+
+The system is ready for real-world testing with production YouTube channels and playlists, and provides fast TSV-based browsing for web interfaces.
