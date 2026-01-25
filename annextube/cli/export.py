@@ -14,7 +14,7 @@ logger = get_logger(__name__)
 @click.command()
 @click.argument(
     "what",
-    type=click.Choice(["videos", "playlists", "all"], case_sensitive=False),
+    type=click.Choice(["videos", "playlists", "authors", "all"], case_sensitive=False),
     default="all",
     required=False,
 )
@@ -39,7 +39,7 @@ def export(ctx: click.Context, what: str, output_dir: Path, output: Path):
     interfaces without parsing individual JSON files.
 
     Arguments:
-        WHAT: What to export - 'videos', 'playlists', or 'all' (default)
+        WHAT: What to export - 'videos', 'playlists', 'authors', or 'all' (default)
 
     Examples:
 
@@ -74,14 +74,21 @@ def export(ctx: click.Context, what: str, output_dir: Path, output: Path):
             output_path = export_service.generate_playlists_tsv(output)
             click.echo(f"✓ Generated {output_path}")
 
+        elif what == "authors":
+            from annextube.services.authors import AuthorsService
+            authors_service = AuthorsService(output_dir)
+            output_path = authors_service.generate_authors_tsv()
+            click.echo(f"✓ Generated {output_path}")
+
         elif what == "all":
             if output:
                 click.echo("Error: Cannot specify --output with 'all' export", err=True)
                 raise click.Abort()
 
-            videos_path, playlists_path = export_service.generate_all()
+            videos_path, playlists_path, authors_path = export_service.generate_all()
             click.echo(f"✓ Generated {videos_path}")
             click.echo(f"✓ Generated {playlists_path}")
+            click.echo(f"✓ Generated {authors_path}")
 
         click.echo()
         click.echo("✓ Export complete!")

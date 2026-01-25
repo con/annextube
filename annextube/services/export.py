@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 from annextube.lib.logging_config import get_logger
+from .authors import AuthorsService
 
 logger = get_logger(__name__)
 
@@ -153,15 +154,20 @@ class ExportService:
 
         return output_path
 
-    def generate_all(self) -> tuple[Path, Path]:
-        """Generate both videos.tsv and playlists.tsv.
+    def generate_all(self) -> tuple[Path, Path, Path]:
+        """Generate videos.tsv, playlists.tsv, and authors.tsv.
 
         Returns:
-            Tuple of (videos_tsv_path, playlists_tsv_path)
+            Tuple of (videos_tsv_path, playlists_tsv_path, authors_tsv_path)
         """
         videos_tsv = self.generate_videos_tsv()
         playlists_tsv = self.generate_playlists_tsv()
-        return videos_tsv, playlists_tsv
+
+        # Generate authors.tsv
+        authors_service = AuthorsService(self.repo_path)
+        authors_tsv = authors_service.generate_authors_tsv()
+
+        return videos_tsv, playlists_tsv, authors_tsv
 
     def _calculate_playlist_duration(self, playlist_dir: Path) -> int:
         """Calculate total duration of all videos in playlist.
