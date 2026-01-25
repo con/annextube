@@ -181,7 +181,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-004**: System MUST track video URLs without downloading content (lazy download strategy)
 - **FR-005**: System MUST download and store video metadata including title, description, publication date, duration, view count, like count, channel info
 - **FR-006**: System MUST download and store video thumbnails at highest available resolution
-- **FR-007**: System MUST download closed captions in all available languages as separate VTT files per language
+- **FR-007**: System MUST attempt to download closed captions in all available languages as separate VTT files per language, handling YouTube rate limits (HTTP 429) gracefully with retry logic and Retry-After header support
 - **FR-008**: System MUST download video comments including comment text, author, timestamp, like count, and reply threads
 - **FR-009**: System MUST support selective download of video content based on user configuration
 
@@ -214,6 +214,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-028**: System MUST store file naming templates in configuration for customization, supporting patterns like `{date}_{video_id}_{sanitized_title}/` that combine publication date, persistent video ID, and sanitized title
 - **FR-029**: System MUST store video files with source URL references to enable re-downloading from original source
 - **FR-030**: System MUST store metadata for videos including source URL, fetch date, video ID
+- **FR-031**: System MUST assign git-annex metadata to all annexed files (videos, thumbnails, captions if annexed) including: video_id, title, channel, published, and filetype field where filetype is 'video' for video files, 'thumbnail' for thumbnails, and 'caption.{language-code}' for captions
 - **FR-031a**: System MUST generate captions.tsv file per video listing all available captions with metadata (language code, auto-generated flag, file path, last fetched timestamp)
 
 #### Metadata Aggregation and Export
@@ -241,7 +242,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Command-Line Interface
 
-- **FR-048**: System MUST provide CLI command to initialize new archive repository (create-dataset) with options for git/git-annex configuration (what files go under git vs git-annex)
+- **FR-048**: System MUST provide CLI command to initialize new archive repository (init) accepting optional directory as positional argument (defaulting to current directory) and automatically configuring git-annex security settings for yt-dlp
 - **FR-049**: System MUST provide CLI command to backup channel by URL
 - **FR-050**: System MUST provide CLI command to backup playlist by URL
 - **FR-051**: System MUST provide CLI command to run incremental update
@@ -281,8 +282,8 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Data Integrity and Reliability
 
-- **FR-076**: System MUST implement retry logic with exponential backoff for failed operations
-- **FR-077**: System MUST respect YouTube rate limits and API quotas
+- **FR-076**: System MUST implement retry logic with exponential backoff for failed operations, parsing and respecting Retry-After headers from HTTP 429 responses when present
+- **FR-077**: System MUST respect YouTube rate limits and API quotas, handling HTTP 429 (Too Many Requests) errors gracefully for both video metadata and subtitle requests
 - **FR-078**: System MUST detect and handle network interruptions gracefully
 - **FR-079**: System MUST support resumable operations after interruption
 - **FR-080**: System MUST validate downloaded content integrity

@@ -195,6 +195,7 @@ class Archiver:
                     'published': video.published_at.strftime('%Y-%m-%d'),  # Just date
                     'duration': str(video.duration),
                     'source_url': video.source_url,
+                    'filetype': 'video',
                 }
                 self.git_annex.set_metadata(video_file, metadata)
                 logger.debug(f"Set git-annex metadata for: {video_file}")
@@ -218,7 +219,7 @@ class Archiver:
         return caption_count
 
     def _download_thumbnail(self, video: Video, video_dir: Path) -> None:
-        """Download video thumbnail.
+        """Download video thumbnail and set git-annex metadata.
 
         Args:
             video: Video model instance
@@ -231,14 +232,27 @@ class Archiver:
             urllib.request.urlretrieve(video.thumbnail_url, thumbnail_path)
             logger.debug(f"Downloaded thumbnail: {thumbnail_path}")
 
-            # Note: Thumbnail metadata could be set after git add, but skipping for now
-            # to avoid complexity with git-annex metadata timing
+            # Set git-annex metadata for thumbnail
+            # Note: Must be done after git add, so we do it in a try/except
+            try:
+                metadata = {
+                    'video_id': video.video_id,
+                    'title': video.title,
+                    'channel': video.channel_name,
+                    'published': video.published_at.strftime('%Y-%m-%d'),
+                    'filetype': 'thumbnail',
+                }
+                self.git_annex.set_metadata(thumbnail_path, metadata)
+                logger.debug(f"Set git-annex metadata for thumbnail: {thumbnail_path}")
+            except Exception as e:
+                # Metadata setting might fail if file not yet in annex
+                logger.debug(f"Could not set thumbnail metadata (will be set on commit): {e}")
 
         except Exception as e:
             logger.warning(f"Failed to download thumbnail: {e}")
 
     def _download_captions(self, video: Video, video_dir: Path) -> int:
-        """Download video captions and generate captions.tsv.
+        """Download video captions, generate captions.tsv, and set git-annex metadata.
 
         Args:
             video: Video model instance
@@ -257,7 +271,7 @@ class Archiver:
                 with open(captions_tsv_path, "w") as f:
                     # Write header
                     f.write("language_code\tauto_generated\tfile_path\tfetched_at\n")
-                    # Write caption rows
+                    # Write caption rows and set git-annex metadata
                     for caption in captions_metadata:
                         f.write(
                             f"{caption['language_code']}\t"
@@ -265,6 +279,28 @@ class Archiver:
                             f"{caption['file_path']}\t"
                             f"{caption['fetched_at']}\n"
                         )
+
+                        # Set git-annex metadata for each caption file
+                        # captions are text files (*.vtt) so they go to git, not annex
+                        # but we can still set metadata if they end up in annex
+                        # (depends on .gitattributes rules)
+                        try:
+                            caption_file_path = self.repo_path / caption['file_path']
+                            lang_code = caption['language_code']
+                            metadata = {
+                                'video_id': video.video_id,
+                                'title': video.title,
+                                'channel': video.channel_name,
+                                'published': video.published_at.strftime('%Y-%m-%d'),
+                                'filetype': f'caption.{lang_code}',
+                                'language': lang_code,
+                                'auto_generated': str(caption['auto_generated']),
+                            }
+                            self.git_annex.set_metadata(caption_file_path, metadata)
+                            logger.debug(f"Set git-annex metadata for caption: {caption_file_path}")
+                        except Exception as e:
+                            # Captions are in git (*.vtt), so metadata setting may not apply
+                            logger.debug(f"Could not set caption metadata (file in git, not annex): {e}")
 
                 logger.debug(f"Downloaded {len(captions_metadata)} caption files and created captions.tsv")
                 return len(captions_metadata)

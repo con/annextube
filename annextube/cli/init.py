@@ -12,19 +12,23 @@ logger = get_logger(__name__)
 
 
 @click.command()
-@click.option(
-    "--output-dir",
+@click.argument(
+    "directory",
     type=click.Path(path_type=Path),
     default=Path.cwd(),
-    help="Directory to initialize (default: current directory)",
+    required=False,
 )
 @click.pass_context
-def init(ctx: click.Context, output_dir: Path):
+def init(ctx: click.Context, directory: Path):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
     configures file tracking rules, and generates configuration template.
+
+    Arguments:
+        DIRECTORY: Directory to initialize (default: current directory)
     """
+    output_dir = directory
     logger.info(f"Initializing annextube archive at {output_dir}")
 
     # Ensure directory exists
