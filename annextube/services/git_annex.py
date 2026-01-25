@@ -38,6 +38,14 @@ class GitAnnexService:
             check=True,
         )
 
+        # Configure git-annex to allow yt-dlp access to any IP addresses
+        # This is needed for git-annex addurl --no-raw to work with YouTube URLs
+        subprocess.run(
+            ["git", "config", "annex.security.allowed-ip-addresses", "all"],
+            cwd=self.repo_path,
+            check=True,
+        )
+
         logger.info("Git-annex repository initialized")
 
     def configure_gitattributes(self) -> None:

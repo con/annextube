@@ -238,7 +238,7 @@ class Archiver:
             logger.warning(f"Failed to download thumbnail: {e}")
 
     def _download_captions(self, video: Video, video_dir: Path) -> int:
-        """Download video captions.
+        """Download video captions and generate captions.tsv.
 
         Args:
             video: Video model instance
@@ -249,11 +249,25 @@ class Archiver:
         """
         try:
             captions_dir = video_dir / "captions"
-            languages = self.youtube.download_captions(video.video_id, captions_dir)
+            captions_metadata = self.youtube.download_captions(video.video_id, captions_dir)
 
-            if languages:
-                logger.debug(f"Downloaded {len(languages)} caption files")
-                return len(languages)
+            if captions_metadata:
+                # Create captions.tsv with metadata
+                captions_tsv_path = video_dir / "captions.tsv"
+                with open(captions_tsv_path, "w") as f:
+                    # Write header
+                    f.write("language_code\tauto_generated\tfile_path\tfetched_at\n")
+                    # Write caption rows
+                    for caption in captions_metadata:
+                        f.write(
+                            f"{caption['language_code']}\t"
+                            f"{caption['auto_generated']}\t"
+                            f"{caption['file_path']}\t"
+                            f"{caption['fetched_at']}\n"
+                        )
+
+                logger.debug(f"Downloaded {len(captions_metadata)} caption files and created captions.tsv")
+                return len(captions_metadata)
 
         except Exception as e:
             logger.warning(f"Failed to download captions: {e}")

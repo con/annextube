@@ -214,15 +214,16 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-028**: System MUST store file naming templates in configuration for customization, supporting patterns like `{date}_{video_id}_{sanitized_title}/` that combine publication date, persistent video ID, and sanitized title
 - **FR-029**: System MUST store video files with source URL references to enable re-downloading from original source
 - **FR-030**: System MUST store metadata for videos including source URL, fetch date, video ID
+- **FR-031a**: System MUST generate captions.tsv file per video listing all available captions with metadata (language code, auto-generated flag, file path, last fetched timestamp)
 
 #### Metadata Aggregation and Export
 
-- **FR-031**: System MUST generate top-level videos.tsv file with summary metadata for all videos
-- **FR-032**: System MUST generate playlists.tsv file with summary metadata for all playlists
-- **FR-033**: System MUST include in videos.tsv: video ID, title, channel, published date, duration, view count, like count, comment count, has captions, file path
-- **FR-034**: System MUST include in playlists.tsv: playlist ID, title, channel, video count, total duration, last updated
-- **FR-035**: System MUST regenerate TSV files during updates to reflect current state
-- **FR-036**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB
+- **FR-032**: System MUST generate top-level videos.tsv file with summary metadata for all videos
+- **FR-033**: System MUST generate playlists.tsv file with summary metadata for all playlists
+- **FR-034**: System MUST include in videos.tsv: video ID, title, channel, published date, duration, view count, like count, comment count, has captions, file path
+- **FR-035**: System MUST include in playlists.tsv: playlist ID, title, channel, video count, total duration, last updated
+- **FR-036**: System MUST regenerate TSV files during updates to reflect current state
+- **FR-037**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB
 
 #### Web Interface
 
@@ -359,6 +360,8 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **git-annex**: Large file management and URL backend support
   - Uses `git annex addurl --fast --relaxed --no-raw` for video URL tracking
   - Requires yt-dlp in PATH for --no-raw to work properly
+  - Requires `annex.security.allowed-ip-addresses=all` configuration for yt-dlp to access YouTube
+  - This is automatically set during `annextube init`
 - **yt-dlp** (command-line tool): REQUIRED in PATH for git-annex --no-raw flag
   - Used by git-annex to resolve YouTube URLs to actual video URLs
   - Without it, git-annex downloads raw HTML instead of video URLs

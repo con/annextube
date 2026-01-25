@@ -33,6 +33,8 @@ class YouTubeService:
     def _retry_on_rate_limit(self, func, *args, **kwargs):
         """Retry function on rate limit errors with exponential backoff.
 
+        Respects Retry-After header if present in response.
+
         Args:
             func: Function to retry
             *args: Arguments to pass to function
@@ -53,8 +55,25 @@ class YouTubeService:
                 # Check if it's a rate limit error (429)
                 if "429" in error_str or "Too Many Requests" in error_str:
                     if attempt < MAX_RETRIES - 1:
-                        logger.warning(f"Rate limit hit, retrying in {backoff}s (attempt {attempt + 1}/{MAX_RETRIES})")
-                        time.sleep(backoff)
+                        # Try to extract Retry-After from error message
+                        # yt-dlp includes this in error messages
+                        retry_after = None
+                        if "Retry-After:" in error_str:
+                            try:
+                                # Extract number from "Retry-After: XX"
+                                parts = error_str.split("Retry-After:")
+                                if len(parts) > 1:
+                                    retry_after = int(parts[1].strip().split()[0])
+                            except (ValueError, IndexError):
+                                pass
+
+                        wait_time = retry_after if retry_after else backoff
+                        logger.warning(
+                            f"Rate limit hit, retrying in {wait_time}s "
+                            f"(attempt {attempt + 1}/{MAX_RETRIES})"
+                            f"{' (from Retry-After header)' if retry_after else ''}"
+                        )
+                        time.sleep(wait_time)
                         backoff *= BACKOFF_MULTIPLIER
                         continue
                 # Not a rate limit error or exhausted retries
@@ -206,7 +225,7 @@ class YouTubeService:
 
         return video_url  # Fallback
 
-    def download_captions(self, video_id: str, output_dir: Path) -> List[str]:
+    def download_captions(self, video_id: str, output_dir: Path) -> List[Dict[str, Any]]:
         """Download captions for a video.
 
         Args:
@@ -214,7 +233,11 @@ class YouTubeService:
             output_dir: Directory to save captions
 
         Returns:
-            List of downloaded caption language codes
+            List of caption metadata dictionaries with keys:
+            - language_code: Language code (e.g., 'en', 'es')
+            - auto_generated: Whether caption is auto-generated
+            - file_path: Path to caption file
+            - fetched_at: ISO 8601 timestamp when fetched
         """
         logger.info(f"Downloading captions for: {video_id}")
 
@@ -235,18 +258,41 @@ class YouTubeService:
 
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([video_url])
+                # Extract info to get subtitle metadata
+                info = ydl.extract_info(video_url, download=True)
+                return info
 
         try:
             # Retry on rate limits
-            self._retry_on_rate_limit(_download)
+            info = self._retry_on_rate_limit(_download)
 
             # Find downloaded caption files
             caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
-            languages = [f.stem.split(".")[-1] for f in caption_files]
 
-            logger.info(f"Downloaded {len(languages)} captions: {languages}")
-            return languages
+            # Build metadata for each caption
+            captions_metadata = []
+            fetched_at = datetime.now().isoformat()
+
+            # Get subtitle info from video info
+            subtitles = info.get('subtitles', {}) if info else {}
+            automatic_captions = info.get('automatic_captions', {}) if info else {}
+
+            for caption_file in caption_files:
+                # Extract language code from filename (video_id.lang.vtt)
+                lang_code = caption_file.stem.split(".")[-1]
+
+                # Determine if auto-generated
+                is_auto = lang_code in automatic_captions
+
+                captions_metadata.append({
+                    'language_code': lang_code,
+                    'auto_generated': is_auto,
+                    'file_path': str(caption_file.relative_to(output_dir.parent.parent)),  # Relative to repo root
+                    'fetched_at': fetched_at
+                })
+
+            logger.info(f"Downloaded {len(captions_metadata)} captions: {[c['language_code'] for c in captions_metadata]}")
+            return captions_metadata
 
         except Exception as e:
             logger.error(f"Failed to download captions: {e}")
