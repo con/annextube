@@ -77,7 +77,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
     try:
         # Load configuration
         config_path = ctx.obj.get("config_path")
-        config = load_config(config_path)
+        config = load_config(config_path, repo_path=output_dir)
 
         # Override limit if specified
         if limit:

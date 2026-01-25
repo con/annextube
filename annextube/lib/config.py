@@ -135,15 +135,17 @@ class Config:
         )
 
 
-def load_config(config_path: Optional[Path] = None) -> Config:
+def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = None) -> Config:
     """Load configuration from TOML file.
 
     API key is read from YOUTUBE_API_KEY environment variable, not from config file.
 
     Args:
         config_path: Optional path to config file. If not provided, searches:
-            1. .annextube/config.toml (current directory)
-            2. ~/.config/annextube/config.toml (user config)
+            1. {repo_path}/.annextube/config.toml (if repo_path provided)
+            2. .annextube/config.toml (current directory)
+            3. ~/.config/annextube/config.toml (user config)
+        repo_path: Optional path to repository root (for searching config file)
 
     Returns:
         Config object
@@ -156,13 +158,22 @@ def load_config(config_path: Optional[Path] = None) -> Config:
 
     if config_path is None:
         # Search for config file
-        local_config = Path.cwd() / ".annextube" / "config.toml"
-        user_config = Path.home() / ".config" / "annextube" / "config.toml"
+        search_paths = []
 
-        if local_config.exists():
-            config_path = local_config
-        elif user_config.exists():
-            config_path = user_config
+        # If repo_path provided, search there first
+        if repo_path is not None:
+            search_paths.append(Path(repo_path) / ".annextube" / "config.toml")
+
+        # Then try current directory
+        search_paths.append(Path.cwd() / ".annextube" / "config.toml")
+
+        # Finally try user config
+        search_paths.append(Path.home() / ".config" / "annextube" / "config.toml")
+
+        for path in search_paths:
+            if path.exists():
+                config_path = path
+                break
         else:
             raise FileNotFoundError(
                 "No config file found. Expected .annextube/config.toml or "

@@ -25,14 +25,14 @@ def sanitize_filename(text: str) -> str:
         text: Text to sanitize
 
     Returns:
-        Sanitized text safe for filesystem (uses '-' for word separation)
+        Sanitized text safe for filesystem (preserves original casing, uses '-' for word separation)
     """
     # Replace special chars (except spaces and hyphens)
     text = re.sub(r'[^\w\s-]', '', text)
     # Replace spaces with hyphens (keep underscores for field separation)
     text = re.sub(r'[-\s]+', '-', text)
-    # Limit length and lowercase
-    text = text.lower()[:100]
+    # Limit length (preserve original casing)
+    text = text[:100]
     return text
 
 
