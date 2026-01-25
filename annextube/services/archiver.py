@@ -4,7 +4,10 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from annextube.lib.config import SourceConfig
 
 from annextube.lib.config import Config
 from annextube.lib.logging_config import get_logger
@@ -240,7 +243,66 @@ class Archiver:
 
         return self.repo_path / "playlists" / path_str
 
-    def backup_channel(self, channel_url: str) -> dict:
+    def _discover_playlists(self, channel_url: str, include_pattern: str,
+                           exclude_pattern: Optional[str], include_podcasts: bool) -> List[str]:
+        """Discover and filter playlists from a channel.
+
+        Args:
+            channel_url: YouTube channel URL
+            include_pattern: "all", "none", or regex pattern for playlists to include
+            exclude_pattern: Optional regex pattern for playlists to exclude
+            include_podcasts: Whether to also discover podcasts
+
+        Returns:
+            List of playlist URLs to backup
+        """
+        if include_pattern == "none":
+            return []
+
+        # Fetch all playlists
+        playlists = self.youtube.get_channel_playlists(channel_url)
+
+        # Optionally fetch podcasts
+        if include_podcasts:
+            podcasts = self.youtube.get_channel_podcasts(channel_url)
+            playlists.extend(podcasts)
+            logger.info(f"Discovered {len(podcasts)} podcasts")
+
+        if not playlists:
+            return []
+
+        # Filter by include pattern
+        if include_pattern != "all":
+            import re
+            try:
+                pattern = re.compile(include_pattern)
+                original_count = len(playlists)
+                playlists = [p for p in playlists if pattern.search(p['title'])]
+                logger.info(f"Include filter '{include_pattern}' matched {len(playlists)}/{original_count} playlists")
+            except re.error as e:
+                logger.error(f"Invalid include_playlists regex '{include_pattern}': {e}")
+                return []
+
+        # Filter by exclude pattern
+        if exclude_pattern:
+            import re
+            try:
+                pattern = re.compile(exclude_pattern)
+                original_count = len(playlists)
+                playlists = [p for p in playlists if not pattern.search(p['title'])]
+                logger.info(f"Exclude filter '{exclude_pattern}' removed {original_count - len(playlists)} playlists")
+            except re.error as e:
+                logger.error(f"Invalid exclude_playlists regex '{exclude_pattern}': {e}")
+
+        # Log discovered playlists
+        if playlists:
+            logger.info(f"Will backup {len(playlists)} playlists:")
+            for p in playlists:
+                logger.info(f"  - {p['title']} ({p['video_count']} videos)")
+
+        return [p['url'] for p in playlists]
+
+    def backup_channel(self, channel_url: str, source_config: Optional['SourceConfig'] = None) -> dict:
         """Backup a YouTube channel.
 
         Args:
@@ -293,6 +355,28 @@ class Archiver:
             )
 
             logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
+
+            # Auto-discover and backup playlists if configured
+            if source_config and source_config.include_playlists != "none":
+                logger.info("Discovering playlists from channel...")
+                playlist_urls = self._discover_playlists(
+                    channel_url,
+                    source_config.include_playlists,
+                    source_config.exclude_playlists,
+                    source_config.include_podcasts
+                )
+
+                for playlist_url in playlist_urls:
+                    try:
+                        playlist_stats = self.backup_playlist(playlist_url)
+                        stats["videos_processed"] += playlist_stats.get("videos_processed", 0)
+                        stats["videos_tracked"] += playlist_stats.get("videos_tracked", 0)
+                        stats["metadata_saved"] += playlist_stats.get("metadata_saved", 0)
+                        stats["captions_downloaded"] += playlist_stats.get("captions_downloaded", 0)
+                        stats["errors"].extend(playlist_stats.get("errors", []))
+                    except Exception as e:
+                        logger.error(f"Failed to backup playlist {playlist_url}: {e}")
+                        stats["errors"].append(f"Playlist {playlist_url}: {str(e)}")
 
             # Generate TSV metadata files
             try:

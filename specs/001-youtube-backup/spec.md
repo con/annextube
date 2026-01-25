@@ -179,6 +179,9 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 - **FR-001**: System MUST support archiving entire YouTube channels by URL
 - **FR-002**: System MUST support archiving individual playlists by URL
+- **FR-002a**: System MUST support automatic discovery and backup of all playlists from a channel when `include_playlists` option is configured (values: "all", "none", or regex pattern)
+- **FR-002b**: System MUST support filtering discovered playlists by regex pattern to selectively include playlists (via `include_playlists` pattern) and exclude playlists (via `exclude_playlists` pattern)
+- **FR-002c**: System MUST discover podcasts from a channel's Podcasts tab when `include_podcasts` option is enabled, treating them as playlists with additional episode metadata
 - **FR-003**: System MUST support archiving specific videos by URL or ID list
 - **FR-004**: System MUST track video URLs without downloading content (lazy download strategy)
 - **FR-005**: System MUST download and store video metadata including title, description, publication date, duration, view count, like count, channel info

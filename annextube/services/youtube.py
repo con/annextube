@@ -295,6 +295,92 @@ class YouTubeService:
                 logger.error(f"Failed to fetch playlist metadata: {e}")
                 return None
 
+    def get_channel_playlists(self, channel_url: str) -> List[Dict[str, Any]]:
+        """Get all playlists from a channel.
+
+        Args:
+            channel_url: YouTube channel URL (e.g., https://www.youtube.com/@channel)
+
+        Returns:
+            List of playlist dicts with: id, title, url, video_count
+        """
+        logger.debug(f"Discovering playlists from channel: {channel_url}")
+
+        # Construct playlists tab URL
+        playlists_url = channel_url.rstrip("/") + "/playlists"
+
+        ydl_opts = self._get_ydl_opts(download=False)
+        ydl_opts["extract_flat"] = True  # Don't fetch individual playlist videos
+
+        playlists = []
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(playlists_url, download=False)
+
+                if not info or "entries" not in info:
+                    logger.warning(f"No playlists found for channel: {channel_url}")
+                    return []
+
+                for entry in info["entries"]:
+                    if entry and entry.get("_type") == "playlist":
+                        playlists.append({
+                            "id": entry.get("id"),
+                            "title": entry.get("title", "Unknown"),
+                            "url": entry.get("url") or f"https://www.youtube.com/playlist?list={entry.get('id')}",
+                            "video_count": entry.get("playlist_count", 0),
+                        })
+
+                logger.info(f"Discovered {len(playlists)} playlists from {channel_url}")
+                return playlists
+
+        except Exception as e:
+            logger.error(f"Failed to fetch channel playlists: {e}")
+            return []
+
+    def get_channel_podcasts(self, channel_url: str) -> List[Dict[str, Any]]:
+        """Get all podcasts from a channel's Podcasts tab.
+
+        Args:
+            channel_url: YouTube channel URL (e.g., https://www.youtube.com/@channel)
+
+        Returns:
+            List of podcast dicts with: id, title, url, video_count
+        """
+        logger.debug(f"Discovering podcasts from channel: {channel_url}")
+
+        # Construct podcasts tab URL
+        podcasts_url = channel_url.rstrip("/") + "/podcasts"
+
+        ydl_opts = self._get_ydl_opts(download=False)
+        ydl_opts["extract_flat"] = True
+
+        podcasts = []
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(podcasts_url, download=False)
+
+                if not info or "entries" not in info:
+                    logger.debug(f"No podcasts found for channel: {channel_url}")
+                    return []
+
+                for entry in info["entries"]:
+                    if entry and entry.get("_type") == "playlist":
+                        podcasts.append({
+                            "id": entry.get("id"),
+                            "title": entry.get("title", "Unknown"),
+                            "url": entry.get("url") or f"https://www.youtube.com/playlist?list={entry.get('id')}",
+                            "video_count": entry.get("playlist_count", 0),
+                        })
+
+                logger.info(f"Discovered {len(podcasts)} podcasts from {channel_url}")
+                return podcasts
+
+        except Exception as e:
+            logger.debug(f"Failed to fetch channel podcasts (may not have podcasts): {e}")
+            return []
+
     def get_video_metadata(self, video_url: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a single video.
 

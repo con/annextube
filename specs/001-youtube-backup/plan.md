@@ -208,3 +208,122 @@ docs/                         # Hugo documentation site
 > **Fill ONLY if Constitution Check has violations that must be justified**
 
 No constitution violations requiring justification. All design decisions align with constitutional principles.
+
+## Pending Implementation
+
+### TODO: Automatic Playlist Discovery (FR-002a, FR-002b, FR-002c)
+
+**Status**: Not yet implemented  
+**Priority**: P2 (Nice to have, improves user experience)  
+**Estimated Effort**: 4-6 hours
+
+**Requirements**:
+- FR-002a: Auto-discover all playlists from channel when `include_playlists` configured  
+- FR-002b: Filter discovered playlists by regex pattern (include/exclude)
+- FR-002c: Discover and backup podcasts from channel's Podcasts tab
+
+**Implementation Tasks**:
+
+1. **Config Schema Update** (`annextube/lib/config.py`):
+   ```python
+   @dataclass
+   class SourceConfig:
+       url: str
+       type: str  # 'channel' or 'playlist'
+       enabled: bool = True
+       # NEW FIELDS:
+       include_playlists: str = "none"  # "all", "none", or regex pattern
+       exclude_playlists: Optional[str] = None  # Regex pattern to exclude
+       include_podcasts: bool = False  # Auto-discover podcasts
+   ```
+
+2. **YouTube Service Enhancement** (`annextube/services/youtube.py`):
+   - Add `get_channel_playlists(channel_url: str) -> List[Dict]` method
+   - Add `get_channel_podcasts(channel_url: str) -> List[Dict]` method
+   - Use yt-dlp to fetch channel's /playlists and /podcasts tabs
+   - Return list of playlist/podcast dicts with: id, title, url, video_count
+
+3. **Playlist Filtering Logic** (`annextube/services/archiver.py`):
+   ```python
+   def _discover_playlists(self, channel_url: str, config: SourceConfig) -> List[str]:
+       """Discover and filter playlists based on config."""
+       if config.include_playlists == "none":
+           return []
+       
+       # Fetch all playlists
+       playlists = self.youtube.get_channel_playlists(channel_url)
+       
+       if config.include_podcasts:
+           podcasts = self.youtube.get_channel_podcasts(channel_url)
+           playlists.extend(podcasts)
+       
+       # Filter by include pattern
+       if config.include_playlists != "all":
+           import re
+           pattern = re.compile(config.include_playlists)
+           playlists = [p for p in playlists if pattern.search(p['title'])]
+       
+       # Filter by exclude pattern
+       if config.exclude_playlists:
+           import re
+           pattern = re.compile(config.exclude_playlists)
+           playlists = [p for p in playlists if not pattern.search(p['title'])]
+       
+       return [p['url'] for p in playlists]
+   ```
+
+4. **Backup Integration** (`annextube/services/archiver.py`):
+   - Modify `backup_channel()` to call `_discover_playlists()` after backing up channel videos
+   - For each discovered playlist URL, call `backup_playlist()`
+   - Log discovered playlists for transparency
+
+5. **Configuration Documentation**:
+   - Update `generate_config_template()` with examples:
+     ```toml
+     [[sources]]
+     url = "https://www.youtube.com/@channel"
+     type = "channel"
+     enabled = true
+     include_playlists = "all"  # Auto-backup all playlists
+     # include_playlists = "историк.*"  # Only playlists matching regex
+     # exclude_playlists = ".*shorts.*|.*old.*"  # Exclude matching playlists
+     # include_podcasts = true  # Also backup podcasts
+     ```
+
+6. **Testing**:
+   - Unit tests for `_discover_playlists()` with mock playlist data
+   - Integration test: channel with 3 playlists, filter to 2
+   - Integration test: podcasts discovery
+   - Contract test: verify playlist discovery doesn't break existing behavior
+
+**Example Usage After Implementation**:
+```toml
+# Before (manual):
+[[sources]]
+url = "https://www.youtube.com/@apopyk"
+type = "channel"
+
+[[sources]]
+url = "https://www.youtube.com/playlist?list=PLxxx1"
+type = "playlist"
+
+[[sources]]
+url = "https://www.youtube.com/playlist?list=PLxxx2"
+type = "playlist"
+
+# After (automatic):
+[[sources]]
+url = "https://www.youtube.com/@apopyk"
+type = "channel"
+include_playlists = "all"  # Discovers all 8 playlists automatically
+```
+
+**Benefits**:
+- Eliminates manual playlist enumeration
+- Automatically discovers new playlists created on channel
+- Powerful filtering for selective playlist backup
+- Cleaner configuration files
+
+**Dependencies**: None (uses existing yt-dlp capabilities)
+
+**Risks**: None (purely additive feature, backward compatible)

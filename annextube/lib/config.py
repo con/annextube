@@ -23,6 +23,9 @@ class SourceConfig:
     url: str
     type: str  # 'channel' or 'playlist'
     enabled: bool = True
+    include_playlists: str = "none"  # "all", "none", or regex pattern for auto-discovery
+    exclude_playlists: Optional[str] = None  # Regex pattern to exclude playlists
+    include_podcasts: bool = False  # Auto-discover podcasts from channel
 
 
 @dataclass
@@ -81,6 +84,9 @@ class Config:
                 url=s["url"],
                 type=s.get("type", "channel"),
                 enabled=s.get("enabled", True),
+                include_playlists=s.get("include_playlists", "none"),
+                exclude_playlists=s.get("exclude_playlists"),
+                include_podcasts=s.get("include_podcasts", False),
             )
             for s in data.get("sources", [])
         ]
@@ -221,6 +227,18 @@ def generate_config_template() -> str:
 url = "https://www.youtube.com/@RickAstleyYT"
 type = "channel"  # or "playlist"
 enabled = true
+# include_playlists = "all"  # Auto-discover and backup ALL playlists from this channel
+# include_playlists = ".*tutorial.*"  # Only playlists matching regex pattern
+# exclude_playlists = ".*shorts.*|.*old.*"  # Exclude playlists matching regex
+# include_podcasts = true  # Also discover podcasts from channel's Podcasts tab
+
+# Example: Auto-discover all playlists from channel
+# [[sources]]
+# url = "https://www.youtube.com/@channel"
+# type = "channel"
+# enabled = true
+# include_playlists = "all"  # Discovers all playlists automatically
+# include_podcasts = true  # Also include podcasts
 
 # Example: Liked Videos playlist (HIGH PRIORITY test case)
 # [[sources]]
