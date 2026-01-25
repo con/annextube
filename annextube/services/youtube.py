@@ -463,17 +463,22 @@ class YouTubeService:
             logger.error(f"Failed to download captions: {e}")
             return []
 
-    def download_comments(self, video_id: str, output_path: Path) -> bool:
+    def download_comments(self, video_id: str, output_path: Path, max_depth: int = 10000) -> bool:
         """Download comments for a video.
 
         Args:
             video_id: YouTube video ID
             output_path: Path to save comments JSON file
+            max_depth: Maximum number of comments to fetch (0 = disabled, default: 10000)
 
         Returns:
             True if successful, False otherwise
         """
-        logger.info(f"Downloading comments for: {video_id}")
+        if max_depth == 0:
+            logger.debug(f"Comments disabled (max_depth=0) for: {video_id}")
+            return False
+
+        logger.info(f"Downloading comments for: {video_id} (max: {max_depth})")
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -482,6 +487,7 @@ class YouTubeService:
             "no_warnings": True,
             "skip_download": True,
             "getcomments": True,
+            "max_comments": max_depth,  # Limit number of comments
             "writeinfojson": False,  # Don't write info json
         }
 
@@ -555,10 +561,10 @@ class YouTubeService:
         else:
             published_at = datetime.now()
 
-        # Get available caption languages
+        # Get available caption languages (sorted for deterministic ordering)
         subtitles = metadata.get("subtitles", {})
         auto_captions = metadata.get("automatic_captions", {})
-        all_captions = set(list(subtitles.keys()) + list(auto_captions.keys()))
+        all_captions = sorted(set(list(subtitles.keys()) + list(auto_captions.keys())))
 
         # Get tags, handle both list and None
         tags = metadata.get("tags")
@@ -589,7 +595,7 @@ class YouTubeService:
             tags=tags,
             categories=categories,
             language=metadata.get("language"),
-            captions_available=list(all_captions),
+            captions_available=all_captions,  # Already sorted list
             has_auto_captions=len(auto_captions) > 0,
             download_status="not_downloaded",
             source_url=metadata.get("webpage_url", f"https://www.youtube.com/watch?v={metadata['id']}"),

@@ -490,9 +490,13 @@ class Archiver:
             caption_count = self._download_captions(video, video_dir)
 
         # Download comments (if enabled)
-        if self.config.components.comments:
+        if self.config.components.comments_depth > 0:
             comments_path = video_dir / "comments.json"
-            self.youtube.download_comments(video.video_id, comments_path)
+            self.youtube.download_comments(
+                video.video_id,
+                comments_path,
+                max_depth=self.config.components.comments_depth
+            )
 
         return caption_count
 

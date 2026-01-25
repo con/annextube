@@ -185,7 +185,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-006**: System MUST download and store video thumbnails at highest available resolution
 - **FR-007**: System MUST attempt to download closed captions matching configured language filter (regex pattern, default: .* for all) as separate VTT files per language, handling YouTube rate limits (HTTP 429) gracefully with retry logic and Retry-After header support
 - **FR-007a**: System MUST support configurable caption language filtering via regex pattern (e.g., "en.*" for English variants, "en|es|fr" for specific languages, ".*" for all)
-- **FR-008**: System MUST download video comments including comment text, author, timestamp, like count, and reply threads, storing as comments.json per video when comments component is enabled
+- **FR-008**: System MUST download video comments including comment text, author, author_id, timestamp, like count, storing as comments.json per video when comments_depth > 0 (configurable maximum comments to fetch, default: 10000, 0 = disabled). Note: yt-dlp limitation - all comments are returned as top-level with parent="root", reply threading information is not available from the YouTube API via yt-dlp
 - **FR-009**: System MUST support selective download of video content based on user configuration
 
 #### Incremental Updates and Change Detection
@@ -205,7 +205,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-019**: System MUST support filtering videos by playlist membership
 - **FR-020**: System MUST support filtering videos by metadata attributes (duration, view count, etc.)
 - **FR-021**: System MUST support exclusion filters (e.g., exclude shorts, exclude specific playlists)
-- **FR-022**: System MUST allow users to specify what components to backup (videos, metadata, comments, captions) via configuration
+- **FR-022**: System MUST allow users to specify what components to backup (videos, metadata, comments via comments_depth, captions via caption_languages) via configuration. comments_depth is an integer (default: 10000) where 0 disables comments download, positive values limit maximum comments fetched
 
 #### Repository Structure and Organization
 
@@ -228,6 +228,8 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-033**: System MUST generate playlists/playlists.tsv file mapping sanitized playlist folder names to playlist IDs and metadata, allowing web interface to resolve playlist identities and handle playlist renames
 - **FR-034**: System MUST include in videos.tsv with consistent column order: title, channel, published, duration, views, likes, comments, captions (count, not boolean), path (relative), video_id (last column)
 - **FR-035**: System MUST include in playlists.tsv with consistent column order: title, channel, video_count, total_duration, last_updated, path (relative folder name), playlist_id (last column)
+- **FR-035a**: System MUST generate authors.tsv file aggregating all unique authors from videos and comments, with columns: author_id (leading), name, channel_url, first_seen, last_seen, video_count (videos uploaded), comment_count (comments made)
+- **FR-035b**: System MUST ensure deterministic ordering of all list fields in metadata files (e.g., captions_available sorted alphabetically) to prevent false diffs in version control
 - **FR-036**: System MUST regenerate TSV files during updates to reflect current state
 - **FR-037**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB (tab-separated, UTF-8 encoded, with header row)
 

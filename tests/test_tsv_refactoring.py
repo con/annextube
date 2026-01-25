@@ -25,7 +25,7 @@ def test_config_defaults():
     # Test ComponentsConfig
     components = ComponentsConfig()
     assert components.caption_languages == ".*", "Default caption_languages should be '.*'"
-    assert components.comments is True, "Comments should be enabled by default"
+    assert components.comments_depth == 10000, "Comments should be enabled with default depth 10000"
 
     # Test OrganizationConfig
     org = OrganizationConfig()
@@ -258,13 +258,30 @@ def test_video_path_without_id():
 
         archiver = Archiver(repo_path, config)
 
-        # Create mock video
+        # Create mock video with all required fields
         video = Video(
             video_id="test_id_123",
             title="Test Video Title",
-            published_at=datetime(2020, 1, 10),
+            description="Test description",
             channel_id="channel123",
             channel_name="Test Channel",
+            published_at=datetime(2020, 1, 10),
+            duration=300,
+            view_count=1000,
+            like_count=50,
+            comment_count=10,
+            thumbnail_url="https://example.com/thumb.jpg",
+            license="standard",
+            privacy_status="public",
+            availability="public",
+            tags=[],
+            categories=[],
+            captions_available=[],
+            has_auto_captions=False,
+            download_status="not_downloaded",
+            source_url="https://youtube.com/watch?v=test_id_123",
+            fetched_at=datetime.now(),
+            updated_at=datetime.now(),
         )
 
         # Get expected path

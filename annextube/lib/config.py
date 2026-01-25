@@ -31,7 +31,7 @@ class ComponentsConfig:
 
     videos: bool = False  # Track URLs only by default
     metadata: bool = True
-    comments: bool = True
+    comments_depth: int = 10000  # Maximum comments to fetch (0 = disabled, default: 10000)
     captions: bool = True
     thumbnails: bool = True
     caption_languages: str = ".*"  # Regex pattern for caption languages (default: all)
@@ -86,10 +86,17 @@ class Config:
         ]
 
         components_data = data.get("components", {})
+
+        # Handle backward compatibility: comments: bool → comments_depth: int
+        comments_depth = components_data.get("comments_depth", 10000)
+        if "comments" in components_data and "comments_depth" not in components_data:
+            # Legacy config with comments: bool
+            comments_depth = 10000 if components_data["comments"] else 0
+
         components = ComponentsConfig(
             videos=components_data.get("videos", False),
             metadata=components_data.get("metadata", True),
-            comments=components_data.get("comments", True),
+            comments_depth=comments_depth,
             captions=components_data.get("captions", True),
             thumbnails=components_data.get("thumbnails", True),
             caption_languages=components_data.get("caption_languages", ".*"),
@@ -218,11 +225,13 @@ enabled = true
 
 # Components to backup
 [components]
-videos = false       # Track URLs only (no video downloads) - saves storage
-metadata = true      # Fetch video metadata
-comments = true      # Fetch comments (stored as comments.json per video)
-captions = true      # Fetch captions matching language filter
-thumbnails = true    # Download thumbnails
+videos = false           # Track URLs only (no video downloads) - saves storage
+metadata = true          # Fetch video metadata
+comments_depth = 10000   # Maximum comments to fetch (0 = disabled, default: 10000)
+                         # Note: yt-dlp limitation - all comments returned as top-level,
+                         # reply threading not available
+captions = true          # Fetch captions matching language filter
+thumbnails = true        # Download thumbnails
 
 caption_languages = ".*"  # Regex pattern for caption languages to download
                           # Examples:
