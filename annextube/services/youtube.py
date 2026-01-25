@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 import yt_dlp
 
 from annextube.lib.logging_config import get_logger
+from annextube.models.playlist import Playlist
 from annextube.models.video import Video
 
 logger = get_logger(__name__)
@@ -171,6 +172,127 @@ class YouTubeService:
             except Exception as e:
                 logger.error(f"Failed to fetch channel videos: {e}", exc_info=True)
                 return []
+
+    def get_playlist_videos(
+        self, playlist_url: str, limit: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Get videos from a playlist.
+
+        Args:
+            playlist_url: YouTube playlist URL
+            limit: Optional limit for number of videos (most recent)
+
+        Returns:
+            List of video metadata dictionaries
+        """
+        logger.info(f"Fetching videos from playlist: {playlist_url}")
+
+        ydl_opts = self._get_ydl_opts(download=False)
+
+        # Get full metadata directly
+        ydl_opts.update(
+            {
+                "playlistend": limit if limit else None,
+                "ignoreerrors": True,  # Continue on errors
+                "no_warnings": False,  # Show warnings for debugging
+            }
+        )
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                # Extract playlist info (gets full metadata for all videos)
+                info = ydl.extract_info(playlist_url, download=False)
+
+                if not info:
+                    logger.warning(f"No information found for playlist: {playlist_url}")
+                    return []
+
+                # Get entries (videos) - full metadata included
+                entries = info.get("entries", [])
+
+                if not entries:
+                    logger.warning("Playlist has no videos or videos are not accessible")
+                    return []
+
+                logger.info(f"Found {len(entries)} video(s) in playlist")
+
+                if limit:
+                    entries = entries[:limit]
+                    logger.info(f"Limited to {len(entries)} video(s)")
+
+                # Filter out None entries and extract metadata
+                videos = []
+                for entry in entries:
+                    if entry is None:
+                        continue
+
+                    # Some entries might be incomplete, skip them
+                    if not entry.get("id"):
+                        logger.warning(f"Skipping entry without ID: {entry.get('title', 'Unknown')}")
+                        continue
+
+                    videos.append(entry)
+
+                logger.info(f"Successfully fetched metadata for {len(videos)} video(s)")
+                return videos
+
+            except Exception as e:
+                logger.error(f"Failed to fetch playlist videos: {e}", exc_info=True)
+                return []
+
+    def get_playlist_metadata(self, playlist_url: str) -> Optional[Playlist]:
+        """Get metadata for a playlist.
+
+        Args:
+            playlist_url: YouTube playlist URL
+
+        Returns:
+            Playlist model instance or None if failed
+        """
+        logger.debug(f"Fetching playlist metadata: {playlist_url}")
+
+        ydl_opts = self._get_ydl_opts(download=False)
+        ydl_opts["extract_flat"] = True  # Don't fetch individual videos
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(playlist_url, download=False)
+
+                if not info:
+                    return None
+
+                # Parse last modified date if available
+                last_modified = None
+                if info.get("modified_date"):
+                    try:
+                        last_modified = datetime.strptime(info["modified_date"], "%Y%m%d")
+                    except ValueError:
+                        pass
+
+                # Get video IDs from entries
+                video_ids = []
+                for entry in info.get("entries", []):
+                    if entry and entry.get("id"):
+                        video_ids.append(entry["id"])
+
+                return Playlist(
+                    playlist_id=info["id"],
+                    title=info.get("title", "Unknown"),
+                    description=info.get("description", ""),
+                    channel_id=info.get("channel_id", info.get("uploader_id", "")),
+                    channel_name=info.get("channel", info.get("uploader", "")),
+                    video_count=info.get("playlist_count", len(video_ids)),
+                    privacy_status=info.get("availability", "public"),
+                    last_modified=last_modified,
+                    video_ids=video_ids,
+                    thumbnail_url=info.get("thumbnail"),
+                    fetched_at=datetime.now(),
+                    updated_at=datetime.now(),
+                )
+
+            except Exception as e:
+                logger.error(f"Failed to fetch playlist metadata: {e}")
+                return None
 
     def get_video_metadata(self, video_url: str) -> Optional[Dict[str, Any]]:
         """Get metadata for a single video.

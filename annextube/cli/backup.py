@@ -69,7 +69,11 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int):
             if config.filters.limit:
                 click.echo(f"Limit: {config.filters.limit} most recent videos")
 
-            stats = archiver.backup_channel(url)
+            # Detect if URL is a playlist or channel
+            if _is_playlist_url(url):
+                stats = archiver.backup_playlist(url)
+            else:
+                stats = archiver.backup_channel(url)
             _print_stats(stats)
 
         else:
@@ -95,9 +99,13 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int):
             }
 
             for i, source in enumerate(enabled_sources, 1):
-                click.echo(f"[{i}/{len(enabled_sources)}] Backing up: {source.url}")
+                click.echo(f"[{i}/{len(enabled_sources)}] {source.type.capitalize()}: {source.url}")
 
-                stats = archiver.backup_channel(source.url)
+                # Route to appropriate backup method
+                if source.type == "playlist":
+                    stats = archiver.backup_playlist(source.url)
+                else:
+                    stats = archiver.backup_channel(source.url)
                 _print_stats(stats, prefix="  ")
 
                 total_stats["sources_processed"] += 1
@@ -147,3 +155,15 @@ def _print_stats(stats: dict, prefix: str = ""):
 
     if stats["errors"]:
         click.echo(f"{prefix}  ⚠ Errors: {len(stats['errors'])}")
+
+
+def _is_playlist_url(url: str) -> bool:
+    """Detect if URL is a playlist.
+
+    Args:
+        url: YouTube URL
+
+    Returns:
+        True if URL appears to be a playlist
+    """
+    return "playlist?" in url or "list=" in url

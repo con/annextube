@@ -9,6 +9,7 @@ from typing import List, Optional
 from annextube.lib.config import Config
 from annextube.lib.logging_config import get_logger
 from annextube.models.channel import Channel
+from annextube.models.playlist import Playlist
 from annextube.models.video import Video
 from annextube.services.git_annex import GitAnnexService
 from annextube.services.youtube import YouTubeService
@@ -88,6 +89,32 @@ class Archiver:
 
         return self.repo_path / "videos" / path_str
 
+    def _get_playlist_path(self, playlist: Playlist) -> Path:
+        """Generate playlist directory path from pattern.
+
+        Args:
+            playlist: Playlist model instance
+
+        Returns:
+            Path to playlist directory
+        """
+        pattern = self.config.organization.playlist_path_pattern
+
+        # Build placeholders
+        placeholders = {
+            'playlist_id': playlist.playlist_id,
+            'channel_id': playlist.channel_id,
+            'channel_name': sanitize_filename(playlist.channel_name),
+            'playlist_title': sanitize_filename(playlist.title),
+        }
+
+        # Replace placeholders in pattern
+        path_str = pattern
+        for key, value in placeholders.items():
+            path_str = path_str.replace(f'{{{key}}}', value)
+
+        return self.repo_path / "playlists" / path_str
+
     def backup_channel(self, channel_url: str) -> dict:
         """Backup a YouTube channel.
 
@@ -144,6 +171,84 @@ class Archiver:
 
         except Exception as e:
             logger.error(f"Channel backup failed: {e}")
+            stats["errors"].append(str(e))
+
+        return stats
+
+    def backup_playlist(self, playlist_url: str) -> dict:
+        """Backup a YouTube playlist.
+
+        Args:
+            playlist_url: YouTube playlist URL
+
+        Returns:
+            Summary dictionary with statistics
+        """
+        logger.info(f"Starting backup for playlist: {playlist_url}")
+
+        stats = {
+            "playlist_url": playlist_url,
+            "videos_processed": 0,
+            "videos_tracked": 0,
+            "metadata_saved": 0,
+            "captions_downloaded": 0,
+            "errors": [],
+        }
+
+        try:
+            # Get playlist metadata
+            playlist = self.youtube.get_playlist_metadata(playlist_url)
+            if not playlist:
+                logger.error("Failed to fetch playlist metadata")
+                stats["errors"].append("Failed to fetch playlist metadata")
+                return stats
+
+            # Create playlist directory
+            playlist_dir = self._get_playlist_path(playlist)
+            playlist_dir.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Playlist directory: {playlist_dir}")
+
+            # Save playlist metadata
+            metadata_path = playlist_dir / "playlist.json"
+            with open(metadata_path, "w") as f:
+                json.dump(playlist.to_dict(), f, indent=2)
+            logger.debug(f"Saved playlist metadata: {metadata_path}")
+
+            # Get playlist videos
+            limit = self.config.filters.limit
+            videos_metadata = self.youtube.get_playlist_videos(playlist_url, limit=limit)
+
+            if not videos_metadata:
+                logger.warning("No videos found in playlist")
+                return stats
+
+            logger.info(f"Found {len(videos_metadata)} videos to process")
+
+            # Process each video
+            for i, video_meta in enumerate(videos_metadata, 1):
+                try:
+                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
+                    video = self.youtube.metadata_to_video(video_meta)
+                    caption_count = self._process_video(video)
+
+                    stats["videos_processed"] += 1
+                    stats["videos_tracked"] += 1
+                    stats["metadata_saved"] += 1
+                    stats["captions_downloaded"] += caption_count
+
+                except Exception as e:
+                    logger.error(f"Failed to process video {video_meta.get('id', 'unknown')}: {e}", exc_info=True)
+                    stats["errors"].append(str(e))
+
+            # Commit changes
+            self.git_annex.add_and_commit(
+                f"Backup playlist: {playlist.title} ({stats['videos_processed']} videos)"
+            )
+
+            logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
+
+        except Exception as e:
+            logger.error(f"Playlist backup failed: {e}")
             stats["errors"].append(str(e))
 
         return stats
