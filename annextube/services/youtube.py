@@ -323,11 +323,17 @@ class YouTubeService:
                     return []
 
                 for entry in info["entries"]:
-                    if entry and entry.get("_type") == "playlist":
+                    if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
+                        # Extract playlist ID from URL
+                        playlist_id = None
+                        url = entry.get("url", "")
+                        if "list=" in url:
+                            playlist_id = url.split("list=")[1].split("&")[0]
+
                         playlists.append({
-                            "id": entry.get("id"),
+                            "id": playlist_id or entry.get("id"),
                             "title": entry.get("title", "Unknown"),
-                            "url": entry.get("url") or f"https://www.youtube.com/playlist?list={entry.get('id')}",
+                            "url": url,
                             "video_count": entry.get("playlist_count", 0),
                         })
 
@@ -366,11 +372,17 @@ class YouTubeService:
                     return []
 
                 for entry in info["entries"]:
-                    if entry and entry.get("_type") == "playlist":
+                    if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
+                        # Extract playlist ID from URL
+                        playlist_id = None
+                        url = entry.get("url", "")
+                        if "list=" in url:
+                            playlist_id = url.split("list=")[1].split("&")[0]
+
                         podcasts.append({
-                            "id": entry.get("id"),
+                            "id": playlist_id or entry.get("id"),
                             "title": entry.get("title", "Unknown"),
-                            "url": entry.get("url") or f"https://www.youtube.com/playlist?list={entry.get('id')}",
+                            "url": url,
                             "video_count": entry.get("playlist_count", 0),
                         })
 
