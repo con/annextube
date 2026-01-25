@@ -1,10 +1,13 @@
 """Backup command for annextube."""
 
+from datetime import datetime
 from pathlib import Path
+from typing import Optional, Tuple
 
 import click
 
 from annextube.lib.config import load_config
+from annextube.lib.date_utils import parse_date
 from annextube.lib.logging_config import get_logger
 from annextube.services.archiver import Archiver
 from annextube.services.git_annex import GitAnnexService
@@ -22,12 +25,28 @@ logger = get_logger(__name__)
 )
 @click.option("--limit", type=int, help="Limit number of videos (most recent)")
 @click.option(
+    "--update",
+    type=click.Choice(["all-incremental", "all-force", "social", "users", "comments"], case_sensitive=False),
+    help="Update mode: all-incremental (new videos + 1 week social), all-force (all videos), social (comments+captions), users (authors), comments (comments only)",
+)
+@click.option(
+    "--from-date",
+    type=str,
+    help="Start date for update window (ISO format or duration like '1 week', '2 days')",
+)
+@click.option(
+    "--to-date",
+    type=str,
+    help="End date for update window (ISO format or duration like '1 week', '2 days')",
+)
+@click.option(
     "--skip-existing",
     is_flag=True,
-    help="Skip videos that have already been processed (incremental update mode)",
+    hidden=True,  # Deprecated, replaced by --update=all-incremental
+    help="(Deprecated: use --update=all-incremental instead)",
 )
 @click.pass_context
-def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, skip_existing: bool):
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, skip_existing: bool):
     """Backup YouTube channel or playlist.
 
     If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
@@ -64,8 +83,47 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, skip_exis
         if limit:
             config.filters.limit = limit
 
+        # Handle deprecated --skip-existing flag
+        if skip_existing and not update:
+            update = "all-incremental"
+            click.echo("Note: --skip-existing is deprecated, use --update=all-incremental instead")
+
+        # Parse date range
+        date_from: Optional[datetime] = None
+        date_to: Optional[datetime] = None
+
+        if from_date:
+            try:
+                date_from = parse_date(from_date)
+                click.echo(f"From date: {date_from.strftime('%Y-%m-%d')}")
+            except ValueError as e:
+                click.echo(f"Error: Invalid --from-date: {e}", err=True)
+                raise click.Abort()
+
+        if to_date:
+            try:
+                date_to = parse_date(to_date)
+                click.echo(f"To date: {date_to.strftime('%Y-%m-%d')}")
+            except ValueError as e:
+                click.echo(f"Error: Invalid --to-date: {e}", err=True)
+                raise click.Abort()
+
+        # Determine skip_existing based on update mode
+        skip_existing_mode = False
+        if update:
+            click.echo(f"Update mode: {update}")
+            if update == "all-incremental":
+                skip_existing_mode = True
+                # Default to 1 week window for social updates if no dates specified
+                if not from_date:
+                    from annextube.lib.date_utils import parse_duration
+                    date_from = datetime.now() - parse_duration("1 week")
+                    click.echo(f"Default social window: {date_from.strftime('%Y-%m-%d')} to now")
+            elif update == "all-force":
+                skip_existing_mode = False  # Re-process all
+
         # Initialize archiver
-        archiver = Archiver(output_dir, config, skip_existing=skip_existing)
+        archiver = Archiver(output_dir, config, skip_existing=skip_existing_mode)
 
         # Determine what to backup
         if url:

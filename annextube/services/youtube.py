@@ -302,7 +302,11 @@ class YouTubeService:
             video_url: YouTube video URL
 
         Returns:
-            Video metadata dictionary or None if failed
+            Video metadata dictionary or None if failed.
+            If video is unavailable, returns dict with:
+            - 'id': video_id
+            - 'availability': 'unavailable' or 'private' or 'removed'
+            - 'privacy_status': 'non-public' or 'removed'
         """
         logger.debug(f"Fetching metadata for: {video_url}")
 
@@ -312,6 +316,38 @@ class YouTubeService:
             try:
                 info = ydl.extract_info(video_url, download=False)
                 return info
+            except yt_dlp.utils.DownloadError as e:
+                error_msg = str(e).lower()
+
+                # Extract video ID from URL
+                video_id = None
+                if 'v=' in video_url:
+                    video_id = video_url.split('v=')[1].split('&')[0]
+                elif '/' in video_url:
+                    video_id = video_url.split('/')[-1]
+
+                # Detect specific error types
+                if 'private video' in error_msg or 'this video is private' in error_msg:
+                    logger.warning(f"Video is private: {video_url}")
+                    return {
+                        'id': video_id,
+                        'availability': 'private',
+                        'privacy_status': 'non-public',
+                        'title': f'Private Video ({video_id})',
+                        'was_available': True,
+                    }
+                elif 'video has been removed' in error_msg or 'unavailable' in error_msg or 'deleted' in error_msg:
+                    logger.warning(f"Video has been removed: {video_url}")
+                    return {
+                        'id': video_id,
+                        'availability': 'removed',
+                        'privacy_status': 'removed',
+                        'title': f'Removed Video ({video_id})',
+                        'was_available': True,
+                    }
+                else:
+                    logger.error(f"Failed to fetch video metadata: {e}")
+                    return None
             except Exception as e:
                 logger.error(f"Failed to fetch video metadata: {e}")
                 return None

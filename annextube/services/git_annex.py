@@ -51,22 +51,31 @@ class GitAnnexService:
     def configure_gitattributes(self) -> None:
         """Configure .gitattributes for file tracking rules.
 
-        Metadata files (*.json, *.tsv, *.md, *.vtt) → git
-        Media files (*.mp4, *.webm, *.jpg, *.png) → git-annex
+        Default: Binary files and files >10k → git-annex
+        Large text files (.vtt captions, comments.json) → git-annex
+        Small metadata files (.tsv, .md, README) → git
         """
         gitattributes_path = self.repo_path / ".gitattributes"
 
         rules = [
             "# annextube file tracking configuration",
             "",
-            "# Metadata files → git (text, tracked in git)",
-            "*.json annex.largefiles=nothing",
+            "# Default: Binary files and files >10k go to git-annex",
+            "* annex.largefiles=(((mimeencoding=binary)and(largerthan=0))or(largerthan=10k))",
+            "",
+            "# Small metadata files → git (override default)",
             "*.tsv annex.largefiles=nothing",
             "*.md annex.largefiles=nothing",
-            "*.vtt annex.largefiles=nothing",
-            "*.txt annex.largefiles=nothing",
+            "README* annex.largefiles=nothing",
+            "LICENSE* annex.largefiles=nothing",
+            ".gitignore annex.largefiles=nothing",
+            ".gitattributes annex.largefiles=nothing",
             "",
-            "# Media files → git-annex (binary, tracked with git-annex)",
+            "# Large text files → git-annex (VTT captions, JSON comments)",
+            "*.vtt annex.largefiles=anything",
+            "comments.json annex.largefiles=anything",
+            "",
+            "# Media files → git-annex (covered by default, explicit for clarity)",
             "*.mp4 annex.largefiles=anything",
             "*.webm annex.largefiles=anything",
             "*.mkv annex.largefiles=anything",
