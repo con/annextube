@@ -615,30 +615,40 @@ class YouTubeService:
         return video_url  # Fallback
 
     def download_captions(
-        self, video_id: str, output_dir: Path, language_pattern: str = ".*"
+        self, video_id: str, output_dir: Path, language_pattern: str = ".*",
+        auto_translated_langs: Optional[List[str]] = None
     ) -> List[Dict[str, Any]]:
-        """Download captions for a video, filtered by language pattern.
+        """Download captions for a video, excluding auto-translated by default.
+
+        By default, downloads only:
+        - Manual subtitles (uploaded by creator)
+        - Auto-generated captions (speech-to-text in original language)
+
+        Auto-translated captions (machine translation to other languages) are excluded
+        unless explicitly specified in auto_translated_langs.
 
         Args:
             video_id: YouTube video ID
             output_dir: Directory to save captions
             language_pattern: Regex pattern for filtering caption languages
                              (default: ".*" for all languages)
-                             Examples: "en.*" for English variants,
-                                      "en|es|fr" for specific languages
+            auto_translated_langs: List of language codes for auto-translated captions to download
+                                  (e.g., ["en", "es"]). Default: [] (no auto-translated)
 
         Returns:
             List of caption metadata dictionaries with keys:
-            - language_code: Language code (e.g., 'en', 'es')
-            - auto_generated: Whether caption is auto-generated
+            - language_code: Language code (e.g., 'en', 'ru')
+            - auto_generated: Whether caption is auto-generated (vs manual)
+            - auto_translated: Whether caption is auto-translated
             - file_path: Path to caption file
             - fetched_at: ISO 8601 timestamp when fetched
         """
-        logger.info(f"Downloading captions for: {video_id} (filter: {language_pattern})")
+        if auto_translated_langs is None:
+            auto_translated_langs = []
+
+        logger.info(f"Downloading captions for: {video_id} (pattern: {language_pattern}, auto-translated: {auto_translated_langs or 'none'})")
 
         output_dir.mkdir(parents=True, exist_ok=True)
-
-        # First, get video info to see available captions
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
         try:
@@ -656,46 +666,67 @@ class YouTubeService:
                 logger.warning(f"No info available for video: {video_id}")
                 return []
 
-            # Get available subtitles
+            # Get available subtitles and auto captions
             subtitles = info.get('subtitles', {})
             automatic_captions = info.get('automatic_captions', {})
-            all_available = set(list(subtitles.keys()) + list(automatic_captions.keys()))
 
-            if not all_available:
+            if not subtitles and not automatic_captions:
                 logger.info(f"No captions available for video: {video_id}")
                 return []
 
-            # Filter by language pattern
-            pattern = re.compile(language_pattern)
-            matching_langs = [lang for lang in all_available if pattern.match(lang)]
+            # Determine which captions to download
+            langs_to_download = []
 
-            if not matching_langs:
+            # Always include manual subtitles (if they match pattern)
+            pattern = re.compile(language_pattern)
+            for lang in subtitles.keys():
+                if pattern.match(lang):
+                    langs_to_download.append(lang)
+
+            # For automatic captions, check if auto-translated
+            for lang, variants in automatic_captions.items():
+                if not pattern.match(lang):
+                    continue
+
+                # Check first variant's URL to determine if auto-translated
+                if variants and len(variants) > 0:
+                    url = variants[0].get('url', '')
+                    # Auto-translated captions have tlang parameter in URL
+                    is_auto_translated = 'tlang=' in url
+
+                    if is_auto_translated:
+                        # Only download if explicitly requested
+                        if lang in auto_translated_langs:
+                            langs_to_download.append(lang)
+                    else:
+                        # Auto-generated (not translated) - always download
+                        langs_to_download.append(lang)
+
+            if not langs_to_download:
                 logger.info(
-                    f"No captions matching pattern '{language_pattern}' "
-                    f"(available: {sorted(all_available)})"
+                    f"No captions to download after filtering "
+                    f"(manual: {len(subtitles)}, auto: {len(automatic_captions)})"
                 )
                 return []
 
             logger.info(
-                f"Found {len(matching_langs)} matching caption(s): {sorted(matching_langs)} "
-                f"(from {len(all_available)} available)"
+                f"Downloading {len(langs_to_download)} caption(s): {sorted(langs_to_download)}"
             )
 
-            # Download only matching captions
+            # Download selected captions
             ydl_opts = {
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
                 "writesubtitles": True,
                 "writeautomaticsub": True,
-                "subtitleslangs": matching_langs,
+                "subtitleslangs": langs_to_download,
                 "subtitlesformat": "vtt",
                 "outtmpl": str(output_dir / "%(id)s.%(ext)s"),
             }
 
             def _download():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # Download subtitles
                     ydl.download([video_url])
 
             # Retry on rate limits
@@ -704,7 +735,7 @@ class YouTubeService:
             # Find downloaded caption files
             caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
 
-            # Build metadata for each caption
+            # Build metadata for each downloaded caption
             captions_metadata = []
             fetched_at = datetime.now().isoformat()
 
@@ -712,13 +743,23 @@ class YouTubeService:
                 # Extract language code from filename (video_id.lang.vtt)
                 lang_code = caption_file.stem.split(".")[-1]
 
-                # Determine if auto-generated
-                is_auto = lang_code in automatic_captions
+                # Determine caption type
+                is_manual = lang_code in subtitles
+                is_auto_generated = lang_code in automatic_captions and not is_manual
+
+                # Check if auto-translated
+                is_auto_translated = False
+                if is_auto_generated and lang_code in automatic_captions:
+                    variants = automatic_captions[lang_code]
+                    if variants and len(variants) > 0:
+                        url = variants[0].get('url', '')
+                        is_auto_translated = 'tlang=' in url
 
                 captions_metadata.append({
                     'language_code': lang_code,
-                    'auto_generated': is_auto,
-                    'file_path': str(caption_file.relative_to(output_dir.parent.parent)),  # Relative to repo root
+                    'auto_generated': is_auto_generated,
+                    'auto_translated': is_auto_translated,
+                    'file_path': str(caption_file.relative_to(output_dir.parent.parent)),
                     'fetched_at': fetched_at
                 })
 
@@ -912,10 +953,19 @@ class YouTubeService:
         else:
             published_at = datetime.now()
 
-        # Get available caption languages (sorted for deterministic ordering)
-        subtitles = metadata.get("subtitles", {})
-        auto_captions = metadata.get("automatic_captions", {})
-        all_captions = sorted(set(list(subtitles.keys()) + list(auto_captions.keys())))
+        # Get available caption languages
+        # For stored metadata (from metadata.json), use the stored captions_available list
+        # For yt-dlp metadata (new videos), start with empty list - will be populated after download
+        if "captions_available" in metadata:
+            # Stored metadata - use what was actually downloaded
+            all_captions = metadata.get("captions_available", [])
+            has_auto_captions = metadata.get("has_auto_captions", False)
+        else:
+            # yt-dlp metadata - don't populate yet, will be set after download
+            all_captions = []
+            # Check if automatic_captions are available in yt-dlp metadata
+            auto_captions = metadata.get("automatic_captions", {})
+            has_auto_captions = len(auto_captions) > 0
 
         # Get tags, handle both list and None
         tags = metadata.get("tags")
@@ -952,8 +1002,8 @@ class YouTubeService:
             tags=tags,
             categories=categories,
             language=metadata.get("language"),
-            captions_available=all_captions,  # Already sorted list
-            has_auto_captions=len(auto_captions) > 0,
+            captions_available=all_captions,  # Empty for new videos, populated after download
+            has_auto_captions=has_auto_captions,
             download_status=metadata.get("download_status", "not_downloaded"),
             source_url=metadata.get("source_url") or metadata.get("webpage_url", f"https://www.youtube.com/watch?v={video_id}"),
             fetched_at=datetime.now(),

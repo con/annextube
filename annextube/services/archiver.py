@@ -759,8 +759,19 @@ class Archiver:
             self._download_thumbnail(video, video_dir)
 
         # Download captions (if enabled and mode allows)
+        caption_count = 0
         if self.config.components.captions and video.captions_available and self._should_process_component("captions"):
-            caption_count = self._download_captions(video, video_dir)
+            downloaded_captions = self._download_captions(video, video_dir)
+            caption_count = len(downloaded_captions)
+
+            # Update video metadata with actually downloaded captions
+            if downloaded_captions:
+                video.captions_available = downloaded_captions
+                # Re-save metadata with updated captions_available
+                metadata_path = video_dir / "metadata.json"
+                with open(metadata_path, "w") as f:
+                    json.dump(video.to_dict(), f, indent=2)
+                logger.debug(f"Updated metadata with {len(downloaded_captions)} downloaded captions")
 
         # Download comments (if enabled and mode allows)
         # comments_depth: None = unlimited, 0 = disabled, N = limit to N
@@ -811,7 +822,7 @@ class Archiver:
         except Exception as e:
             logger.warning(f"Failed to download thumbnail: {e}")
 
-    def _download_captions(self, video: Video, video_dir: Path) -> int:
+    def _download_captions(self, video: Video, video_dir: Path) -> List[str]:
         """Download video captions, generate captions.tsv, and set git-annex metadata.
 
         Args:
@@ -819,27 +830,33 @@ class Archiver:
             video_dir: Video directory path
 
         Returns:
-            Number of caption files downloaded
+            List of downloaded caption language codes
         """
         try:
             captions_dir = video_dir / "captions"
-            # Use caption language filter from config
+            # Use caption settings from config
             language_pattern = self.config.components.caption_languages
+            auto_translated_langs = self.config.components.auto_translated_captions
+
             captions_metadata = self.youtube.download_captions(
-                video.video_id, captions_dir, language_pattern=language_pattern
+                video.video_id,
+                captions_dir,
+                language_pattern=language_pattern,
+                auto_translated_langs=auto_translated_langs
             )
 
             if captions_metadata:
                 # Create captions.tsv with metadata
                 captions_tsv_path = video_dir / "captions.tsv"
                 with open(captions_tsv_path, "w") as f:
-                    # Write header
-                    f.write("language_code\tauto_generated\tfile_path\tfetched_at\n")
+                    # Write header (added auto_translated column)
+                    f.write("language_code\tauto_generated\tauto_translated\tfile_path\tfetched_at\n")
                     # Write caption rows and set git-annex metadata
                     for caption in captions_metadata:
                         f.write(
                             f"{caption['language_code']}\t"
                             f"{caption['auto_generated']}\t"
+                            f"{caption.get('auto_translated', False)}\t"
                             f"{caption['file_path']}\t"
                             f"{caption['fetched_at']}\n"
                         )
@@ -859,6 +876,7 @@ class Archiver:
                                 'filetype': f'caption.{lang_code}',
                                 'language': lang_code,
                                 'auto_generated': str(caption['auto_generated']),
+                                'auto_translated': str(caption.get('auto_translated', False)),
                             }
                             self.git_annex.set_metadata(caption_file_path, metadata)
                             logger.debug(f"Set git-annex metadata for caption: {caption_file_path}")
@@ -867,9 +885,10 @@ class Archiver:
                             logger.debug(f"Could not set caption metadata (file in git, not annex): {e}")
 
                 logger.debug(f"Downloaded {len(captions_metadata)} caption files and created captions.tsv")
-                return len(captions_metadata)
+                # Return list of language codes
+                return sorted([c['language_code'] for c in captions_metadata])
 
         except Exception as e:
             logger.warning(f"Failed to download captions: {e}")
 
-        return 0
+        return []

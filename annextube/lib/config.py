@@ -38,6 +38,7 @@ class ComponentsConfig:
     captions: bool = True
     thumbnails: bool = True
     caption_languages: str = ".*"  # Regex pattern for caption languages (default: all)
+    auto_translated_captions: List[str] = field(default_factory=list)  # Auto-translated languages to download (empty = only auto-generated)
 
 
 @dataclass
