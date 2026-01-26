@@ -193,13 +193,13 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Incremental Updates and Change Detection
 
-- **FR-010**: System MUST efficiently detect new videos added to channels since last sync
-- **FR-011**: System MUST efficiently detect new videos added to playlists since last sync
-- **FR-012**: System MUST detect and fetch updated comments on existing videos
-- **FR-013**: System MUST detect and fetch updated or newly available captions
-- **FR-014**: System MUST detect changes in video metadata (title, description, etc.)
-- **FR-015**: System MUST maintain sync state tracking last successful update per channel/playlist
-- **FR-016**: System MUST complete incremental updates in reasonable time (not re-checking all content)
+- **FR-010**: System MUST efficiently detect new videos added to channels since last sync by querying YouTube API with `publishedAfter` parameter set to maximum published datetime from videos.tsv
+- **FR-011**: System MUST efficiently detect new videos added to playlists since last sync by comparing current playlist contents with playlists.tsv last_updated timestamp
+- **FR-012**: System MUST detect and fetch updated comments on existing videos by comparing comment counts in metadata.json or querying with `publishedAfter` set to latest comment timestamp from comments.json
+- **FR-013**: System MUST detect and fetch updated or newly available captions by comparing available languages with captions.tsv
+- **FR-014**: System MUST detect changes in video metadata (title, description, view/like counts) by comparing fetched metadata with existing metadata.json
+- **FR-015**: System MUST derive sync state from existing data files (videos.tsv for video discovery, metadata.json for counts, comments.json for comment timestamps, file modification times) rather than maintaining separate sync state tracking file
+- **FR-016**: System MUST complete incremental updates in reasonable time (not re-checking all content) by using date-based filtering in YouTube API queries
 
 #### Filtering and Scope Control
 
@@ -227,10 +227,10 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Metadata Aggregation and Export
 
-- **FR-032**: System MUST generate videos/videos.tsv file with summary metadata for all videos, enabling fast loading by web interface without parsing individual JSON files
+- **FR-032**: System MUST generate videos/videos.tsv file with summary metadata for all videos, enabling fast loading by web interface without parsing individual JSON files and efficient incremental updates via date filtering
 - **FR-033**: System MUST generate playlists/playlists.tsv file mapping sanitized playlist folder names to playlist IDs and metadata, allowing web interface to resolve playlist identities and handle playlist renames
-- **FR-034**: System MUST include in videos.tsv with consistent column order: title, channel, published, duration, views, likes, comments, captions (count, not boolean), path (relative), video_id (last column)
-- **FR-035**: System MUST include in playlists.tsv with consistent column order: title, channel, video_count, total_duration, last_updated, path (relative folder name), playlist_id (last column)
+- **FR-034**: System MUST include in videos.tsv with consistent column order: title, channel, published (ISO 8601 datetime with timezone for efficient incremental queries), duration, views, likes, comments, captions (count, not boolean), path (relative), video_id (last column)
+- **FR-035**: System MUST include in playlists.tsv with consistent column order: title, channel, video_count, total_duration, last_updated (ISO 8601 datetime for incremental sync), path (relative folder name), playlist_id (last column)
 - **FR-035a**: System MUST generate authors.tsv file aggregating all unique authors from videos and comments, with columns: author_id (leading), name, channel_url, first_seen, last_seen, video_count (videos uploaded), comment_count (comments made)
 - **FR-035b**: System MUST ensure deterministic ordering of all list fields in metadata files (e.g., captions_available sorted alphabetically) to prevent false diffs in version control
 - **FR-036**: System MUST regenerate TSV files during updates to reflect current state
@@ -255,7 +255,11 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-048**: System MUST provide CLI command to initialize new archive repository (init) accepting optional directory as positional argument (defaulting to current directory) and automatically configuring git-annex security settings for yt-dlp
 - **FR-049**: System MUST provide CLI command to backup channel by URL
 - **FR-050**: System MUST provide CLI command to backup playlist by URL
-- **FR-051**: System MUST provide CLI command to run incremental update
+- **FR-051**: System MUST provide CLI command to run incremental update with multiple modes
+- **FR-051a**: System MUST support `--update=videos-incremental` mode (default) that fetches only videos published after the latest datetime in videos.tsv, optimizing API usage for large channels
+- **FR-051b**: System MUST support `--update=all-incremental` mode that combines videos-incremental with selective social data updates (comments/captions) for recently published videos (configurable time window, default: 1 week)
+- **FR-051c**: System MUST support `--update=social` mode that updates only comments and captions without fetching new videos
+- **FR-051d**: System MUST support `--update=all-force` mode that re-processes all videos in the specified date range, ignoring existing data
 - **FR-052**: System MUST provide CLI command to generate web interface
 - **FR-053**: System MUST provide CLI command to export metadata TSV files
 - **FR-054**: System MUST support configurable logging levels (debug, info, warning, error)

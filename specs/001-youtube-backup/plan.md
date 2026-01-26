@@ -134,14 +134,13 @@ annextube/                    # Python package (library + CLI)
 │   ├── playlist.py          # Playlist entity
 │   ├── caption.py           # Caption entity
 │   ├── comment.py           # Comment entity
-│   ├── sync_state.py        # SyncState entity
 │   └── filter_config.py     # FilterConfig entity
 ├── services/
 │   ├── git_annex.py         # datasalad wrapper for git-annex ops
 │   ├── youtube.py           # yt-dlp wrapper for YouTube ops
 │   ├── archiver.py          # Core archival logic
-│   ├── updater.py           # Incremental update logic
 │   ├── metadata_export.py   # TSV export generation
+│   ├── tsv_reader.py        # TSV reading utilities (max dates, counts)
 │   └── web_generator.py     # Static web UI generation
 ├── cli/
 │   ├── __main__.py          # CLI entry point
@@ -327,3 +326,137 @@ include_playlists = "all"  # Discovers all 8 playlists automatically
 **Dependencies**: None (uses existing yt-dlp capabilities)
 
 **Risks**: None (purely additive feature, backward compatible)
+
+### TODO: Eliminate sync_state.json - Use Actual Data Files (CURRENT)
+
+**Status**: In progress  
+**Priority**: P1 (Performance and simplicity improvement)  
+**Estimated Effort**: 6-8 hours
+
+**Problem**: sync_state.json duplicates data already present in videos.tsv, metadata.json, comments.json, and file modification times. This violates DRY principle and adds complexity.
+
+**Solution**: Derive all sync state from actual data files.
+
+**Implementation Tasks**:
+
+1. **Update videos.tsv to use datetime** (currently date only):
+   - Change published column from YYYY-MM-DD to ISO 8601 datetime with timezone
+   - Update ExportService to write full datetime
+   - Benefits: Enables precise `publishedAfter` queries to YouTube API
+
+2. **Create TSV reader utilities** (`annextube/services/tsv_reader.py`):
+   ```python
+   class TSVReader:
+       @staticmethod
+       def get_latest_video_datetime(videos_tsv_path: Path) -> Optional[datetime]:
+           """Read videos.tsv, return max(published) datetime."""
+           
+       @staticmethod
+       def get_latest_playlist_update(playlists_tsv_path: Path, playlist_id: str) -> Optional[datetime]:
+           """Read playlists.tsv, return last_updated for playlist_id."""
+           
+       @staticmethod
+       def get_latest_comment_datetime(comments_json_path: Path) -> Optional[datetime]:
+           """Read comments.json, return max(timestamp) from all comments."""
+   ```
+
+3. **Add date filtering to YouTube service** (`annextube/services/youtube.py`):
+   ```python
+   def get_channel_videos(self, channel_url: str, limit: int = None,
+                         published_after: Optional[datetime] = None) -> List[Dict]:
+       ydl_opts = self._get_ydl_opts(download=False)
+       
+       if published_after:
+           # Format as YYYYMMDD for yt-dlp
+           ydl_opts['dateafter'] = published_after.strftime('%Y%m%d')
+       
+       # ... rest of method
+   ```
+
+4. **Remove sync_state_service.py completely**:
+   - Delete `annextube/services/sync_state_service.py`
+   - Delete `annextube/models/sync_state.py`
+   - Remove all imports and references
+
+5. **Update archiver to use TSV-based state** (`annextube/services/archiver.py`):
+   ```python
+   def backup_channel(self, channel_url: str, source_config: Optional['SourceConfig'] = None,
+                     update_mode: str = "videos-incremental") -> dict:
+       """Backup channel with efficient incremental updates."""
+       
+       if update_mode == "videos-incremental":
+           # Get latest video datetime from videos.tsv
+           latest_datetime = TSVReader.get_latest_video_datetime(
+               self.repo_path / "videos" / "videos.tsv"
+           )
+           videos = self.youtube.get_channel_videos(
+               channel_url,
+               limit=self.config.filters.limit,
+               published_after=latest_datetime  # Only new videos!
+           )
+       elif update_mode == "all-incremental":
+           # Fetch new videos + update social for recent ones
+           latest_datetime = TSVReader.get_latest_video_datetime(...)
+           new_videos = self.youtube.get_channel_videos(..., published_after=latest_datetime)
+           
+           # Also update social data for videos within time window
+           recent_cutoff = datetime.now() - timedelta(days=7)
+           recent_videos = [v for v in all_videos if v.published_at > recent_cutoff]
+           for video in recent_videos:
+               self._update_social_data(video)
+       elif update_mode == "all-force":
+           # Re-process everything (existing behavior)
+           videos = self.youtube.get_channel_videos(...)
+   ```
+
+6. **Implement update modes in CLI** (`annextube/cli/backup.py`):
+   ```python
+   @click.option(
+       "--update",
+       type=click.Choice(["videos-incremental", "all-incremental", "social", "all-force"]),
+       default="videos-incremental",
+       help="Update mode (default: videos-incremental - fastest, only new videos)"
+   )
+   ```
+
+7. **Update playlists.tsv to include last_updated datetime**:
+   - Add last_updated column (ISO 8601 datetime)
+   - Use for incremental playlist sync
+
+8. **Comments incremental fetch** (if YouTube API supports it):
+   - Check if YouTube API has `publishedAfter` for comments
+   - If yes: fetch only comments newer than max timestamp in comments.json
+   - If no: compare comment count, re-fetch if changed
+
+**Benefits**:
+- ✅ Single source of truth (actual data files)
+- ✅ No duplicate timestamps
+- ✅ Archive is self-describing
+- ✅ Massive performance improvement (query YouTube API with date filters)
+- ✅ Simpler codebase (remove sync_state_service.py)
+- ✅ Can reconstruct state from archive at any time
+
+**Example Performance Gain**:
+Before:
+```
+# Channel with 10,000 videos, checking for new videos
+1. Fetch metadata for all 10,000 videos (slow!)
+2. Skip 9,995 in our code
+3. Process 5 new ones
+```
+
+After:
+```
+# Query YouTube API directly
+1. Fetch only videos published after 2026-01-24T16:48:00Z
+2. Get back 5 videos (only the new ones!)
+3. Process 5 new ones
+```
+
+**Testing**:
+- Unit tests for TSVReader utilities
+- Integration test: backup channel, verify only new videos fetched on second run
+- Integration test: all-incremental mode updates social data for recent videos only
+- Contract test: verify videos.tsv datetime format
+
+**Migration**: Existing archives need videos.tsv regeneration to add datetime (backward compatible - can parse old date-only format and default to midnight UTC)
