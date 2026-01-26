@@ -42,7 +42,8 @@ def sanitize_filename(text: str) -> str:
 class Archiver:
     """Core archival logic coordinating git-annex and YouTube services."""
 
-    def __init__(self, repo_path: Path, config: Config, update_mode: str = "videos-incremental"):
+    def __init__(self, repo_path: Path, config: Config, update_mode: str = "videos-incremental",
+                 date_from: Optional[datetime] = None, date_to: Optional[datetime] = None):
         """Initialize Archiver.
 
         Args:
@@ -50,15 +51,57 @@ class Archiver:
             config: Configuration object
             update_mode: Update mode - "videos-incremental" (default), "all-incremental", "all-force",
                         "social" (comments+captions), "playlists", "comments", "captions"
+            date_from: Filter videos published on or after this date (for video published_at, not comment timestamps)
+            date_to: Filter videos published on or before this date (for video published_at, not comment timestamps)
         """
         self.repo_path = repo_path
         self.config = config
         self.update_mode = update_mode
+        self.date_from = date_from
+        self.date_to = date_to
         self.git_annex = GitAnnexService(repo_path)
         self.youtube = YouTubeService()
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache = None  # Cache for video ID to path mapping
         self._processed_video_ids = set()  # Track videos processed in current run (avoid duplicates)
+
+    def _should_process_video_by_date(self, video_metadata: dict) -> bool:
+        """Check if video should be processed based on date filters.
+
+        Args:
+            video_metadata: Video metadata dict (either yt-dlp schema or our stored schema)
+
+        Returns:
+            True if video is within date range (or no date filter set)
+        """
+        if not self.date_from and not self.date_to:
+            return True  # No date filter
+
+        # Extract published date - handle both schemas
+        published_str = video_metadata.get("published_at") or video_metadata.get("upload_date", "")
+        if not published_str:
+            logger.warning(f"Video {video_metadata.get('video_id', video_metadata.get('id', 'unknown'))} has no published date, skipping")
+            return False
+
+        # Parse the date
+        try:
+            if len(published_str) == 8 and published_str.isdigit():
+                # yt-dlp format: YYYYMMDD
+                published_at = datetime.strptime(published_str, "%Y%m%d")
+            else:
+                # ISO format: YYYY-MM-DDTHH:MM:SS
+                published_at = datetime.fromisoformat(published_str.replace('Z', '+00:00'))
+        except (ValueError, AttributeError) as e:
+            logger.warning(f"Failed to parse published date '{published_str}': {e}")
+            return False
+
+        # Apply date filters
+        if self.date_from and published_at < self.date_from:
+            return False
+        if self.date_to and published_at > self.date_to:
+            return False
+
+        return True
 
     def _should_process_component(self, component: str) -> bool:
         """Determine if a component should be processed based on update mode.
@@ -393,11 +436,18 @@ class Archiver:
         # NOTE: In incremental mode, we don't use limit - we fetch until we hit existing videos.
         # This is more efficient than fetching a fixed number that might all be existing.
         if not skip_video_fetch:
-            videos_metadata = self.youtube.get_channel_videos(
+            all_videos = self.youtube.get_channel_videos(
                 channel_url,
                 limit=limit,
                 existing_video_ids=existing_video_ids
             )
+
+            # Apply date filter if specified
+            if self.date_from or self.date_to:
+                videos_metadata = [v for v in all_videos if self._should_process_video_by_date(v)]
+                logger.info(f"Filtered {len(all_videos)} videos to {len(videos_metadata)} within date range")
+            else:
+                videos_metadata = all_videos
 
         # For component-specific modes, load existing videos from TSV
         if skip_video_fetch and not videos_metadata:
@@ -407,9 +457,11 @@ class Archiver:
 
             if videos_tsv_path.exists():
                 # Read existing videos from TSV
+                total_videos = 0
                 with open(videos_tsv_path, 'r', encoding='utf-8') as f:
                     reader = csv.DictReader(f, delimiter='\t')
                     for row in reader:
+                        total_videos += 1
                         video_id = row.get("video_id")
                         video_path_str = row.get("path")
                         if video_id and video_path_str:
@@ -419,8 +471,14 @@ class Archiver:
                             if metadata_path.exists():
                                 with open(metadata_path) as f:
                                     video_meta = json.load(f)
-                                    videos_metadata.append(video_meta)
-                logger.info(f"Loaded {len(videos_metadata)} existing videos from TSV")
+                                    # Apply date filter
+                                    if self._should_process_video_by_date(video_meta):
+                                        videos_metadata.append(video_meta)
+
+                if self.date_from or self.date_to:
+                    logger.info(f"Loaded {len(videos_metadata)} videos (from {total_videos} total) matching date filter")
+                else:
+                    logger.info(f"Loaded {len(videos_metadata)} existing videos from TSV")
             else:
                 logger.warning("No videos.tsv found, cannot process component updates")
                 return stats
@@ -510,10 +568,17 @@ class Archiver:
 
         # Get playlist videos
         limit = self.config.filters.limit
-        videos_metadata = self.youtube.get_playlist_videos(playlist_url, limit=limit)
+        all_videos = self.youtube.get_playlist_videos(playlist_url, limit=limit)
+
+        # Apply date filter if specified
+        if self.date_from or self.date_to:
+            videos_metadata = [v for v in all_videos if self._should_process_video_by_date(v)]
+            logger.info(f"Filtered {len(all_videos)} videos to {len(videos_metadata)} within date range")
+        else:
+            videos_metadata = all_videos
 
         if not videos_metadata:
-            logger.warning("No videos found in playlist")
+            logger.warning("No videos found in playlist (after date filtering)")
             return stats
 
         logger.info(f"Found {len(videos_metadata)} videos in playlist")

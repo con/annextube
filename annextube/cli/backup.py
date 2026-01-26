@@ -129,8 +129,8 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             date_from = datetime.now() - parse_duration("1 week")
             click.echo(f"Default social window: {date_from.strftime('%Y-%m-%d')} to now")
 
-        # Initialize archiver with update mode
-        archiver = Archiver(output_dir, config, update_mode=update)
+        # Initialize archiver with update mode and date filters
+        archiver = Archiver(output_dir, config, update_mode=update, date_from=date_from, date_to=date_to)
 
         # Determine what to backup
         if url:
