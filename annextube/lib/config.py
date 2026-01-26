@@ -203,13 +203,54 @@ def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = 
     return config
 
 
-def generate_config_template() -> str:
+def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
+                            comments_depth: int = 10000, enable_captions: bool = True) -> str:
     """Generate a template configuration file in TOML format.
+
+    Args:
+        urls: List of YouTube channel/playlist URLs to add
+        enable_videos: Enable video downloading (default: True)
+        comments_depth: Comments to fetch (0=disabled, default: 10000)
+        enable_captions: Enable captions (default: True)
 
     Returns:
         TOML configuration template as string
     """
-    return '''# annextube Configuration File
+    # Generate sources section
+    if urls:
+        sources_section = ""
+        for url in urls:
+            # Detect if playlist or channel
+            url_type = "playlist" if ("playlist?" in url or "list=" in url) else "channel"
+            sources_section += f'''
+[[sources]]
+url = "{url}"
+type = "{url_type}"
+enabled = true
+'''
+        sources_section += '''
+# Add more sources by adding [[sources]] sections above
+'''
+    else:
+        # No URLs provided - show examples only
+        sources_section = '''
+# Sources to backup (channels or playlists)
+# Add [[sources]] sections below for each channel/playlist
+
+# Example: Channel
+# [[sources]]
+# url = "https://www.youtube.com/@channel"
+# type = "channel"
+# enabled = true
+
+# Example: Playlist
+# [[sources]]
+# url = "https://www.youtube.com/playlist?list=PLxxx"
+# type = "playlist"
+# enabled = true
+'''
+
+    return f'''# annextube Configuration File
 # This file configures sources, components, and filters for YouTube archival
 
 # YouTube Data API v3 key (REQUIRED)
@@ -219,47 +260,21 @@ def generate_config_template() -> str:
 #   export YOUTUBE_API_KEY="your-api-key-here"
 #
 # Never commit API keys to version control!
-
-# Sources to backup (channels or playlists)
-# Add multiple [[sources]] sections for multiple sources
-
-[[sources]]
-url = "https://www.youtube.com/@RickAstleyYT"
-type = "channel"  # or "playlist"
-enabled = true
+{sources_section}
+# Optional playlist discovery settings (for channel sources):
 # include_playlists = "all"  # Auto-discover and backup ALL playlists from this channel
 # include_playlists = ".*tutorial.*"  # Only playlists matching regex pattern
 # exclude_playlists = ".*shorts.*|.*old.*"  # Exclude playlists matching regex
 # include_podcasts = true  # Also discover podcasts from channel's Podcasts tab
 
-# Example: Auto-discover all playlists from channel
-# [[sources]]
-# url = "https://www.youtube.com/@channel"
-# type = "channel"
-# enabled = true
-# include_playlists = "all"  # Discovers all playlists automatically
-# include_podcasts = true  # Also include podcasts
-
-# Example: Liked Videos playlist (HIGH PRIORITY test case)
-# [[sources]]
-# url = "https://www.youtube.com/playlist?list=LL"  # LL = Liked Videos
-# type = "playlist"
-# enabled = true
-
-# Example: Multiple channels
-# [[sources]]
-# url = "https://youtube.com/c/datalad"
-# type = "channel"
-# enabled = true
-
 # Components to backup
 [components]
-videos = false           # Track URLs only (no video downloads) - saves storage
+videos = {str(enable_videos).lower()}           # Track URLs only (no video downloads) - saves storage
 metadata = true          # Fetch video metadata
-comments_depth = 10000   # Maximum comments to fetch (0 = disabled, default: 10000)
+comments_depth = {comments_depth}   # Maximum comments to fetch (0 = disabled, default: 10000)
                          # Note: yt-dlp limitation - all comments returned as top-level,
                          # reply threading not available
-captions = true          # Fetch captions matching language filter
+captions = {str(enable_captions).lower()}          # Fetch captions matching language filter
 thumbnails = true        # Download thumbnails
 
 caption_languages = ".*"  # Regex pattern for caption languages to download
@@ -320,11 +335,17 @@ limit = 10  # Limit to N most recent videos (by upload date, newest first)
 '''
 
 
-def save_config_template(config_dir: Path) -> Path:
+def save_config_template(config_dir: Path, urls: list[str] = None,
+                        enable_videos: bool = True, comments_depth: int = 10000,
+                        enable_captions: bool = True) -> Path:
     """Save configuration template to directory.
 
     Args:
         config_dir: Directory to save config template (e.g., .annextube/)
+        urls: List of YouTube channel/playlist URLs to add
+        enable_videos: Enable video downloading (default: True)
+        comments_depth: Comments to fetch (0=disabled, default: 10000)
+        enable_captions: Enable captions (default: True)
 
     Returns:
         Path to created config file
@@ -333,6 +354,6 @@ def save_config_template(config_dir: Path) -> Path:
     config_path = config_dir / "config.toml"
 
     with open(config_path, "w") as f:
-        f.write(generate_config_template())
+        f.write(generate_config_template(urls, enable_videos, comments_depth, enable_captions))
 
     return config_path
