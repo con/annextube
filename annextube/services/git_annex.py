@@ -352,14 +352,16 @@ class GitAnnexService:
     def ensure_sensitive_metadata(self) -> None:
         """Ensure sensitive files have proper git-annex metadata.
 
-        Checks all comments.json and authors.tsv files in the repository.
+        Checks all comments.json, captions (*.vtt), and authors.tsv files.
         For each file in git-annex:
-        1. Sets distribution-restrictions=sensitive
+        1. Sensitive files: Sets distribution-restrictions=sensitive
         2. For comments.json: Also sets video_id, title, channel, published, filetype
-           by reading metadata from adjacent metadata.json file
+        3. For captions: Sets video_id, title, channel, published, filetype, language, etc.
+           by reading metadata from adjacent captions.tsv file
 
         This should be called after commits to ensure proper metadata tagging.
         """
+        import csv
         import glob
         import json
 
@@ -368,7 +370,14 @@ class GitAnnexService:
             "authors.tsv",              # Top-level authors file
         ]
 
+        # Also process caption files for video metadata
+        caption_patterns = [
+            "videos/**/*.vtt",  # All caption files in videos/ directory
+        ]
+
         files_tagged = 0
+
+        # Process sensitive files (comments.json, authors.tsv)
         for pattern in sensitive_patterns:
             for file_str in glob.glob(str(self.repo_path / pattern), recursive=True):
                 file_path = Path(file_str).relative_to(self.repo_path)
@@ -427,5 +436,86 @@ class GitAnnexService:
                     logger.debug(f"Updated {len(new_metadata)} metadata field(s) for {file_path}")
                     files_tagged += 1
 
+        # Process caption files for comprehensive video metadata
+        for pattern in caption_patterns:
+            for file_str in glob.glob(str(self.repo_path / pattern), recursive=True):
+                file_path = Path(file_str).relative_to(self.repo_path)
+
+                # Skip if this is a symlink to another directory (playlist symlinks)
+                if file_path.is_symlink() and "../" in str(file_path.readlink()):
+                    logger.debug(f"Skipping {file_path} (symlink to other directory)")
+                    continue
+
+                # Only process if file is in git-annex
+                if not self.is_annexed(file_path):
+                    logger.debug(f"Skipping {file_path} (not in git-annex)")
+                    continue
+
+                # Read caption metadata from adjacent captions.tsv
+                video_dir = file_path.parent
+                captions_tsv = self.repo_path / video_dir / "captions.tsv"
+                metadata_json = self.repo_path / video_dir / "metadata.json"
+
+                if not captions_tsv.exists() or not metadata_json.exists():
+                    logger.debug(f"Skipping {file_path} (missing captions.tsv or metadata.json)")
+                    continue
+
+                try:
+                    # Get video metadata
+                    with open(metadata_json) as f:
+                        video_meta = json.load(f)
+
+                    # Parse captions.tsv to get caption-specific metadata
+                    caption_meta = None
+                    with open(captions_tsv) as f:
+                        reader = csv.DictReader(f, delimiter="\t")
+                        for row in reader:
+                            # Match by filename (last component of file_path)
+                            row_filename = Path(row.get("file_path", "")).name
+                            if row_filename == file_path.name:
+                                caption_meta = row
+                                break
+
+                    if not caption_meta:
+                        logger.debug(f"Skipping {file_path} (not found in captions.tsv)")
+                        continue
+
+                    # Get language code
+                    lang_code = caption_meta.get("language_code", "unknown")
+
+                    # Prepare comprehensive metadata
+                    new_metadata = {
+                        "video_id": video_meta.get("video_id", ""),
+                        "title": video_meta.get("title", ""),
+                        "channel": video_meta.get("channel_name", ""),
+                        "published": video_meta.get("published_at", "")[:10] if video_meta.get("published_at") else "",
+                        "language": lang_code,
+                        "filetype": f"caption.{lang_code}",
+                    }
+
+                    # Add flags for auto-generated/auto-translated
+                    if caption_meta.get("auto_generated") == "True":
+                        new_metadata["auto_generated"] = "true"
+                    if caption_meta.get("auto_translated") == "True":
+                        new_metadata["auto_translated"] = "true"
+
+                    # Check existing metadata
+                    existing = self.get_metadata(file_path)
+
+                    # Update only changed fields
+                    updates = {}
+                    for key, value in new_metadata.items():
+                        if value and value not in existing.get(key, []):
+                            updates[key] = value
+
+                    if updates:
+                        for key, value in updates.items():
+                            self.set_metadata(file_path, {key: value})
+                        logger.debug(f"Updated {len(updates)} metadata field(s) for {file_path}")
+                        files_tagged += 1
+
+                except Exception as e:
+                    logger.debug(f"Could not set metadata for {file_path}: {e}")
+
         if files_tagged > 0:
-            logger.info(f"Tagged {files_tagged} sensitive file(s) with metadata")
+            logger.info(f"Tagged {files_tagged} file(s) with metadata")
