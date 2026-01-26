@@ -616,7 +616,7 @@ class YouTubeService:
 
     def download_captions(
         self, video_id: str, output_dir: Path, language_pattern: str = ".*",
-        auto_translated_langs: Optional[List[str]] = None
+        auto_translated_langs: Optional[List[str]] = None, base_filename: str = None
     ) -> List[Dict[str, Any]]:
         """Download captions for a video, excluding auto-translated by default.
 
@@ -634,6 +634,9 @@ class YouTubeService:
                              (default: ".*" for all languages)
             auto_translated_langs: List of language codes for auto-translated captions to download
                                   (e.g., ["en", "es"]). Default: [] (no auto-translated)
+            base_filename: Base filename for caption files (without extension)
+                          (e.g., "video" produces "video.ru.vtt")
+                          If None, uses video_id as base filename
 
         Returns:
             List of caption metadata dictionaries with keys:
@@ -645,6 +648,10 @@ class YouTubeService:
         """
         if auto_translated_langs is None:
             auto_translated_langs = []
+
+        # Use base_filename for caption files (defaults to video_id for backward compatibility)
+        if base_filename is None:
+            base_filename = video_id
 
         logger.info(f"Downloading captions for: {video_id} (pattern: {language_pattern}, auto-translated: {auto_translated_langs or 'none'})")
 
@@ -732,8 +739,21 @@ class YouTubeService:
             # Retry on rate limits
             self._retry_on_rate_limit(_download)
 
-            # Find downloaded caption files
+            # Find downloaded caption files (yt-dlp uses video_id in filename)
             caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
+
+            # Rename files if base_filename differs from video_id
+            # This allows video.ru.vtt instead of VIDEO_ID.ru.vtt for player auto-discovery
+            if base_filename != video_id:
+                renamed_files = []
+                for caption_file in caption_files:
+                    # Extract language code from filename (video_id.lang.vtt)
+                    lang_code = caption_file.stem.split(".")[-1]
+                    new_name = output_dir / f"{base_filename}.{lang_code}.vtt"
+                    caption_file.rename(new_name)
+                    renamed_files.append(new_name)
+                    logger.debug(f"Renamed {caption_file.name} → {new_name.name}")
+                caption_files = renamed_files
 
             # Deduplicate: remove LANG-orig if identical to LANG
             # This avoids storing duplicate files for curated vs original captions
@@ -744,7 +764,7 @@ class YouTubeService:
                 # Check if this is a -orig variant
                 if lang_code.endswith('-orig'):
                     base_lang = lang_code[:-5]  # Remove '-orig' suffix
-                    base_file = output_dir / f"{video_id}.{base_lang}.vtt"
+                    base_file = output_dir / f"{base_filename}.{base_lang}.vtt"
 
                     if base_file.exists():
                         # Compare file contents

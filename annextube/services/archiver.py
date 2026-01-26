@@ -842,11 +842,17 @@ class Archiver:
             language_pattern = self.config.components.caption_languages
             auto_translated_langs = self.config.components.auto_translated_captions
 
+            # Extract video base filename (without extension) to match video file
+            # e.g., "video.mkv" -> "video"
+            video_filename = self.config.organization.video_filename
+            base_filename = Path(video_filename).stem
+
             captions_metadata = self.youtube.download_captions(
                 video.video_id,
                 video_dir,
                 language_pattern=language_pattern,
-                auto_translated_langs=auto_translated_langs
+                auto_translated_langs=auto_translated_langs,
+                base_filename=base_filename
             )
 
             if captions_metadata:
