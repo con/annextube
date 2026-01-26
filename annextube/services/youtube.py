@@ -828,10 +828,15 @@ class YouTubeService:
         Fetches ALL comments by default (no limit). If comments.json already exists,
         merges new comments with existing ones (deduplicates by comment_id).
 
+        NOTE: max_depth limits comments PER FETCH, not total. Total count can exceed
+        max_depth due to incremental merging across multiple runs. To limit new comment
+        growth, use a smaller max_depth value.
+
         Args:
             video_id: YouTube video ID
             output_path: Path to save comments JSON file
-            max_depth: Maximum number of comments to fetch (None = unlimited, 0 = disabled)
+            max_depth: Maximum number of comments to fetch per run (None = unlimited, 0 = disabled)
+                      Total comments can exceed this due to incremental merging.
 
         Returns:
             True if successful, False otherwise
@@ -851,8 +856,8 @@ class YouTubeService:
             except Exception as e:
                 logger.warning(f"Failed to load existing comments: {e}")
 
-        max_str = max_depth if max_depth else "unlimited"
-        logger.info(f"Downloading comments for: {video_id} (max: {max_str})")
+        max_str = f"up to {max_depth} new" if max_depth else "all new (unlimited)"
+        logger.info(f"Downloading comments for: {video_id} ({max_str})")
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 

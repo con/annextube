@@ -71,9 +71,12 @@ class GitAnnexService:
             ".gitignore annex.largefiles=nothing",
             ".gitattributes annex.largefiles=nothing",
             "",
-            "# Large text files → git-annex (VTT captions, JSON comments)",
-            "*.vtt annex.largefiles=anything",
+            "# Sensitive data files → git-annex (contains personal information)",
+            "authors.tsv annex.largefiles=anything",
             "comments.json annex.largefiles=anything",
+            "",
+            "# Large text files → git-annex (VTT captions)",
+            "*.vtt annex.largefiles=anything",
             "",
             "# Media files → git-annex (covered by default, explicit for clarity)",
             "*.mp4 annex.largefiles=anything",
@@ -210,6 +213,10 @@ class GitAnnexService:
             subprocess.run(["git", "commit", "-m", message], cwd=self.repo_path, check=True,
                          capture_output=True, text=True)
             logger.info(f"Committed changes: {message}")
+
+            # Ensure sensitive files have proper metadata
+            self.ensure_sensitive_metadata()
+
             return True
         except subprocess.CalledProcessError as e:
             # Check if it's just "nothing to commit"
@@ -240,3 +247,91 @@ class GitAnnexService:
             cmd = ["git", "annex", "metadata", str(file_path), "-s", f"{key}={value}"]
             logger.debug(f"Setting metadata: {key}={value} for {file_path}")
             subprocess.run(cmd, cwd=self.repo_path, check=True, capture_output=True)
+
+    def get_metadata(self, file_path: Path) -> dict[str, list[str]]:
+        """Get git-annex metadata for a file.
+
+        Args:
+            file_path: Path to file
+
+        Returns:
+            Dictionary mapping metadata keys to lists of values
+            Empty dict if file has no metadata or is not in annex
+        """
+        cmd = ["git", "annex", "metadata", "--json", str(file_path)]
+        try:
+            result = subprocess.run(
+                cmd, cwd=self.repo_path, check=True, capture_output=True, text=True
+            )
+            if result.stdout:
+                import json
+                data = json.loads(result.stdout)
+                # git-annex metadata JSON format: {"fields": {"key": ["value1", "value2"]}}
+                return data.get("fields", {})
+            return {}
+        except subprocess.CalledProcessError:
+            # File not in annex or no metadata
+            return {}
+
+    def is_annexed(self, file_path: Path) -> bool:
+        """Check if a file is managed by git-annex (symlink to annex object).
+
+        Args:
+            file_path: Path to file (relative to repo root or absolute)
+
+        Returns:
+            True if file is a symlink to git-annex object store
+        """
+        full_path = self.repo_path / file_path if not file_path.is_absolute() else file_path
+
+        if not full_path.is_symlink():
+            return False
+
+        # Check if symlink target points to .git/annex/objects
+        try:
+            target = full_path.readlink()
+            # Resolve relative symlink
+            if not target.is_absolute():
+                target = (full_path.parent / target).resolve()
+            return ".git/annex/objects" in str(target)
+        except (OSError, ValueError):
+            return False
+
+    def ensure_sensitive_metadata(self) -> None:
+        """Ensure sensitive files have distribution-restrictions=sensitive metadata.
+
+        Checks all comments.json and authors.tsv files in the repository.
+        If they are in git-annex and don't have distribution-restrictions metadata,
+        sets it to 'sensitive'.
+
+        This should be called after commits to ensure proper metadata tagging.
+        """
+        import glob
+
+        sensitive_patterns = [
+            "**/comments.json",  # All comments files (recursive)
+            "authors.tsv",       # Top-level authors file
+        ]
+
+        files_tagged = 0
+        for pattern in sensitive_patterns:
+            for file_str in glob.glob(str(self.repo_path / pattern), recursive=True):
+                file_path = Path(file_str).relative_to(self.repo_path)
+
+                # Only process if file is in git-annex
+                if not self.is_annexed(file_path):
+                    logger.debug(f"Skipping {file_path} (not in git-annex)")
+                    continue
+
+                # Check existing metadata
+                metadata = self.get_metadata(file_path)
+                distribution = metadata.get("distribution-restrictions", [])
+
+                # Set if not already set to sensitive
+                if "sensitive" not in distribution:
+                    logger.info(f"Setting distribution-restrictions=sensitive for {file_path}")
+                    self.set_metadata(file_path, {"distribution-restrictions": "sensitive"})
+                    files_tagged += 1
+
+        if files_tagged > 0:
+            logger.info(f"Tagged {files_tagged} sensitive file(s) with distribution-restrictions metadata")
