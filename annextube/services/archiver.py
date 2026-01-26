@@ -330,7 +330,8 @@ class Archiver:
                 existing_video_ids = TSVReader.get_existing_video_ids(videos_tsv_path)
 
                 if existing_video_ids:
-                    logger.info(f"Incremental mode: will filter out {len(existing_video_ids)} existing videos")
+                    logger.info(f"Incremental mode: filtering {len(existing_video_ids)} existing videos")
+                    # YouTube service uses two-pass approach: extract_flat for IDs, then full metadata for new only
                 else:
                     logger.info("No existing videos.tsv found, performing full initial backup")
             elif self.update_mode == "social":
@@ -339,9 +340,8 @@ class Archiver:
                 videos_metadata = []
 
             # Fetch videos (unless in social-only mode)
-            # NOTE: Don't use published_after in incremental mode - it causes yt-dlp to fetch
-            # metadata for all same-day videos before we can filter them. Instead, rely on
-            # ID-based filtering which is more reliable.
+            # NOTE: In incremental mode, we don't use limit - we fetch until we hit existing videos.
+            # This is more efficient than fetching a fixed number that might all be existing.
             if self.update_mode != "social":
                 videos_metadata = self.youtube.get_channel_videos(
                     channel_url,

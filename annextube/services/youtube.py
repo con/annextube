@@ -128,7 +128,75 @@ class YouTubeService:
 
         ydl_opts = self._get_ydl_opts(download=False)
 
-        # Get full metadata directly
+        # In incremental mode, use two-pass approach:
+        # 1. First pass with extract_flat to get just video IDs (fast)
+        # 2. Second pass to fetch full metadata only for new videos
+        use_two_pass = existing_video_ids is not None and len(existing_video_ids) > 0
+
+        if use_two_pass:
+            # First pass: Get just IDs with extract_flat
+            flat_opts = ydl_opts.copy()
+            flat_opts.update({
+                "extract_flat": "in_playlist",  # Just get video IDs, no metadata
+                "playlistend": limit if limit else None,
+                "ignoreerrors": True,
+            })
+
+            logger.debug("First pass: fetching video IDs only (extract_flat)")
+            with yt_dlp.YoutubeDL(flat_opts) as ydl_flat:
+                try:
+                    info = ydl_flat.extract_info(channel_url, download=False)
+                    if not info or not info.get("entries"):
+                        logger.warning("No videos found in channel")
+                        return []
+
+                    # Filter to find new video IDs
+                    all_entries = list(info.get("entries", []))
+                    new_video_ids = []
+                    consecutive_existing = 0
+
+                    for entry in all_entries:
+                        if not entry or not entry.get("id"):
+                            continue
+
+                        video_id = entry["id"]
+                        if video_id in existing_video_ids:
+                            logger.debug(f"Skipping existing video: {video_id}")
+                            consecutive_existing += 1
+                            if consecutive_existing >= 10:
+                                logger.info(f"Stopping: found 10 consecutive existing videos")
+                                break
+                            continue
+
+                        consecutive_existing = 0
+                        new_video_ids.append(video_id)
+
+                    if not new_video_ids:
+                        logger.info("No new videos found")
+                        return []
+
+                    logger.info(f"Found {len(new_video_ids)} new video(s), fetching full metadata")
+
+                    # Second pass: Fetch full metadata only for new videos
+                    videos = []
+                    for video_id in new_video_ids:
+                        try:
+                            video_url = f"https://www.youtube.com/watch?v={video_id}"
+                            video_info = ydl.extract_info(video_url, download=False)
+                            if video_info:
+                                videos.append(video_info)
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+
+                    logger.info(f"Successfully fetched metadata for {len(videos)} new video(s)")
+                    return videos
+
+                except Exception as e:
+                    logger.error(f"Failed flat extraction: {e}", exc_info=True)
+                    # Fall back to regular extraction
+                    use_two_pass = False
+
+        # Regular extraction (initial backup or fallback)
         ydl_opts.update(
             {
                 "playlistend": limit if limit else None,
@@ -160,7 +228,11 @@ class YouTubeService:
                     logger.info(f"Limited to {len(entries)} video(s)")
 
                 # Filter out None entries and extract metadata
+                # In incremental mode, stop when we hit consecutive existing videos
                 videos = []
+                consecutive_existing = 0
+                max_consecutive_existing = 10  # Stop after 10 consecutive existing videos
+
                 for entry in entries:
                     if entry is None:
                         continue
@@ -173,13 +245,22 @@ class YouTubeService:
                     # Filter by existing video IDs (for incremental updates)
                     if existing_video_ids and entry.get("id") in existing_video_ids:
                         logger.debug(f"Skipping existing video: {entry.get('id')}")
+                        consecutive_existing += 1
+
+                        # Stop early if we've hit many consecutive existing videos
+                        # This is the mykrok pattern: assume no new videos after this point
+                        if consecutive_existing >= max_consecutive_existing:
+                            logger.info(f"Stopping: found {consecutive_existing} consecutive existing videos")
+                            break
                         continue
 
+                    # Found a new video - reset consecutive counter
+                    consecutive_existing = 0
                     videos.append(entry)
 
                 logger.info(f"Successfully fetched metadata for {len(videos)} video(s)")
-                if existing_video_ids and len(videos) < len(entries):
-                    logger.info(f"Filtered out {len(entries) - len(videos)} already-seen video(s)")
+                if existing_video_ids and consecutive_existing > 0:
+                    logger.info(f"Stopped after encountering {consecutive_existing} existing video(s)")
                 return videos
 
             except Exception as e:
