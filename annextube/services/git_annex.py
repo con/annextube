@@ -195,6 +195,18 @@ class GitAnnexService:
         Returns:
             True if commit was made, False if nothing to commit or only timestamps changed
         """
+        # Sync filesystem to ensure all writes are flushed to disk
+        # This prevents race conditions where git-annex tries to add files
+        # that are still being written or buffered in OS caches
+        import os
+        try:
+            os.sync()
+        except (OSError, AttributeError):
+            # sync() may not be available on all platforms or may fail
+            # Fall back to just waiting a moment for buffers to flush
+            import time
+            time.sleep(0.1)
+
         if files:
             for f in files:
                 subprocess.run(["git", "annex", "add", str(f)], cwd=self.repo_path, check=True)
