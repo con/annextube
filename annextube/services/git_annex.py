@@ -181,6 +181,10 @@ class GitAnnexService:
     def add_and_commit(self, message: str, files: Optional[list[Path]] = None) -> bool:
         """Add files and commit changes.
 
+        Uses 'git annex add' to let git-annex decide based on .gitattributes
+        whether to commit to git or annex (prevents thumbnails from being
+        committed in unlocked mode to git).
+
         Args:
             message: Commit message
             files: Optional list of specific files to add (None = add all)
@@ -190,9 +194,9 @@ class GitAnnexService:
         """
         if files:
             for f in files:
-                subprocess.run(["git", "add", str(f)], cwd=self.repo_path, check=True)
+                subprocess.run(["git", "annex", "add", str(f)], cwd=self.repo_path, check=True)
         else:
-            subprocess.run(["git", "add", "."], cwd=self.repo_path, check=True)
+            subprocess.run(["git", "annex", "add", "."], cwd=self.repo_path, check=True)
 
         # Check if only timestamps changed
         if self._is_timestamp_only_change():

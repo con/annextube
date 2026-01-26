@@ -25,7 +25,7 @@ def test_config_defaults():
     # Test ComponentsConfig
     components = ComponentsConfig()
     assert components.caption_languages == ".*", "Default caption_languages should be '.*'"
-    assert components.comments_depth == 10000, "Comments should be enabled with default depth 10000"
+    assert components.comments_depth is None, "Comments should be unlimited by default (None = fetch all)"
 
     # Test OrganizationConfig
     org = OrganizationConfig()

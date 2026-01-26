@@ -26,9 +26,17 @@ logger = get_logger(__name__)
 @click.option("--limit", type=int, help="Limit number of videos (most recent)")
 @click.option(
     "--update",
-    type=click.Choice(["videos-incremental", "all-incremental", "all-force", "social"], case_sensitive=False),
+    type=click.Choice([
+        "videos-incremental",  # New videos only (default)
+        "all-incremental",      # New videos + social for recent
+        "all-force",            # Re-process everything
+        "social",               # Comments + captions only (shortcut)
+        "playlists",            # Playlists only
+        "comments",             # Comments only
+        "captions"              # Captions only
+    ], case_sensitive=False),
     default="videos-incremental",
-    help="Update mode: videos-incremental (new videos only, default), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions only)",
+    help="Update mode: videos-incremental (new videos only, default), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components)",
 )
 @click.option(
     "--from-date",

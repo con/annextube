@@ -54,13 +54,44 @@ class YouTubeService:
                 return func(*args, **kwargs)
             except Exception as e:
                 error_str = str(e)
+
+                # Log full error details for debugging
+                logger.debug(f"YouTube API error (attempt {attempt + 1}/{MAX_RETRIES}): {error_str}")
+
+                # Try to extract HTTP status code and headers from exception
+                status_code = None
+                if hasattr(e, 'code'):
+                    status_code = e.code
+                elif "429" in error_str or "Too Many Requests" in error_str:
+                    status_code = 429
+                elif "403" in error_str or "Forbidden" in error_str:
+                    status_code = 403
+
+                # Log response headers if available
+                if hasattr(e, 'headers'):
+                    logger.warning(f"HTTP {status_code} Response Headers: {dict(e.headers)}")
+                elif hasattr(e, 'response') and hasattr(e.response, 'headers'):
+                    logger.warning(f"HTTP {status_code} Response Headers: {dict(e.response.headers)}")
+                else:
+                    # yt-dlp embeds headers in error message, try to extract
+                    if "headers:" in error_str.lower():
+                        logger.warning(f"Error details: {error_str}")
+
                 # Check if it's a rate limit error (429)
-                if "429" in error_str or "Too Many Requests" in error_str:
+                if status_code == 429 or "429" in error_str or "Too Many Requests" in error_str:
                     if attempt < MAX_RETRIES - 1:
-                        # Try to extract Retry-After from error message
-                        # yt-dlp includes this in error messages
+                        # Try to extract Retry-After from error message or headers
                         retry_after = None
-                        if "Retry-After:" in error_str:
+
+                        # First try exception attributes
+                        if hasattr(e, 'headers') and 'Retry-After' in e.headers:
+                            try:
+                                retry_after = int(e.headers['Retry-After'])
+                            except (ValueError, KeyError):
+                                pass
+
+                        # Fall back to parsing error message
+                        if retry_after is None and "Retry-After:" in error_str:
                             try:
                                 # Extract number from "Retry-After: XX"
                                 parts = error_str.split("Retry-After:")
@@ -698,13 +729,16 @@ class YouTubeService:
             logger.error(f"Failed to download captions: {e}")
             return []
 
-    def download_comments(self, video_id: str, output_path: Path, max_depth: int = 10000) -> bool:
-        """Download comments for a video.
+    def download_comments(self, video_id: str, output_path: Path, max_depth: Optional[int] = None) -> bool:
+        """Download comments for a video with smart incremental fetching.
+
+        Fetches ALL comments by default (no limit). If comments.json already exists,
+        merges new comments with existing ones (deduplicates by comment_id).
 
         Args:
             video_id: YouTube video ID
             output_path: Path to save comments JSON file
-            max_depth: Maximum number of comments to fetch (0 = disabled, default: 10000)
+            max_depth: Maximum number of comments to fetch (None = unlimited, 0 = disabled)
 
         Returns:
             True if successful, False otherwise
@@ -713,7 +747,19 @@ class YouTubeService:
             logger.debug(f"Comments disabled (max_depth=0) for: {video_id}")
             return False
 
-        logger.info(f"Downloading comments for: {video_id} (max: {max_depth})")
+        # Load existing comments for incremental update
+        existing_comments = {}
+        if output_path.exists():
+            try:
+                with open(output_path, 'r', encoding='utf-8') as f:
+                    existing_list = json.load(f)
+                    existing_comments = {c['comment_id']: c for c in existing_list if c.get('comment_id')}
+                    logger.info(f"Loaded {len(existing_comments)} existing comments for incremental update")
+            except Exception as e:
+                logger.warning(f"Failed to load existing comments: {e}")
+
+        max_str = max_depth if max_depth else "unlimited"
+        logger.info(f"Downloading comments for: {video_id} (max: {max_str})")
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -722,9 +768,12 @@ class YouTubeService:
             "no_warnings": True,
             "skip_download": True,
             "getcomments": True,
-            "max_comments": max_depth,  # Limit number of comments
             "writeinfojson": False,  # Don't write info json
         }
+
+        # Only set max_comments if specified (otherwise fetch all)
+        if max_depth:
+            ydl_opts["max_comments"] = max_depth
 
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -743,7 +792,7 @@ class YouTubeService:
             # Extract comments
             comments = info.get('comments', [])
 
-            if not comments:
+            if not comments and not existing_comments:
                 logger.info(f"No comments available for video: {video_id}")
                 # Still save empty comments file for consistency
                 output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -752,10 +801,19 @@ class YouTubeService:
                 return True
 
             # Format comments for storage
-            formatted_comments = []
+            new_count = 0
             for comment in comments:
-                formatted_comments.append({
-                    'comment_id': comment.get('id', ''),
+                comment_id = comment.get('id', '')
+                if not comment_id:
+                    continue
+
+                # Check if this is a new comment
+                if comment_id not in existing_comments:
+                    new_count += 1
+
+                # Add/update comment (updates like_count and other fields)
+                existing_comments[comment_id] = {
+                    'comment_id': comment_id,
                     'author': comment.get('author', ''),
                     'author_id': comment.get('author_id', ''),
                     'text': comment.get('text', ''),
@@ -763,14 +821,20 @@ class YouTubeService:
                     'like_count': comment.get('like_count', 0),
                     'is_favorited': comment.get('is_favorited', False),
                     'parent': comment.get('parent', 'root'),  # 'root' or parent comment ID
-                })
+                }
+
+            # Convert back to list and save
+            final_comments = list(existing_comments.values())
 
             # Save comments to JSON file
             output_path.parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, 'w', encoding='utf-8') as f:
-                json.dump(formatted_comments, f, indent=2, ensure_ascii=False)
+                json.dump(final_comments, f, indent=2, ensure_ascii=False)
 
-            logger.info(f"Downloaded {len(formatted_comments)} comment(s) to {output_path}")
+            if new_count > 0:
+                logger.info(f"Downloaded {new_count} new comment(s), total: {len(final_comments)}")
+            else:
+                logger.info(f"No new comments, refreshed {len(final_comments)} existing comment(s)")
             return True
 
         except Exception as e:

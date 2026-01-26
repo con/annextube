@@ -20,7 +20,7 @@ logger = get_logger(__name__)
 )
 @click.argument("urls", nargs=-1)
 @click.option("--videos/--no-videos", default=True, help="Enable video downloading (default: enabled)")
-@click.option("--comments", type=int, default=10000, help="Comments depth (0=disabled, default: 10000)")
+@click.option("--comments", type=int, default=-1, help="Comments depth (-1=unlimited (default), 0=disabled, N=limit to N)")
 @click.option("--captions/--no-captions", default=True, help="Enable captions (default: enabled)")
 @click.pass_context
 def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool):
@@ -54,11 +54,13 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
 
         # Create config directory and template
         config_dir = output_dir / ".annextube"
+        # Convert -1 (unlimited) to None
+        comments_depth_value = None if comments == -1 else comments
         config_path = save_config_template(
             config_dir,
             urls=list(urls),
             enable_videos=videos,
-            comments_depth=comments,
+            comments_depth=comments_depth_value,
             enable_captions=captions
         )
 
@@ -82,7 +84,12 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         click.echo()
         click.echo("Component settings:")
         click.echo(f"  - Videos: {'enabled' if videos else 'disabled'}")
-        click.echo(f"  - Comments: {'disabled' if comments == 0 else f'up to {comments}'}")
+        if comments == 0:
+            click.echo("  - Comments: disabled")
+        elif comments == -1:
+            click.echo("  - Comments: unlimited (fetches all, incrementally)")
+        else:
+            click.echo(f"  - Comments: up to {comments}")
         click.echo(f"  - Captions: {'enabled' if captions else 'disabled'}")
         click.echo()
         click.echo("Next steps:")

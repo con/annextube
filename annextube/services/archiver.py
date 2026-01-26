@@ -48,7 +48,8 @@ class Archiver:
         Args:
             repo_path: Path to archive repository
             config: Configuration object
-            update_mode: Update mode - "videos-incremental" (default), "all-incremental", "social", "all-force"
+            update_mode: Update mode - "videos-incremental" (default), "all-incremental", "all-force",
+                        "social" (comments+captions), "playlists", "comments", "captions"
         """
         self.repo_path = repo_path
         self.config = config
@@ -57,6 +58,52 @@ class Archiver:
         self.youtube = YouTubeService()
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache = None  # Cache for video ID to path mapping
+
+    def _should_process_component(self, component: str) -> bool:
+        """Determine if a component should be processed based on update mode.
+
+        Args:
+            component: Component name ("videos", "playlists", "comments", "captions", "metadata")
+
+        Returns:
+            True if component should be processed
+        """
+        mode = self.update_mode
+
+        # Component-specific modes
+        if mode == component:
+            return True
+
+        # "social" is shortcut for comments + captions
+        if mode == "social":
+            return component in ["comments", "captions"]
+
+        # "playlists" mode only processes playlists
+        if mode == "playlists":
+            return component == "playlists"
+
+        # "comments" mode only processes comments
+        if mode == "comments":
+            return component == "comments"
+
+        # "captions" mode only processes captions
+        if mode == "captions":
+            return component == "captions"
+
+        # videos-incremental: new videos only, but also update playlists if video set changed
+        if mode == "videos-incremental":
+            return component in ["videos", "metadata", "playlists"]
+
+        # all-incremental: new videos + social for recent + playlists
+        if mode == "all-incremental":
+            return component in ["videos", "metadata", "comments", "captions", "playlists"]
+
+        # all-force: everything
+        if mode == "all-force":
+            return True
+
+        # Default: process everything
+        return True
 
     def _load_video_paths(self) -> dict:
         """Load existing video ID to path mapping from videos.tsv.
@@ -322,8 +369,15 @@ class Archiver:
             # Determine what videos to fetch based on update_mode
             limit = self.config.filters.limit
             existing_video_ids = None
+            videos_metadata = []
 
-            if self.update_mode in ["videos-incremental", "all-incremental"]:
+            # Skip video fetching for component-specific modes that don't need videos
+            skip_video_fetch = self.update_mode in ["social", "comments", "captions", "playlists"]
+
+            if skip_video_fetch:
+                # Component-specific mode: don't fetch new videos, only update existing ones
+                logger.info(f"{self.update_mode} mode: skipping new video fetch")
+            elif self.update_mode in ["videos-incremental", "all-incremental"]:
                 # Get existing IDs for incremental updates
                 from .tsv_reader import TSVReader
                 videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
@@ -334,20 +388,42 @@ class Archiver:
                     # YouTube service uses two-pass approach: extract_flat for IDs, then full metadata for new only
                 else:
                     logger.info("No existing videos.tsv found, performing full initial backup")
-            elif self.update_mode == "social":
-                # Social mode: don't fetch new videos at all, only update existing ones
-                logger.info("Social-only mode: skipping new video fetch")
-                videos_metadata = []
 
-            # Fetch videos (unless in social-only mode)
+            # Fetch videos (unless in component-specific mode)
             # NOTE: In incremental mode, we don't use limit - we fetch until we hit existing videos.
             # This is more efficient than fetching a fixed number that might all be existing.
-            if self.update_mode != "social":
+            if not skip_video_fetch:
                 videos_metadata = self.youtube.get_channel_videos(
                     channel_url,
                     limit=limit,
                     existing_video_ids=existing_video_ids
                 )
+
+            # For component-specific modes, load existing videos from TSV
+            if skip_video_fetch and not videos_metadata:
+                logger.info("Loading existing videos for component-specific update...")
+                import csv
+                videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
+
+                if videos_tsv_path.exists():
+                    # Read existing videos from TSV
+                    with open(videos_tsv_path, 'r', encoding='utf-8') as f:
+                        reader = csv.DictReader(f, delimiter='\t')
+                        for row in reader:
+                            video_id = row.get("video_id")
+                            video_path_str = row.get("path")
+                            if video_id and video_path_str:
+                                # Load metadata from disk
+                                video_path = self.repo_path / "videos" / video_path_str
+                                metadata_path = video_path / "metadata.json"
+                                if metadata_path.exists():
+                                    with open(metadata_path) as f:
+                                        video_meta = json.load(f)
+                                        videos_metadata.append(video_meta)
+                    logger.info(f"Loaded {len(videos_metadata)} existing videos from TSV")
+                else:
+                    logger.warning("No videos.tsv found, cannot process component updates")
+                    return stats
 
             if not videos_metadata:
                 logger.warning("No videos found")
@@ -608,17 +684,18 @@ class Archiver:
             except Exception as e:
                 logger.warning(f"Failed to track video URL: {e}")
 
-        # Download thumbnail (if enabled)
-        if self.config.components.thumbnails and video.thumbnail_url:
+        # Download thumbnail (if enabled and mode allows)
+        if self.config.components.thumbnails and video.thumbnail_url and self._should_process_component("metadata"):
             self._download_thumbnail(video, video_dir)
 
-        # Download captions (if enabled)
-        if self.config.components.captions and video.captions_available:
+        # Download captions (if enabled and mode allows)
+        if self.config.components.captions and video.captions_available and self._should_process_component("captions"):
             caption_count = self._download_captions(video, video_dir)
 
-        # Download comments (if enabled)
+        # Download comments (if enabled and mode allows)
+        # comments_depth: None = unlimited, 0 = disabled, N = limit to N
         comments_fetched = False
-        if self.config.components.comments_depth > 0:
+        if self.config.components.comments_depth != 0 and self._should_process_component("comments"):
             comments_path = video_dir / "comments.json"
             comments_fetched = self.youtube.download_comments(
                 video.video_id,

@@ -34,7 +34,7 @@ class ComponentsConfig:
 
     videos: bool = False  # Track URLs only by default
     metadata: bool = True
-    comments_depth: int = 10000  # Maximum comments to fetch (0 = disabled, default: 10000)
+    comments_depth: Optional[int] = None  # Maximum comments to fetch (None = unlimited, 0 = disabled)
     captions: bool = True
     thumbnails: bool = True
     caption_languages: str = ".*"  # Regex pattern for caption languages (default: all)
@@ -93,11 +93,11 @@ class Config:
 
         components_data = data.get("components", {})
 
-        # Handle backward compatibility: comments: bool → comments_depth: int
-        comments_depth = components_data.get("comments_depth", 10000)
+        # Handle backward compatibility: comments: bool → comments_depth: Optional[int]
+        comments_depth = components_data.get("comments_depth", None)  # None = unlimited (new default)
         if "comments" in components_data and "comments_depth" not in components_data:
             # Legacy config with comments: bool
-            comments_depth = 10000 if components_data["comments"] else 0
+            comments_depth = None if components_data["comments"] else 0  # None = unlimited
 
         components = ComponentsConfig(
             videos=components_data.get("videos", False),
@@ -204,21 +204,27 @@ def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = 
 
 
 def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
-                            comments_depth: int = 10000, enable_captions: bool = True) -> str:
+                            comments_depth: Optional[int] = None, enable_captions: bool = True) -> str:
     """Generate a template configuration file in TOML format.
 
     Args:
         urls: List of YouTube channel/playlist URLs to add
         enable_videos: Enable video downloading (default: True)
-        comments_depth: Comments to fetch (0=disabled, default: 10000)
+        comments_depth: Comments to fetch (None=unlimited, 0=disabled, default: None)
         enable_captions: Enable captions (default: True)
 
     Returns:
         TOML configuration template as string
     """
-    # Convert boolean values to TOML format
+    # Convert values to TOML format
     videos_str = str(enable_videos).lower()
     captions_str = str(enable_captions).lower()
+
+    # Handle comments_depth: None means don't set it (use default = unlimited)
+    if comments_depth is None:
+        comments_str = "# comments_depth = 10000  # Uncomment to limit (None = unlimited)"
+    else:
+        comments_str = f"comments_depth = {comments_depth}"
 
     # Generate sources section
     if urls:
@@ -275,9 +281,10 @@ enabled = true
 [components]
 videos = {videos_str}           # Track URLs only (no video downloads) - saves storage
 metadata = true          # Fetch video metadata
-comments_depth = {comments_depth}   # Maximum comments to fetch (0 = disabled, default: 10000)
-                         # Note: yt-dlp limitation - all comments returned as top-level,
-                         # reply threading not available
+{comments_str}           # Comments: None = unlimited (fetches ALL, incrementally)
+                         #           0 = disabled
+                         #           N = limit to N comments
+                         # Note: Incremental - merges new comments with existing
 captions = {captions_str}          # Fetch captions matching language filter
 thumbnails = true        # Download thumbnails
 
@@ -340,7 +347,7 @@ limit = 10  # Limit to N most recent videos (by upload date, newest first)
 
 
 def save_config_template(config_dir: Path, urls: list[str] = None,
-                        enable_videos: bool = True, comments_depth: int = 10000,
+                        enable_videos: bool = True, comments_depth: Optional[int] = None,
                         enable_captions: bool = True) -> Path:
     """Save configuration template to directory.
 
@@ -348,7 +355,7 @@ def save_config_template(config_dir: Path, urls: list[str] = None,
         config_dir: Directory to save config template (e.g., .annextube/)
         urls: List of YouTube channel/playlist URLs to add
         enable_videos: Enable video downloading (default: True)
-        comments_depth: Comments to fetch (0=disabled, default: 10000)
+        comments_depth: Comments to fetch (None=unlimited, 0=disabled, default: None)
         enable_captions: Enable captions (default: True)
 
     Returns:
