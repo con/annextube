@@ -177,24 +177,32 @@ class YouTubeService:
 
                     logger.info(f"Found {len(new_video_ids)} new video(s), fetching full metadata")
 
-                    # Second pass: Fetch full metadata only for new videos
-                    videos = []
+                except Exception as e:
+                    logger.error(f"Failed flat extraction: {e}", exc_info=True)
+                    # Fall back to regular extraction
+                    use_two_pass = False
+
+            # Second pass: Fetch full metadata only for new videos (outside the flat extraction context)
+            if use_two_pass:
+                full_opts = ydl_opts.copy()
+                full_opts.update({
+                    "ignoreerrors": True,
+                    "no_warnings": False,
+                })
+
+                videos = []
+                with yt_dlp.YoutubeDL(full_opts) as ydl_full:
                     for video_id in new_video_ids:
                         try:
                             video_url = f"https://www.youtube.com/watch?v={video_id}"
-                            video_info = ydl.extract_info(video_url, download=False)
+                            video_info = ydl_full.extract_info(video_url, download=False)
                             if video_info:
                                 videos.append(video_info)
                         except Exception as e:
                             logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
 
-                    logger.info(f"Successfully fetched metadata for {len(videos)} new video(s)")
-                    return videos
-
-                except Exception as e:
-                    logger.error(f"Failed flat extraction: {e}", exc_info=True)
-                    # Fall back to regular extraction
-                    use_two_pass = False
+                logger.info(f"Successfully fetched metadata for {len(videos)} new video(s)")
+                return videos
 
         # Regular extraction (initial backup or fallback)
         ydl_opts.update(

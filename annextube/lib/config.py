@@ -216,6 +216,10 @@ def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
     Returns:
         TOML configuration template as string
     """
+    # Convert boolean values to TOML format
+    videos_str = str(enable_videos).lower()
+    captions_str = str(enable_captions).lower()
+
     # Generate sources section
     if urls:
         sources_section = ""
@@ -269,12 +273,12 @@ enabled = true
 
 # Components to backup
 [components]
-videos = {str(enable_videos).lower()}           # Track URLs only (no video downloads) - saves storage
+videos = {videos_str}           # Track URLs only (no video downloads) - saves storage
 metadata = true          # Fetch video metadata
 comments_depth = {comments_depth}   # Maximum comments to fetch (0 = disabled, default: 10000)
                          # Note: yt-dlp limitation - all comments returned as top-level,
                          # reply threading not available
-captions = {str(enable_captions).lower()}          # Fetch captions matching language filter
+captions = {captions_str}          # Fetch captions matching language filter
 thumbnails = true        # Download thumbnails
 
 caption_languages = ".*"  # Regex pattern for caption languages to download
@@ -286,20 +290,20 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
 
 # Repository organization and file paths
 [organization]
-video_path_pattern = "{date}_{sanitized_title}"  # Path pattern for videos (video_id tracked in TSV)
+video_path_pattern = "{{date}}_{{sanitized_title}}"  # Path pattern for videos (video_id tracked in TSV)
 # Available placeholders:
-#   {date} - Publication date (YYYY-MM-DD)
-#   {video_id} - YouTube video ID (optional, tracked in videos.tsv)
-#   {sanitized_title} - Video title (filesystem-safe, hyphens for words)
-#   {channel_id} - Channel ID
-#   {channel_name} - Channel name (sanitized)
+#   {{date}} - Publication date (YYYY-MM-DD)
+#   {{video_id}} - YouTube video ID (optional, tracked in videos.tsv)
+#   {{sanitized_title}} - Video title (filesystem-safe, hyphens for words)
+#   {{channel_id}} - Channel ID
+#   {{channel_name}} - Channel name (sanitized)
 # Examples:
-#   "{date}_{sanitized_title}" - Date + title (default, ID in TSV)
-#   "{date}_{video_id}_{sanitized_title}" - Include ID (legacy)
-#   "{video_id}" - Just video ID (compact)
+#   "{{date}}_{{sanitized_title}}" - Date + title (default, ID in TSV)
+#   "{{date}}_{{video_id}}_{{sanitized_title}}" - Include ID (legacy)
+#   "{{video_id}}" - Just video ID (compact)
 
-channel_path_pattern = "{channel_id}"  # Path pattern for channels
-playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists (uses sanitized name in practice)
+channel_path_pattern = "{{channel_id}}"  # Path pattern for channels
+playlist_path_pattern = "{{playlist_id}}"  # Path pattern for playlists (uses sanitized name in practice)
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
 

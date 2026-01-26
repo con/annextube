@@ -66,22 +66,17 @@ def test_incremental_backup_no_reprocessing():
         # Verify incremental mode was used
         assert "videos-incremental" in result2.stdout, "Should use incremental mode by default"
 
-        # Verify videos were filtered out
+        # Verify no new videos were found (two-pass approach filtered them out)
         stderr_lower = result2.stderr.lower()
-        assert ("filtered out" in stderr_lower or
-                "skipping existing video" in stderr_lower or
-                "0 video(s) in channel" in stderr_lower), \
-            "Second run should filter out existing videos"
+        assert ("no new videos found" in stderr_lower or
+                "stopping: found" in stderr_lower or
+                "filtered out" in stderr_lower), \
+            "Second run should find no new videos"
 
-        # Verify no new videos were processed (all filtered)
-        # The output should show 0 videos processed or similar
+        # Verify no new videos were processed
         stdout_lower = result2.stdout.lower()
-
-        # Check for indicators that nothing was processed
-        # This could be "0 videos processed" or no "processing video" messages
-        processing_msgs = result2.stderr.count("Processing video")
-        assert processing_msgs == 0, \
-            f"Second run should not process any videos, but found {processing_msgs} processing messages"
+        assert "videos processed: 0" in stdout_lower, \
+            "Second run should process 0 videos"
 
 
 @pytest.mark.ai_generated
@@ -138,7 +133,7 @@ def test_incremental_backup_detects_new_videos():
         assert second_count == 5, f"Expected 5 videos after second backup, got {second_count}"
 
         # Should have processed 3 new videos (5 - 2)
-        # The exact message format may vary, but there should be indication of new videos
-        stderr_text = result.stderr
-        assert "Filtered out 2" in stderr_text or "existing videos" in stderr_text, \
-            "Should indicate 2 existing videos were filtered out"
+        stdout_text = result.stdout
+        # Check that 3 videos were processed
+        assert "videos processed: 3" in stdout_text.lower(), \
+            f"Should have processed 3 new videos"
