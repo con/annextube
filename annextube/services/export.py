@@ -67,7 +67,7 @@ class ExportService:
                 video_entry = {
                     "title": metadata.get("title", ""),
                     "channel": metadata.get("channel_name", ""),
-                    "published": metadata.get("published_at", "")[:10] if metadata.get("published_at") else "",
+                    "published": metadata.get("published_at", ""),  # Full ISO 8601 datetime
                     "duration": str(metadata.get("duration", 0)),
                     "views": str(metadata.get("view_count", 0)),
                     "likes": str(metadata.get("like_count", 0)),
@@ -139,7 +139,7 @@ class ExportService:
                     "channel": metadata.get("channel_name", ""),
                     "video_count": str(video_count),
                     "total_duration": str(total_duration),
-                    "last_updated": metadata.get("last_modified", metadata.get("updated_at", ""))[:19] if metadata.get("last_modified") or metadata.get("updated_at") else "",
+                    "last_updated": metadata.get("last_modified") or metadata.get("updated_at") or "",  # Full ISO 8601 datetime
                     "path": playlist_dir.name,  # Relative folder name
                     "playlist_id": metadata.get("playlist_id", ""),
                 }

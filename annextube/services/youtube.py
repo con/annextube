@@ -103,18 +103,23 @@ class YouTubeService:
         return opts
 
     def get_channel_videos(
-        self, channel_url: str, limit: Optional[int] = None
+        self, channel_url: str, limit: Optional[int] = None,
+        published_after: Optional[datetime] = None
     ) -> List[Dict[str, Any]]:
         """Get videos from a channel.
 
         Args:
             channel_url: YouTube channel URL
             limit: Optional limit for number of videos (most recent)
+            published_after: Optional datetime to filter videos published after this date
 
         Returns:
             List of video metadata dictionaries
         """
         logger.info(f"Fetching videos from channel: {channel_url}")
+
+        if published_after:
+            logger.info(f"Filtering videos published after: {published_after.isoformat()}")
 
         # Ensure we're getting the videos tab, not channel tabs
         if not channel_url.endswith("/videos"):
@@ -131,6 +136,12 @@ class YouTubeService:
                 "no_warnings": False,  # Show warnings for debugging
             }
         )
+
+        # Add date filtering if specified
+        if published_after:
+            # Format as YYYYMMDD for yt-dlp
+            ydl_opts['dateafter'] = published_after.strftime('%Y%m%d')
+            logger.debug(f"yt-dlp dateafter: {ydl_opts['dateafter']}")
 
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
