@@ -735,6 +735,34 @@ class YouTubeService:
             # Find downloaded caption files
             caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
 
+            # Deduplicate: remove LANG-orig if identical to LANG
+            # This avoids storing duplicate files for curated vs original captions
+            files_to_remove = []
+            for caption_file in caption_files:
+                lang_code = caption_file.stem.split(".")[-1]
+
+                # Check if this is a -orig variant
+                if lang_code.endswith('-orig'):
+                    base_lang = lang_code[:-5]  # Remove '-orig' suffix
+                    base_file = output_dir / f"{video_id}.{base_lang}.vtt"
+
+                    if base_file.exists():
+                        # Compare file contents
+                        try:
+                            with open(caption_file, 'rb') as f1, open(base_file, 'rb') as f2:
+                                if f1.read() == f2.read():
+                                    # Files are identical - remove -orig variant
+                                    logger.debug(f"Removing duplicate {lang_code} (identical to {base_lang})")
+                                    caption_file.unlink()
+                                    files_to_remove.append(caption_file)
+                                else:
+                                    logger.debug(f"Keeping both {lang_code} and {base_lang} (differ)")
+                        except Exception as e:
+                            logger.warning(f"Failed to compare {lang_code} and {base_lang}: {e}")
+
+            # Update caption_files to exclude removed files
+            caption_files = [f for f in caption_files if f not in files_to_remove]
+
             # Build metadata for each downloaded caption
             captions_metadata = []
             fetched_at = datetime.now().isoformat()
@@ -755,11 +783,14 @@ class YouTubeService:
                         url = variants[0].get('url', '')
                         is_auto_translated = 'tlang=' in url
 
+                # Path relative to repo root (video directory is videos/VIDEO_DIR/)
+                relative_path = caption_file.relative_to(output_dir.parent.parent)
+
                 captions_metadata.append({
                     'language_code': lang_code,
                     'auto_generated': is_auto_generated,
                     'auto_translated': is_auto_translated,
-                    'file_path': str(caption_file.relative_to(output_dir.parent.parent)),
+                    'file_path': str(relative_path),
                     'fetched_at': fetched_at
                 })
 

@@ -825,6 +825,9 @@ class Archiver:
     def _download_captions(self, video: Video, video_dir: Path) -> List[str]:
         """Download video captions, generate captions.tsv, and set git-annex metadata.
 
+        Captions are saved directly in video directory (not captions/ subdirectory)
+        for automatic discovery by video players.
+
         Args:
             video: Video model instance
             video_dir: Video directory path
@@ -833,14 +836,15 @@ class Archiver:
             List of downloaded caption language codes
         """
         try:
-            captions_dir = video_dir / "captions"
+            # Save captions directly in video directory (not subdirectory)
+            # This allows video players to auto-discover them
             # Use caption settings from config
             language_pattern = self.config.components.caption_languages
             auto_translated_langs = self.config.components.auto_translated_captions
 
             captions_metadata = self.youtube.download_captions(
                 video.video_id,
-                captions_dir,
+                video_dir,
                 language_pattern=language_pattern,
                 auto_translated_langs=auto_translated_langs
             )
