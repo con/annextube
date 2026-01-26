@@ -178,7 +178,7 @@ class YouTubeService:
                     videos.append(entry)
 
                 logger.info(f"Successfully fetched metadata for {len(videos)} video(s)")
-                if published_after and len(videos) < len(entries):
+                if existing_video_ids and len(videos) < len(entries):
                     logger.info(f"Filtered out {len(entries) - len(videos)} already-seen video(s)")
                 return videos
 
