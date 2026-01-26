@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import yt_dlp
 
+from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
 from annextube.models.playlist import Playlist
 from annextube.models.video import Video
@@ -888,7 +889,7 @@ class YouTubeService:
                 logger.info(f"No comments available for video: {video_id}")
                 # Still save empty comments file for consistency
                 output_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(output_path, 'w', encoding='utf-8') as f:
+                with AtomicFileWriter(output_path) as f:
                     json.dump([], f, indent=2)
                 return True
 
@@ -951,7 +952,7 @@ class YouTubeService:
 
             # Save comments to JSON file
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, 'w', encoding='utf-8') as f:
+            with AtomicFileWriter(output_path) as f:
                 json.dump(final_comments, f, indent=2, ensure_ascii=False)
 
             if new_count > 0 or updated_count > 0:

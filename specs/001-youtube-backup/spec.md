@@ -306,6 +306,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-080**: System MUST validate downloaded content integrity
 - **FR-081**: System MUST log all errors with sufficient context for troubleshooting
 - **FR-082**: System MUST maintain operation state to support idempotent operations
+- **FR-082a**: System MUST perform atomic file updates when modifying existing files in git-annex repositories. Since git-annex files are symlinks to read-only content, updates MUST follow the pattern: (1) Read existing content if needed, (2) Unlink the symlink, (3) Write new content. This pattern MUST be implemented via a centralized helper utility (function or context manager) to ensure consistency and DRY principle
 
 #### CI/CD and Automation
 

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from annextube.lib.config import SourceConfig
 
 from annextube.lib.config import Config
+from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
 from annextube.models.channel import Channel
 from annextube.models.playlist import Playlist
@@ -603,7 +604,7 @@ class Archiver:
 
         # Only update playlist metadata if content changed
         if playlist_changed:
-            with open(metadata_path, "w") as f:
+            with AtomicFileWriter(metadata_path) as f:
                 json.dump(playlist.to_dict(), f, indent=2)
             logger.debug(f"Saved playlist metadata: {metadata_path}")
 
@@ -713,7 +714,7 @@ class Archiver:
 
         # Save metadata
         metadata_path = video_dir / "metadata.json"
-        with open(metadata_path, "w") as f:
+        with AtomicFileWriter(metadata_path) as f:
             json.dump(video.to_dict(), f, indent=2)
 
         logger.debug(f"Saved metadata: {metadata_path}")
@@ -769,7 +770,7 @@ class Archiver:
                 video.captions_available = downloaded_captions
                 # Re-save metadata with updated captions_available
                 metadata_path = video_dir / "metadata.json"
-                with open(metadata_path, "w") as f:
+                with AtomicFileWriter(metadata_path) as f:
                     json.dump(video.to_dict(), f, indent=2)
                 logger.debug(f"Updated metadata with {len(downloaded_captions)} downloaded captions")
 
@@ -858,7 +859,7 @@ class Archiver:
             if captions_metadata:
                 # Create captions.tsv with metadata
                 captions_tsv_path = video_dir / "captions.tsv"
-                with open(captions_tsv_path, "w") as f:
+                with AtomicFileWriter(captions_tsv_path) as f:
                     # Write header (added auto_translated column)
                     f.write("language_code\tauto_generated\tauto_translated\tfile_path\tfetched_at\n")
                     # Write caption rows and set git-annex metadata
