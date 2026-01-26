@@ -364,14 +364,20 @@ class GitAnnexService:
         import json
 
         sensitive_patterns = [
-            "**/comments.json",  # All comments files (recursive)
-            "authors.tsv",       # Top-level authors file
+            "videos/**/comments.json",  # Comments in videos/ directory only (not playlist symlinks)
+            "authors.tsv",              # Top-level authors file
         ]
 
         files_tagged = 0
         for pattern in sensitive_patterns:
             for file_str in glob.glob(str(self.repo_path / pattern), recursive=True):
                 file_path = Path(file_str).relative_to(self.repo_path)
+
+                # Skip if this is a symlink to another directory (playlist symlinks)
+                # We only want to set metadata on the original files in videos/
+                if file_path.is_symlink() and "../" in str(file_path.readlink()):
+                    logger.debug(f"Skipping {file_path} (symlink to other directory)")
+                    continue
 
                 # Only process if file is in git-annex
                 if not self.is_annexed(file_path):
