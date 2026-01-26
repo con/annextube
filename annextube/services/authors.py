@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
 
+from annextube.lib.file_utils import AtomicFileWriter
 from ..models.author import Author
 
 logger = logging.getLogger(__name__)
@@ -190,7 +191,7 @@ class AuthorsService:
         # Sort authors by author_id for deterministic output
         sorted_authors = sorted(authors.values(), key=lambda a: a.author_id)
 
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with AtomicFileWriter(output_path) as f:
             # Write header
             f.write("author_id\tname\tchannel_url\tfirst_seen\tlast_seen\tvideo_count\tcomment_count\n")
 

@@ -338,15 +338,18 @@ class GitAnnexService:
             return False
 
     def ensure_sensitive_metadata(self) -> None:
-        """Ensure sensitive files have distribution-restrictions=sensitive metadata.
+        """Ensure sensitive files have proper git-annex metadata.
 
         Checks all comments.json and authors.tsv files in the repository.
-        If they are in git-annex and don't have distribution-restrictions metadata,
-        sets it to 'sensitive'.
+        For each file in git-annex:
+        1. Sets distribution-restrictions=sensitive
+        2. For comments.json: Also sets video_id, title, channel, published, filetype
+           by reading metadata from adjacent metadata.json file
 
         This should be called after commits to ensure proper metadata tagging.
         """
         import glob
+        import json
 
         sensitive_patterns = [
             "**/comments.json",  # All comments files (recursive)
@@ -364,14 +367,47 @@ class GitAnnexService:
                     continue
 
                 # Check existing metadata
-                metadata = self.get_metadata(file_path)
-                distribution = metadata.get("distribution-restrictions", [])
+                existing = self.get_metadata(file_path)
+                distribution = existing.get("distribution-restrictions", [])
 
-                # Set if not already set to sensitive
+                # Prepare metadata to set
+                new_metadata = {}
+
+                # Always ensure distribution-restrictions
                 if "sensitive" not in distribution:
-                    logger.info(f"Setting distribution-restrictions=sensitive for {file_path}")
-                    self.set_metadata(file_path, {"distribution-restrictions": "sensitive"})
+                    new_metadata["distribution-restrictions"] = "sensitive"
+
+                # For comments.json, also set comprehensive video metadata
+                if file_path.name == "comments.json":
+                    # Try to read video metadata from adjacent metadata.json
+                    metadata_file = file_path.parent / "metadata.json"
+                    if metadata_file.exists():
+                        try:
+                            with open(self.repo_path / metadata_file) as f:
+                                video_meta = json.load(f)
+
+                            # Set video metadata if not present or different
+                            video_fields = {
+                                "video_id": video_meta.get("video_id", ""),
+                                "title": video_meta.get("title", ""),
+                                "channel": video_meta.get("channel_name", ""),
+                                "published": video_meta.get("published_at", "")[:10] if video_meta.get("published_at") else "",
+                                "filetype": "comments",
+                            }
+
+                            for key, value in video_fields.items():
+                                if value and value not in existing.get(key, []):
+                                    new_metadata[key] = value
+
+                        except Exception as e:
+                            logger.debug(f"Could not read metadata.json for {file_path}: {e}")
+
+                # Set metadata if any fields need updating
+                if new_metadata:
+                    for key, value in new_metadata.items():
+                        self.set_metadata(file_path, {key: value})
+                    logger.debug(f"Updated {len(new_metadata)} metadata field(s) for {file_path}")
                     files_tagged += 1
 
         if files_tagged > 0:
-            logger.info(f"Tagged {files_tagged} sensitive file(s) with distribution-restrictions metadata")
+            logger.info(f"Tagged {files_tagged} sensitive file(s) with metadata")
