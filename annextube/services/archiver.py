@@ -322,16 +322,19 @@ class Archiver:
             # Determine what videos to fetch based on update_mode
             limit = self.config.filters.limit
             published_after = None
+            existing_video_ids = None
 
             if self.update_mode in ["videos-incremental", "all-incremental"]:
-                # Get latest video datetime from videos.tsv for incremental updates
+                # Get latest video datetime and existing IDs for incremental updates
                 from .tsv_reader import TSVReader
                 videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
                 latest_datetime = TSVReader.get_latest_video_datetime(videos_tsv_path)
+                existing_video_ids = TSVReader.get_existing_video_ids(videos_tsv_path)
 
                 if latest_datetime:
                     published_after = latest_datetime
                     logger.info(f"Incremental update: fetching videos after {latest_datetime.isoformat()}")
+                    logger.info(f"Filtering out {len(existing_video_ids)} existing videos by ID")
                 else:
                     logger.info("No existing videos.tsv found, performing full initial backup")
             elif self.update_mode == "social":
@@ -344,7 +347,8 @@ class Archiver:
                 videos_metadata = self.youtube.get_channel_videos(
                     channel_url,
                     limit=limit,
-                    published_after=published_after
+                    published_after=published_after,
+                    existing_video_ids=existing_video_ids
                 )
 
             if not videos_metadata:

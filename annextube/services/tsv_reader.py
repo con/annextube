@@ -153,3 +153,33 @@ class TSVReader:
         except Exception as e:
             logger.error(f"Failed to count videos in TSV: {e}")
             return 0
+
+    @staticmethod
+    def get_existing_video_ids(videos_tsv_path: Path) -> set[str]:
+        """Get set of all video IDs from videos.tsv.
+
+        Args:
+            videos_tsv_path: Path to videos.tsv file
+
+        Returns:
+            Set of video IDs already in the archive
+        """
+        if not videos_tsv_path.exists():
+            return set()
+
+        try:
+            with open(videos_tsv_path, 'r', encoding='utf-8') as f:
+                reader = csv.DictReader(f, delimiter='\t')
+                video_ids = set()
+
+                for row in reader:
+                    video_id = row.get('video_id')
+                    if video_id:
+                        video_ids.add(video_id)
+
+                logger.debug(f"Found {len(video_ids)} existing video IDs in TSV")
+                return video_ids
+
+        except Exception as e:
+            logger.error(f"Failed to read video IDs from TSV: {e}")
+            return set()

@@ -104,7 +104,8 @@ class YouTubeService:
 
     def get_channel_videos(
         self, channel_url: str, limit: Optional[int] = None,
-        published_after: Optional[datetime] = None
+        published_after: Optional[datetime] = None,
+        existing_video_ids: Optional[set[str]] = None
     ) -> List[Dict[str, Any]]:
         """Get videos from a channel.
 
@@ -112,6 +113,7 @@ class YouTubeService:
             channel_url: YouTube channel URL
             limit: Optional limit for number of videos (most recent)
             published_after: Optional datetime to filter videos published after this date
+            existing_video_ids: Optional set of video IDs already in archive (for incremental updates)
 
         Returns:
             List of video metadata dictionaries
@@ -120,6 +122,9 @@ class YouTubeService:
 
         if published_after:
             logger.info(f"Filtering videos published after: {published_after.isoformat()}")
+
+        if existing_video_ids:
+            logger.info(f"Filtering out {len(existing_video_ids)} existing videos")
 
         # Ensure we're getting the videos tab, not channel tabs
         if not channel_url.endswith("/videos"):
@@ -176,8 +181,14 @@ class YouTubeService:
                         logger.warning(f"Skipping entry without ID: {entry.get('title', 'Unknown')}")
                         continue
 
+                    # Filter by existing video IDs (most reliable for incremental updates)
+                    if existing_video_ids and entry.get("id") in existing_video_ids:
+                        logger.debug(f"Skipping existing video: {entry.get('id')}")
+                        continue
+
                     # Post-filter by datetime if published_after specified
                     # (yt-dlp dateafter only supports date, not datetime)
+                    # NOTE: This is a secondary filter - ID-based filtering is more reliable
                     if published_after and entry.get("upload_date"):
                         try:
                             # Parse upload_date (YYYYMMDD format) to datetime
@@ -188,9 +199,11 @@ class YouTubeService:
                             if entry.get("timestamp"):
                                 upload_datetime = datetime.fromtimestamp(entry["timestamp"])
 
-                            # Skip if not newer than our cutoff
-                            if upload_datetime <= published_after:
-                                logger.debug(f"Skipping video {entry.get('id')} - published {upload_datetime.isoformat()} <= {published_after.isoformat()}")
+                            # Skip if strictly older than our cutoff
+                            # NOTE: Use < not <= because YouTube often only provides date (midnight)
+                            # If timestamps are equal, we can't determine order, so include it
+                            if upload_datetime < published_after:
+                                logger.debug(f"Skipping video {entry.get('id')} - published {upload_datetime.isoformat()} < {published_after.isoformat()}")
                                 continue
                         except (ValueError, TypeError) as e:
                             logger.warning(f"Could not parse upload date for filtering: {e}")
