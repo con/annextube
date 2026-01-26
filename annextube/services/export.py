@@ -253,7 +253,7 @@ class ExportService:
             output_path: Path to output file
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write("video_id\ttitle\tchannel\tpublished\tduration\tviews\tlikes\tcomments\thas_captions\tfile_path\n")
+            f.write("title\tchannel\tpublished\tduration\tviews\tlikes\tcomments\tcaptions\tpath\tvideo_id\n")
 
     def _write_empty_playlists_tsv(self, output_path: Path) -> None:
         """Write empty playlists.tsv with header only.
@@ -262,4 +262,4 @@ class ExportService:
             output_path: Path to output file
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write("folder_name\tplaylist_id\ttitle\tchannel\tvideo_count\ttotal_duration\tlast_updated\n")
+            f.write("title\tchannel\tvideo_count\ttotal_duration\tlast_updated\tpath\tplaylist_id\n")

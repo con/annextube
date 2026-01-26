@@ -26,8 +26,9 @@ logger = get_logger(__name__)
 @click.option("--limit", type=int, help="Limit number of videos (most recent)")
 @click.option(
     "--update",
-    type=click.Choice(["all-incremental", "all-force", "social", "users", "comments"], case_sensitive=False),
-    help="Update mode: all-incremental (new videos + 1 week social), all-force (all videos), social (comments+captions), users (authors), comments (comments only)",
+    type=click.Choice(["videos-incremental", "all-incremental", "all-force", "social"], case_sensitive=False),
+    default="videos-incremental",
+    help="Update mode: videos-incremental (new videos only, default), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions only)",
 )
 @click.option(
     "--from-date",
@@ -84,11 +85,17 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             config.filters.limit = limit
 
         # Handle deprecated --skip-existing flag
-        if skip_existing and not update:
+        if skip_existing:
             update = "all-incremental"
             click.echo("Note: --skip-existing is deprecated, use --update=all-incremental instead")
 
-        # Parse date range
+        # Default update mode if not specified
+        if not update:
+            update = "videos-incremental"
+
+        click.echo(f"Update mode: {update}")
+
+        # Parse date range (for all-incremental mode)
         date_from: Optional[datetime] = None
         date_to: Optional[datetime] = None
 
@@ -108,22 +115,14 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 click.echo(f"Error: Invalid --to-date: {e}", err=True)
                 raise click.Abort()
 
-        # Determine skip_existing based on update mode
-        skip_existing_mode = False
-        if update:
-            click.echo(f"Update mode: {update}")
-            if update == "all-incremental":
-                skip_existing_mode = True
-                # Default to 1 week window for social updates if no dates specified
-                if not from_date:
-                    from annextube.lib.date_utils import parse_duration
-                    date_from = datetime.now() - parse_duration("1 week")
-                    click.echo(f"Default social window: {date_from.strftime('%Y-%m-%d')} to now")
-            elif update == "all-force":
-                skip_existing_mode = False  # Re-process all
+        # For all-incremental mode, default to 1 week window for social updates if no dates specified
+        if update == "all-incremental" and not from_date:
+            from annextube.lib.date_utils import parse_duration
+            date_from = datetime.now() - parse_duration("1 week")
+            click.echo(f"Default social window: {date_from.strftime('%Y-%m-%d')} to now")
 
-        # Initialize archiver
-        archiver = Archiver(output_dir, config, skip_existing=skip_existing_mode)
+        # Initialize archiver with update mode
+        archiver = Archiver(output_dir, config, update_mode=update)
 
         # Determine what to backup
         if url:

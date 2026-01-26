@@ -42,24 +42,19 @@ def sanitize_filename(text: str) -> str:
 class Archiver:
     """Core archival logic coordinating git-annex and YouTube services."""
 
-    def __init__(self, repo_path: Path, config: Config, skip_existing: bool = False):
+    def __init__(self, repo_path: Path, config: Config, update_mode: str = "videos-incremental"):
         """Initialize Archiver.
 
         Args:
             repo_path: Path to archive repository
             config: Configuration object
-            skip_existing: If True, skip videos that have already been processed
+            update_mode: Update mode - "videos-incremental" (default), "all-incremental", "social", "all-force"
         """
         self.repo_path = repo_path
         self.config = config
-        self.skip_existing = skip_existing
+        self.update_mode = update_mode
         self.git_annex = GitAnnexService(repo_path)
         self.youtube = YouTubeService()
-
-        # Initialize sync state service
-        from .sync_state import SyncStateService
-        self.sync_state = SyncStateService(repo_path)
-        self.sync_state.load()
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache = None  # Cache for video ID to path mapping
 
@@ -307,11 +302,12 @@ class Archiver:
 
         Args:
             channel_url: YouTube channel URL
+            source_config: Optional source configuration for playlists
 
         Returns:
             Summary dictionary with statistics
         """
-        logger.info(f"Starting backup for channel: {channel_url}")
+        logger.info(f"Starting backup for channel: {channel_url} (mode: {self.update_mode})")
 
         stats = {
             "channel_url": channel_url,
@@ -323,9 +319,33 @@ class Archiver:
         }
 
         try:
-            # Get channel videos
+            # Determine what videos to fetch based on update_mode
             limit = self.config.filters.limit
-            videos_metadata = self.youtube.get_channel_videos(channel_url, limit=limit)
+            published_after = None
+
+            if self.update_mode in ["videos-incremental", "all-incremental"]:
+                # Get latest video datetime from videos.tsv for incremental updates
+                from .tsv_reader import TSVReader
+                videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
+                latest_datetime = TSVReader.get_latest_video_datetime(videos_tsv_path)
+
+                if latest_datetime:
+                    published_after = latest_datetime
+                    logger.info(f"Incremental update: fetching videos after {latest_datetime.isoformat()}")
+                else:
+                    logger.info("No existing videos.tsv found, performing full initial backup")
+            elif self.update_mode == "social":
+                # Social mode: don't fetch new videos at all, only update existing ones
+                logger.info("Social-only mode: skipping new video fetch")
+                videos_metadata = []
+
+            # Fetch videos (unless in social-only mode)
+            if self.update_mode != "social":
+                videos_metadata = self.youtube.get_channel_videos(
+                    channel_url,
+                    limit=limit,
+                    published_after=published_after
+                )
 
             if not videos_metadata:
                 logger.warning("No videos found")
@@ -385,9 +405,6 @@ class Archiver:
                 self.git_annex.add_and_commit("Update TSV metadata files")
             except Exception as e:
                 logger.warning(f"Failed to generate TSV files: {e}")
-
-            # Save sync state
-            self.sync_state.save()
 
         except Exception as e:
             logger.error(f"Channel backup failed: {e}")
@@ -504,9 +521,6 @@ class Archiver:
             except Exception as e:
                 logger.warning(f"Failed to generate TSV files: {e}")
 
-            # Save sync state
-            self.sync_state.save()
-
         except Exception as e:
             logger.error(f"Playlist backup failed: {e}")
             stats["errors"].append(str(e))
@@ -525,15 +539,22 @@ class Archiver:
         logger.debug(f"Processing video: {video.video_id} - {video.title}")
         caption_count = 0
 
-        # Check if we should skip this video
-        if self.skip_existing:
-            video_state = self.sync_state.get_video_state(video.video_id)
-            if video_state and video_state.last_metadata_fetch:
-                logger.info(f"Skipping already-processed video: {video.video_id}")
-                return 0
-
         # Calculate expected path using configurable pattern
         expected_path = self._get_video_path(video)
+
+        # Check if we should skip this video (for incremental modes)
+        if self.update_mode in ["videos-incremental", "all-incremental"]:
+            # Skip if metadata.json already exists (video already processed)
+            metadata_path = expected_path / "metadata.json"
+            if metadata_path.exists():
+                logger.debug(f"Skipping already-processed video: {video.video_id}")
+                # For all-incremental, still check if we need to update social data
+                if self.update_mode == "all-incremental":
+                    # TODO: Implement social data updates for recent videos
+                    pass
+                return 0
+
+        # Continue with path calculation
 
         # Check if video needs renaming (path pattern changed)
         video_dir = self._rename_video_if_needed(video, expected_path)
@@ -602,18 +623,6 @@ class Archiver:
                 comments_path,
                 max_depth=self.config.components.comments_depth
             )
-
-        # Update sync state
-        self.sync_state.update_video_state(
-            video_id=video.video_id,
-            published_at=video.published_at,
-            comment_count=video.comment_count,
-            view_count=video.view_count,
-            like_count=video.like_count,
-            metadata_fetched=True,
-            comments_fetched=comments_fetched,
-            captions_fetched=(caption_count > 0),
-        )
 
         return caption_count
 
