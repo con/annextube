@@ -800,8 +800,15 @@ class YouTubeService:
                     json.dump([], f, indent=2)
                 return True
 
+            # Debug: Log sample comment fields to understand what yt-dlp provides
+            if comments and logger.isEnabledFor(5):  # DEBUG level
+                sample = comments[0]
+                logger.debug(f"Sample comment fields: {list(sample.keys())}")
+                logger.debug(f"Sample timestamp type: {type(sample.get('timestamp'))}, value: {sample.get('timestamp')}")
+
             # Format comments for storage
             new_count = 0
+            updated_count = 0
             for comment in comments:
                 comment_id = comment.get('id', '')
                 if not comment_id:
@@ -809,19 +816,43 @@ class YouTubeService:
 
                 # Check if this is a new comment
                 if comment_id not in existing_comments:
+                    # New comment - add all fields
                     new_count += 1
 
-                # Add/update comment (updates like_count and other fields)
-                existing_comments[comment_id] = {
-                    'comment_id': comment_id,
-                    'author': comment.get('author', ''),
-                    'author_id': comment.get('author_id', ''),
-                    'text': comment.get('text', ''),
-                    'timestamp': comment.get('timestamp'),
-                    'like_count': comment.get('like_count', 0),
-                    'is_favorited': comment.get('is_favorited', False),
-                    'parent': comment.get('parent', 'root'),  # 'root' or parent comment ID
-                }
+                    # Normalize timestamp: ensure it's an integer (Unix timestamp from API)
+                    # yt-dlp provides timestamp as Unix epoch seconds (should be stable)
+                    timestamp = comment.get('timestamp')
+                    if timestamp is not None:
+                        # Convert to int if it's a float (removes sub-second precision variations)
+                        timestamp = int(timestamp)
+
+                    existing_comments[comment_id] = {
+                        'comment_id': comment_id,
+                        'author': comment.get('author', ''),
+                        'author_id': comment.get('author_id', ''),
+                        'text': comment.get('text', ''),
+                        'timestamp': timestamp,  # Unix timestamp from YouTube API (stable)
+                        'like_count': comment.get('like_count', 0),
+                        'is_favorited': comment.get('is_favorited', False),
+                        'parent': comment.get('parent', 'root'),  # 'root' or parent comment ID
+                    }
+                else:
+                    # Existing comment - only update fields that can change
+                    # Preserve original timestamp, author, text, etc. (stable fields)
+                    existing = existing_comments[comment_id]
+
+                    # Update like_count if changed
+                    new_like_count = comment.get('like_count', 0)
+                    if existing.get('like_count', 0) != new_like_count:
+                        existing['like_count'] = new_like_count
+                        updated_count += 1
+
+                    # Update is_favorited if changed
+                    new_favorited = comment.get('is_favorited', False)
+                    if existing.get('is_favorited', False) != new_favorited:
+                        existing['is_favorited'] = new_favorited
+                        if updated_count == 0:  # Only count once per comment
+                            updated_count += 1
 
             # Convert back to list and save
             final_comments = list(existing_comments.values())
@@ -831,10 +862,15 @@ class YouTubeService:
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(final_comments, f, indent=2, ensure_ascii=False)
 
-            if new_count > 0:
-                logger.info(f"Downloaded {new_count} new comment(s), total: {len(final_comments)}")
+            if new_count > 0 or updated_count > 0:
+                parts = []
+                if new_count > 0:
+                    parts.append(f"{new_count} new")
+                if updated_count > 0:
+                    parts.append(f"{updated_count} updated")
+                logger.info(f"Comments: {', '.join(parts)}, total: {len(final_comments)}")
             else:
-                logger.info(f"No new comments, refreshed {len(final_comments)} existing comment(s)")
+                logger.info(f"No comment changes, {len(final_comments)} existing comment(s)")
             return True
 
         except Exception as e:
