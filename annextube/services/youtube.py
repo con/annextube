@@ -878,21 +878,37 @@ class YouTubeService:
             return False
 
     def metadata_to_video(self, metadata: Dict[str, Any]) -> Video:
-        """Convert yt-dlp metadata to Video model.
+        """Convert metadata to Video model.
+
+        Handles both yt-dlp schema (id) and our stored schema (video_id).
 
         Args:
-            metadata: yt-dlp metadata dictionary
+            metadata: yt-dlp metadata dictionary OR stored Video.to_dict() format
 
         Returns:
             Video model instance
+
+        Raises:
+            ValueError: If video_id/id is missing from metadata
         """
-        # Parse published date
-        published_str = metadata.get("upload_date", "")
+        # Extract video_id - handle both yt-dlp schema ("id") and stored schema ("video_id")
+        video_id = metadata.get("video_id") or metadata.get("id")
+        if not video_id:
+            raise ValueError(f"Missing video_id/id in metadata. Available keys: {list(metadata.keys())}")
+
+        # Parse published date - handle both yt-dlp format and stored ISO format
+        published_str = metadata.get("upload_date", "") or metadata.get("published_at", "")
         if published_str:
             try:
+                # Try yt-dlp format first (YYYYMMDD)
                 published_at = datetime.strptime(published_str, "%Y%m%d")
             except ValueError:
-                published_at = datetime.now()
+                try:
+                    # Try ISO format (stored format)
+                    published_at = datetime.fromisoformat(published_str.replace('Z', '+00:00'))
+                except ValueError:
+                    logger.warning(f"Could not parse published date: {published_str}")
+                    published_at = datetime.now()
         else:
             published_at = datetime.now()
 
@@ -908,32 +924,38 @@ class YouTubeService:
         elif not isinstance(tags, list):
             tags = []
 
-        # Get category
+        # Get category - handle both yt-dlp and stored format
         category = metadata.get("category", "")
-        categories = [category] if category else []
+        categories = metadata.get("categories", [category] if category else [])
+
+        # Handle channel_name - yt-dlp uses "channel", stored uses "channel_name"
+        channel_name = metadata.get("channel_name") or metadata.get("channel") or metadata.get("uploader", "")
+
+        # Handle thumbnail - yt-dlp uses "thumbnail", stored uses "thumbnail_url"
+        thumbnail_url = metadata.get("thumbnail_url") or metadata.get("thumbnail", "")
 
         return Video(
-            video_id=metadata["id"],
+            video_id=video_id,  # Use extracted video_id
             title=metadata.get("title", "Unknown"),
             description=metadata.get("description", ""),
             channel_id=metadata.get("channel_id", metadata.get("uploader_id", "")),
-            channel_name=metadata.get("channel", metadata.get("uploader", "")),
+            channel_name=channel_name,
             published_at=published_at,
             duration=int(metadata.get("duration", 0) or 0),
             view_count=int(metadata.get("view_count", 0) or 0),
             like_count=int(metadata.get("like_count", 0) or 0),
             comment_count=int(metadata.get("comment_count", 0) or 0),
-            thumbnail_url=metadata.get("thumbnail", ""),
+            thumbnail_url=thumbnail_url,
             license=metadata.get("license", "standard"),
-            privacy_status="public",  # yt-dlp doesn't expose this easily
+            privacy_status=metadata.get("privacy_status", "public"),
             availability=metadata.get("availability", "public"),
             tags=tags,
             categories=categories,
             language=metadata.get("language"),
             captions_available=all_captions,  # Already sorted list
             has_auto_captions=len(auto_captions) > 0,
-            download_status="not_downloaded",
-            source_url=metadata.get("webpage_url", f"https://www.youtube.com/watch?v={metadata['id']}"),
+            download_status=metadata.get("download_status", "not_downloaded"),
+            source_url=metadata.get("source_url") or metadata.get("webpage_url", f"https://www.youtube.com/watch?v={video_id}"),
             fetched_at=datetime.now(),
             updated_at=datetime.now(),
         )
