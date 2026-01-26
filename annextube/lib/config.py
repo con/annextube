@@ -107,6 +107,7 @@ class Config:
             captions=components_data.get("captions", True),
             thumbnails=components_data.get("thumbnails", True),
             caption_languages=components_data.get("caption_languages", ".*"),
+            auto_translated_captions=components_data.get("auto_translated_captions", []),
         )
 
         filters_data = data.get("filters", {})
