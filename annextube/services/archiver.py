@@ -787,6 +787,17 @@ class Archiver:
                 max_depth=self.config.components.comments_depth
             )
 
+            # Set git-annex metadata for comments file
+            if comments_fetched and comments_path.exists():
+                metadata = {
+                    'video_id': video.video_id,
+                    'title': video.title,
+                    'channel': video.channel_name,
+                    'published': video.published_at.strftime('%Y-%m-%d'),
+                    'filetype': 'comments',
+                }
+                self.git_annex.set_metadata_if_changed(comments_path, metadata)
+
         # Track that this video was processed in this run
         self._processed_video_ids.add(video.video_id)
 
@@ -875,27 +886,20 @@ class Archiver:
                         )
 
                         # Set git-annex metadata for each caption file
-                        # captions are text files (*.vtt) so they go to git, not annex
-                        # but we can still set metadata if they end up in annex
-                        # (depends on .gitattributes rules)
-                        try:
-                            caption_file_path = self.repo_path / caption['file_path']
-                            lang_code = caption['language_code']
-                            metadata = {
-                                'video_id': video.video_id,
-                                'title': video.title,
-                                'channel': video.channel_name,
-                                'published': video.published_at.strftime('%Y-%m-%d'),
-                                'filetype': f'caption.{lang_code}',
-                                'language': lang_code,
-                                'auto_generated': str(caption['auto_generated']),
-                                'auto_translated': str(caption.get('auto_translated', False)),
-                            }
-                            self.git_annex.set_metadata(caption_file_path, metadata)
-                            logger.debug(f"Set git-annex metadata for caption: {caption_file_path}")
-                        except Exception as e:
-                            # Captions are in git (*.vtt), so metadata setting may not apply
-                            logger.debug(f"Could not set caption metadata (file in git, not annex): {e}")
+                        # Only updates if file is in git-annex (based on .gitattributes)
+                        caption_file_path = self.repo_path / caption['file_path']
+                        lang_code = caption['language_code']
+                        metadata = {
+                            'video_id': video.video_id,
+                            'title': video.title,
+                            'channel': video.channel_name,
+                            'published': video.published_at.strftime('%Y-%m-%d'),
+                            'filetype': f'caption.{lang_code}',
+                            'language': lang_code,
+                            'auto_generated': str(caption['auto_generated']),
+                            'auto_translated': str(caption.get('auto_translated', False)),
+                        }
+                        self.git_annex.set_metadata_if_changed(caption_file_path, metadata)
 
                 logger.debug(f"Downloaded {len(captions_metadata)} caption files and created captions.tsv")
                 # Return list of language codes

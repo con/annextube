@@ -248,6 +248,46 @@ class GitAnnexService:
             logger.debug(f"Setting metadata: {key}={value} for {file_path}")
             subprocess.run(cmd, cwd=self.repo_path, check=True, capture_output=True)
 
+    def set_metadata_if_changed(self, file_path: Path, metadata: dict[str, str]) -> bool:
+        """Set git-annex metadata for a file, only updating changed fields.
+
+        Only operates on files in git-annex. Silently skips files in git.
+        Compares new metadata with existing and only updates changed fields.
+
+        Args:
+            file_path: Path to file (relative to repo root or absolute)
+            metadata: Dictionary of metadata key-value pairs to set
+
+        Returns:
+            True if metadata was updated, False if skipped (not in annex or no changes)
+        """
+        # Check if file is in annex
+        if not self.is_annexed(file_path):
+            logger.debug(f"Skipping metadata for {file_path} (not in git-annex)")
+            return False
+
+        # Get existing metadata
+        existing = self.get_metadata(file_path)
+
+        # Find fields that need updating
+        updates = {}
+        for key, new_value in metadata.items():
+            existing_values = existing.get(key, [])
+            # git-annex stores values as lists, compare as sets
+            if new_value not in existing_values:
+                updates[key] = new_value
+
+        # Update only changed fields
+        if updates:
+            for key, value in updates.items():
+                cmd = ["git", "annex", "metadata", str(file_path), "-s", f"{key}={value}"]
+                subprocess.run(cmd, cwd=self.repo_path, check=True, capture_output=True)
+            logger.debug(f"Updated {len(updates)} metadata field(s) for {file_path}")
+            return True
+
+        logger.debug(f"No metadata changes for {file_path}")
+        return False
+
     def get_metadata(self, file_path: Path) -> dict[str, list[str]]:
         """Get git-annex metadata for a file.
 
