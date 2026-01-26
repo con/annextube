@@ -508,8 +508,10 @@ class Archiver:
 
         logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
 
-        # Auto-discover and backup playlists if configured
-        if source_config and source_config.include_playlists != "none":
+        # Auto-discover and backup playlists if configured AND mode allows playlist processing
+        # Component-specific modes (comments, captions, social) should not process playlists
+        if (source_config and source_config.include_playlists != "none" and
+                self._should_process_component("playlists")):
             logger.info("Discovering playlists from channel...")
             playlist_urls = self._discover_playlists(
                 channel_url,
