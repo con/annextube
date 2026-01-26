@@ -58,6 +58,7 @@ class Archiver:
         self.youtube = YouTubeService()
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache = None  # Cache for video ID to path mapping
+        self._processed_video_ids = set()  # Track videos processed in current run (avoid duplicates)
 
     def _should_process_component(self, component: str) -> bool:
         """Determine if a component should be processed based on update mode.
@@ -523,12 +524,6 @@ class Archiver:
             playlist_dir.mkdir(parents=True, exist_ok=True)
             logger.debug(f"Playlist directory: {playlist_dir}")
 
-            # Save playlist metadata
-            metadata_path = playlist_dir / "playlist.json"
-            with open(metadata_path, "w") as f:
-                json.dump(playlist.to_dict(), f, indent=2)
-            logger.debug(f"Saved playlist metadata: {metadata_path}")
-
             # Get playlist videos
             limit = self.config.filters.limit
             videos_metadata = self.youtube.get_playlist_videos(playlist_url, limit=limit)
@@ -537,7 +532,36 @@ class Archiver:
                 logger.warning("No videos found in playlist")
                 return stats
 
-            logger.info(f"Found {len(videos_metadata)} videos to process")
+            logger.info(f"Found {len(videos_metadata)} videos in playlist")
+
+            # Check if playlist content changed (for incremental modes)
+            playlist_changed = True
+            metadata_path = playlist_dir / "playlist.json"
+
+            if metadata_path.exists() and self.update_mode in ["videos-incremental", "all-incremental"]:
+                try:
+                    with open(metadata_path, 'r') as f:
+                        old_data = json.load(f)
+                        old_video_ids = [v['video_id'] for v in old_data.get('videos', [])]
+                        new_video_ids = [v.get('id') for v in videos_metadata if v.get('id')]
+
+                        if old_video_ids == new_video_ids:
+                            playlist_changed = False
+                            logger.info(f"Playlist content unchanged, skipping update: {playlist.title}")
+                except Exception as e:
+                    logger.debug(f"Failed to compare playlist content: {e}")
+                    playlist_changed = True
+
+            # Only update playlist metadata if content changed
+            if playlist_changed:
+                with open(metadata_path, "w") as f:
+                    json.dump(playlist.to_dict(), f, indent=2)
+                logger.debug(f"Saved playlist metadata: {metadata_path}")
+
+            # Skip video processing in playlists mode if content unchanged
+            if not playlist_changed and self.update_mode == "playlists":
+                logger.info("Playlist content unchanged, skipping video processing")
+                return stats
 
             # Get prefix width and separator for ordered symlinks
             prefix_width = self.config.organization.playlist_prefix_width
@@ -546,13 +570,24 @@ class Archiver:
             # Process each video and create ordered symlinks
             for i, video_meta in enumerate(videos_metadata, 1):
                 try:
-                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
                     video = self.youtube.metadata_to_video(video_meta)
+                    video_id = video.video_id
 
-                    # Process video (creates video directory with content)
-                    caption_count = self._process_video(video)
+                    # Check if video was already processed in this run (e.g., from channel backup)
+                    if video_id in self._processed_video_ids:
+                        logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
+                        caption_count = 0
+                    else:
+                        logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
+                        # Process video (creates video directory with content)
+                        caption_count = self._process_video(video)
 
-                    # Create ordered symlink in playlist directory
+                        stats["videos_processed"] += 1
+                        stats["videos_tracked"] += 1
+                        stats["metadata_saved"] += 1
+                        stats["captions_downloaded"] += caption_count
+
+                    # Create ordered symlink in playlist directory (even if already processed)
                     video_dir = self._get_video_path(video)
                     if video_dir.exists():
                         # Create symlink with zero-padded numeric prefix
@@ -574,11 +609,6 @@ class Archiver:
                         logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
                     else:
                         logger.warning(f"Video directory not found, skipping symlink: {video_dir}")
-
-                    stats["videos_processed"] += 1
-                    stats["videos_tracked"] += 1
-                    stats["metadata_saved"] += 1
-                    stats["captions_downloaded"] += caption_count
 
                 except Exception as e:
                     logger.error(f"Failed to process video {video_meta.get('id', 'unknown')}: {e}", exc_info=True)
@@ -702,6 +732,9 @@ class Archiver:
                 comments_path,
                 max_depth=self.config.components.comments_depth
             )
+
+        # Track that this video was processed in this run
+        self._processed_video_ids.add(video.video_id)
 
         return caption_count
 
