@@ -176,9 +176,31 @@ class YouTubeService:
                         logger.warning(f"Skipping entry without ID: {entry.get('title', 'Unknown')}")
                         continue
 
+                    # Post-filter by datetime if published_after specified
+                    # (yt-dlp dateafter only supports date, not datetime)
+                    if published_after and entry.get("upload_date"):
+                        try:
+                            # Parse upload_date (YYYYMMDD format) to datetime
+                            upload_date_str = entry["upload_date"]
+                            upload_datetime = datetime.strptime(upload_date_str, "%Y%m%d")
+
+                            # If video has timestamp, use it for more precise filtering
+                            if entry.get("timestamp"):
+                                upload_datetime = datetime.fromtimestamp(entry["timestamp"])
+
+                            # Skip if not newer than our cutoff
+                            if upload_datetime <= published_after:
+                                logger.debug(f"Skipping video {entry.get('id')} - published {upload_datetime.isoformat()} <= {published_after.isoformat()}")
+                                continue
+                        except (ValueError, TypeError) as e:
+                            logger.warning(f"Could not parse upload date for filtering: {e}")
+                            # Include video if we can't parse date (safer to include than skip)
+
                     videos.append(entry)
 
                 logger.info(f"Successfully fetched metadata for {len(videos)} video(s)")
+                if published_after and len(videos) < len(entries):
+                    logger.info(f"Filtered out {len(entries) - len(videos)} already-seen video(s)")
                 return videos
 
             except Exception as e:

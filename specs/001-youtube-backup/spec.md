@@ -200,6 +200,8 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-014**: System MUST detect changes in video metadata (title, description, view/like counts) by comparing fetched metadata with existing metadata.json
 - **FR-015**: System MUST derive sync state from existing data files (videos.tsv for video discovery, metadata.json for counts, comments.json for comment timestamps, file modification times) rather than maintaining separate sync state tracking file
 - **FR-016**: System MUST complete incremental updates in reasonable time (not re-checking all content) by using date-based filtering in YouTube API queries
+- **FR-016a**: System MUST filter videos by datetime (not just date) after fetching from YouTube API, since yt-dlp's `dateafter` parameter only supports date precision (YYYYMMDD). Videos with `published_at <= latest_datetime_in_tsv` must be skipped to avoid re-processing same-day videos
+- **FR-016b**: System MUST NOT create git commits when only timestamp fields (`fetched_at`, `updated_at`, `last_modified`) have changed without any content changes. Commits should only be created when real data changes (new videos, updated metadata values, new comments, new captions)
 
 #### Filtering and Scope Control
 

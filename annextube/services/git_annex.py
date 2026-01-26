@@ -128,6 +128,56 @@ class GitAnnexService:
             check=True,
         )
 
+    def _is_timestamp_only_change(self) -> bool:
+        """Check if staged changes are only timestamp updates.
+
+        Returns:
+            True if only timestamp fields changed, False otherwise
+        """
+        try:
+            # Get diff of staged changes
+            result = subprocess.run(
+                ["git", "diff", "--cached"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            diff_output = result.stdout
+            if not diff_output:
+                return False  # No changes staged
+
+            # Check if ALL changed lines are timestamp-only updates
+            # Timestamp fields: fetched_at, updated_at, last_modified, last_updated
+            timestamp_patterns = [
+                '"fetched_at":',
+                '"updated_at":',
+                '"last_modified":',
+                '\tlast_updated\t',  # TSV column
+            ]
+
+            lines = diff_output.split('\n')
+            changed_lines = [l for l in lines if l.startswith('+') or l.startswith('-')]
+            # Filter out diff metadata lines (+++, ---)
+            changed_lines = [l for l in changed_lines if not (l.startswith('+++') or l.startswith('---'))]
+
+            if not changed_lines:
+                return False  # No actual content changes
+
+            # Check if all changed lines are timestamp updates
+            timestamp_changes = 0
+            for line in changed_lines:
+                if any(pattern in line for pattern in timestamp_patterns):
+                    timestamp_changes += 1
+
+            # If all changed lines are timestamp-related, this is timestamp-only
+            return timestamp_changes == len(changed_lines)
+
+        except subprocess.CalledProcessError:
+            # If we can't check, assume it's not timestamp-only (safer to commit)
+            return False
+
     def add_and_commit(self, message: str, files: Optional[list[Path]] = None) -> bool:
         """Add files and commit changes.
 
@@ -136,13 +186,21 @@ class GitAnnexService:
             files: Optional list of specific files to add (None = add all)
 
         Returns:
-            True if commit was made, False if nothing to commit
+            True if commit was made, False if nothing to commit or only timestamps changed
         """
         if files:
             for f in files:
                 subprocess.run(["git", "add", str(f)], cwd=self.repo_path, check=True)
         else:
             subprocess.run(["git", "add", "."], cwd=self.repo_path, check=True)
+
+        # Check if only timestamps changed
+        if self._is_timestamp_only_change():
+            logger.info("Skipping commit - only timestamp fields changed (no real content updates)")
+            # Unstage the changes
+            subprocess.run(["git", "reset", "HEAD"], cwd=self.repo_path, check=False,
+                         capture_output=True)
+            return False
 
         try:
             subprocess.run(["git", "commit", "-m", message], cwd=self.repo_path, check=True,
