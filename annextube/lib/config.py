@@ -25,7 +25,7 @@ class SourceConfig:
     enabled: bool = True
     include_playlists: str = "none"  # "all", "none", or regex pattern for auto-discovery
     exclude_playlists: Optional[str] = None  # Regex pattern to exclude playlists
-    include_podcasts: bool = False  # Auto-discover podcasts from channel
+    include_podcasts: str = "none"  # "all", "none", or regex pattern for podcast auto-discovery
 
 
 @dataclass
@@ -77,6 +77,14 @@ class Config:
     filters: FiltersConfig = field(default_factory=FiltersConfig)
     organization: OrganizationConfig = field(default_factory=OrganizationConfig)
 
+    @staticmethod
+    def _normalize_include_podcasts(value: Any) -> str:
+        """Normalize include_podcasts value from various formats to canonical string."""
+        if isinstance(value, bool):
+            # Backward compatibility: bool → "all" or "none"
+            return "all" if value else "none"
+        return str(value) if value else "none"
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Config":
         """Create Config from dictionary (loaded from TOML)."""
@@ -87,7 +95,7 @@ class Config:
                 enabled=s.get("enabled", True),
                 include_playlists=s.get("include_playlists", "none"),
                 exclude_playlists=s.get("exclude_playlists"),
-                include_podcasts=s.get("include_podcasts", False),
+                include_podcasts=self._normalize_include_podcasts(s.get("include_podcasts", "none")),
             )
             for s in data.get("sources", [])
         ]
@@ -273,11 +281,12 @@ enabled = true
 #
 # Never commit API keys to version control!
 {sources_section}
-# Optional playlist discovery settings (for channel sources):
+# Optional playlist/podcast discovery settings (for channel sources):
 # include_playlists = "all"  # Auto-discover and backup ALL playlists from this channel
 # include_playlists = ".*tutorial.*"  # Only playlists matching regex pattern
 # exclude_playlists = ".*shorts.*|.*old.*"  # Exclude playlists matching regex
-# include_podcasts = true  # Also discover podcasts from channel's Podcasts tab
+# include_podcasts = "all"  # Auto-discover ALL podcasts from channel's Podcasts tab
+# include_podcasts = ".*interview.*"  # Only podcasts matching regex pattern
 
 # Components to backup
 [components]

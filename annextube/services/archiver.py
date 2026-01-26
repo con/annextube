@@ -331,29 +331,45 @@ class Archiver:
         return self.repo_path / "playlists" / path_str
 
     def _discover_playlists(self, channel_url: str, include_pattern: str,
-                           exclude_pattern: Optional[str], include_podcasts: bool) -> List[str]:
+                           exclude_pattern: Optional[str], include_podcasts: str) -> List[str]:
         """Discover and filter playlists from a channel.
 
         Args:
             channel_url: YouTube channel URL
             include_pattern: "all", "none", or regex pattern for playlists to include
             exclude_pattern: Optional regex pattern for playlists to exclude
-            include_podcasts: Whether to also discover podcasts
+            include_podcasts: "all", "none", or regex pattern for podcasts to include
 
         Returns:
             List of playlist URLs to backup
         """
-        if include_pattern == "none":
+        if include_pattern == "none" and include_podcasts == "none":
             return []
 
-        # Fetch all playlists
-        playlists = self.youtube.get_channel_playlists(channel_url)
+        playlists = []
 
-        # Optionally fetch podcasts
-        if include_podcasts:
+        # Fetch and filter playlists
+        if include_pattern != "none":
+            playlists = self.youtube.get_channel_playlists(channel_url)
+
+        # Fetch and filter podcasts
+        if include_podcasts != "none":
             podcasts = self.youtube.get_channel_podcasts(channel_url)
-            playlists.extend(podcasts)
             logger.info(f"Discovered {len(podcasts)} podcasts")
+
+            # Filter podcasts by pattern
+            if include_podcasts != "all":
+                import re
+                try:
+                    pattern = re.compile(include_podcasts)
+                    original_count = len(podcasts)
+                    podcasts = [p for p in podcasts if pattern.search(p['title'])]
+                    logger.info(f"Podcast filter '{include_podcasts}' matched {len(podcasts)}/{original_count} podcasts")
+                except re.error as e:
+                    logger.error(f"Invalid include_podcasts regex '{include_podcasts}': {e}")
+                    podcasts = []
+
+            playlists.extend(podcasts)
 
         if not playlists:
             return []
