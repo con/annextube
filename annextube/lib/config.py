@@ -95,7 +95,7 @@ class Config:
                 enabled=s.get("enabled", True),
                 include_playlists=s.get("include_playlists", "none"),
                 exclude_playlists=s.get("exclude_playlists"),
-                include_podcasts=self._normalize_include_podcasts(s.get("include_podcasts", "none")),
+                include_podcasts=cls._normalize_include_podcasts(s.get("include_podcasts", "none")),
             )
             for s in data.get("sources", [])
         ]
