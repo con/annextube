@@ -21,7 +21,6 @@ class Playlist:
         video_ids: Ordered list of video IDs in playlist
         thumbnail_url: Playlist thumbnail URL
         fetched_at: When this metadata was fetched
-        updated_at: When this record was last updated
     """
 
     playlist_id: str
@@ -35,7 +34,6 @@ class Playlist:
     video_ids: List[str]
     thumbnail_url: Optional[str] = None
     fetched_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -51,5 +49,4 @@ class Playlist:
             "video_ids": self.video_ids,
             "thumbnail_url": self.thumbnail_url,
             "fetched_at": self.fetched_at.isoformat() if self.fetched_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

@@ -709,11 +709,21 @@ class Archiver:
         # Calculate expected path using configurable pattern
         expected_path = self._get_video_path(video)
 
+        # Detect if this is a NEW video (metadata.json doesn't exist yet)
+        # NEW videos should get ALL configured components regardless of update mode
+        metadata_path = expected_path / "metadata.json"
+        is_new_video = not metadata_path.exists()
+
+        # Log whether this is a new or existing video
+        if is_new_video:
+            logger.info(f"Processing NEW video: {video.title}")
+        else:
+            logger.debug(f"Updating EXISTING video: {video.title}")
+
         # Check if we should skip this video (for incremental modes)
         if self.update_mode in ["videos-incremental", "all-incremental"]:
             # Skip if metadata.json already exists (video already processed)
-            metadata_path = expected_path / "metadata.json"
-            if metadata_path.exists():
+            if not is_new_video:  # Use our detection instead of checking again
                 logger.debug(f"Skipping already-processed video: {video.video_id}")
                 # For all-incremental, still check if we need to update social data
                 if self.update_mode == "all-incremental":
@@ -774,12 +784,25 @@ class Archiver:
                 logger.warning(f"Failed to track video URL: {e}")
 
         # Download thumbnail (if enabled and mode allows)
-        if self.config.components.thumbnails and video.thumbnail_url and self._should_process_component("metadata"):
+        # For NEW videos: always fetch if configured, regardless of mode
+        # For EXISTING videos: respect component-specific mode
+        should_fetch_thumbnail = self.config.components.thumbnails and video.thumbnail_url and \
+                               (is_new_video or self._should_process_component("metadata"))
+        if should_fetch_thumbnail:
             self._download_thumbnail(video, video_dir)
 
         # Download captions (if enabled and mode allows)
+        # For NEW videos: always try to fetch if configured (we don't know what's available yet)
+        # For EXISTING videos: only fetch if captions exist and mode allows it
         caption_count = 0
-        if self.config.components.captions and video.captions_available and self._should_process_component("captions"):
+        if is_new_video:
+            # New video: try to download if captions enabled, regardless of what metadata says
+            should_fetch_captions = self.config.components.captions
+        else:
+            # Existing video: only download if captions available and mode allows
+            should_fetch_captions = self.config.components.captions and video.captions_available and \
+                                   self._should_process_component("captions")
+        if should_fetch_captions:
             downloaded_captions = self._download_captions(video, video_dir)
             caption_count = len(downloaded_captions)
 
@@ -793,9 +816,13 @@ class Archiver:
                 logger.debug(f"Updated metadata with {len(downloaded_captions)} downloaded captions")
 
         # Download comments (if enabled and mode allows)
+        # For NEW videos: always fetch if configured, regardless of mode
+        # For EXISTING videos: respect component-specific mode
         # comments_depth: None = unlimited, 0 = disabled, N = limit to N
         comments_fetched = False
-        if self.config.components.comments_depth != 0 and self._should_process_component("comments"):
+        should_fetch_comments = self.config.components.comments_depth != 0 and \
+                               (is_new_video or self._should_process_component("comments"))
+        if should_fetch_comments:
             comments_path = video_dir / "comments.json"
             comments_fetched = self.youtube.download_comments(
                 video.video_id,

@@ -139,7 +139,7 @@ class ExportService:
                     "channel": metadata.get("channel_name", ""),
                     "video_count": str(video_count),
                     "total_duration": str(total_duration),
-                    "last_updated": metadata.get("last_modified") or metadata.get("updated_at") or "",  # Full ISO 8601 datetime
+                    "last_updated": metadata.get("last_modified") or "",  # Full ISO 8601 datetime
                     "path": playlist_dir.name,  # Relative folder name
                     "playlist_id": metadata.get("playlist_id", ""),
                 }
@@ -261,5 +261,8 @@ class ExportService:
         Args:
             output_path: Path to output file
         """
+        # Ensure parent directory exists
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("title\tchannel\tvideo_count\ttotal_duration\tlast_updated\tpath\tplaylist_id\n")

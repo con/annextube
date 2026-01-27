@@ -421,7 +421,6 @@ class YouTubeService:
                     video_ids=video_ids,
                     thumbnail_url=info.get("thumbnail"),
                     fetched_at=datetime.now(),
-                    updated_at=datetime.now(),
                 )
 
             except Exception as e:
@@ -1064,5 +1063,4 @@ class YouTubeService:
             download_status=metadata.get("download_status", "not_downloaded"),
             source_url=metadata.get("source_url") or metadata.get("webpage_url", f"https://www.youtube.com/watch?v={video_id}"),
             fetched_at=datetime.now(),
-            updated_at=datetime.now(),
         )

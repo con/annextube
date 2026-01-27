@@ -30,7 +30,6 @@ class Video:
     download_status: str  # 'not_downloaded', 'tracked', 'downloaded', 'failed'
     source_url: str
     fetched_at: datetime
-    updated_at: datetime
     language: Optional[str] = None
     file_path: Optional[str] = None
     file_size: Optional[int] = None
@@ -62,7 +61,6 @@ class Video:
             "download_status": self.download_status,
             "source_url": self.source_url,
             "fetched_at": self.fetched_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
         }
 
     @classmethod
@@ -93,5 +91,4 @@ class Video:
             download_status=data["download_status"],
             source_url=data["source_url"],
             fetched_at=datetime.fromisoformat(data["fetched_at"]),
-            updated_at=datetime.fromisoformat(data["updated_at"]),
         )

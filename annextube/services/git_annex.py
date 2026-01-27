@@ -131,6 +131,155 @@ class GitAnnexService:
             check=True,
         )
 
+    def _is_tsv_timestamp_only_change(self, changed_lines: list[str]) -> bool:
+        """Check if TSV file changes are only in datetime columns.
+
+        Args:
+            changed_lines: List of changed lines from git diff (+ and - lines)
+
+        Returns:
+            True if changes are only ISO 8601 datetime values
+        """
+        import re
+
+        # ISO 8601 datetime pattern
+        iso_datetime_pattern = re.compile(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}')
+
+        # For each pair of lines (removed and added), check if only datetimes differ
+        # Group lines by +/- (removed lines start with -, added lines start with +)
+        removed_lines = [l[1:] for l in changed_lines if l.startswith('-')]
+        added_lines = [l[1:] for l in changed_lines if l.startswith('+')]
+
+        if len(removed_lines) != len(added_lines):
+            return False  # Different number of lines changed
+
+        for old, new in zip(removed_lines, added_lines):
+            # Replace all datetimes with a placeholder
+            old_normalized = iso_datetime_pattern.sub('DATETIME', old)
+            new_normalized = iso_datetime_pattern.sub('DATETIME', new)
+
+            # If after replacing datetimes, the lines are identical, it's timestamp-only
+            if old_normalized != new_normalized:
+                return False  # Non-timestamp change detected
+
+        return True
+
+    def _filter_timestamp_only_changes(self) -> bool:
+        """Check unstaged changes and reset files with only timestamp updates.
+
+        This method runs BEFORE staging to prevent timestamp-only files from
+        being added to the index.
+
+        Returns:
+            True if real changes remain after filtering, False if only timestamps
+        """
+        try:
+            # Check for untracked files first
+            untracked_result = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            has_untracked = bool(untracked_result.stdout.strip())
+
+            # Get list of modified files (unstaged)
+            result = subprocess.run(
+                ["git", "diff", "--name-only"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            modified_files = [f.strip() for f in result.stdout.split('\n') if f.strip()]
+
+            if not modified_files:
+                # No modified files, but there might be untracked files
+                return has_untracked
+
+            files_to_restore = []
+
+            # Timestamp patterns to check
+            timestamp_patterns = [
+                '"fetched_at":',
+                '"last_modified":',
+            ]
+
+            for file_path in modified_files:
+                # Check if this file only has timestamp changes
+                diff_result = subprocess.run(
+                    ["git", "diff", file_path],
+                    cwd=self.repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True
+                )
+
+                diff = diff_result.stdout
+                if not diff:
+                    continue
+
+                # Parse diff for changed lines
+                changed_lines = [l for l in diff.split('\n')
+                               if l.startswith('+') or l.startswith('-')]
+                changed_lines = [l for l in changed_lines
+                               if not (l.startswith('+++') or l.startswith('---'))]
+
+                if not changed_lines:
+                    continue
+
+                # Check if all changes are timestamp fields
+                is_timestamp_only = all(
+                    any(pattern in line for pattern in timestamp_patterns)
+                    for line in changed_lines
+                )
+
+                # Special handling for TSV files - check if only datetime values changed
+                if not is_timestamp_only and file_path.endswith('.tsv'):
+                    is_timestamp_only = self._is_tsv_timestamp_only_change(changed_lines)
+
+                if is_timestamp_only:
+                    files_to_restore.append(file_path)
+                    logger.debug(f"Timestamp-only changes in {file_path}")
+
+            # Restore timestamp-only files
+            if files_to_restore:
+                logger.info(f"Resetting {len(files_to_restore)} file(s) with only timestamp changes")
+                for f in files_to_restore:
+                    subprocess.run(["git", "restore", f], cwd=self.repo_path, check=True)
+
+            # Check if any real changes remain (modified or untracked)
+            result = subprocess.run(
+                ["git", "diff", "--name-only"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            has_modified = bool(result.stdout.strip())
+
+            # Recheck for untracked files
+            untracked_check = subprocess.run(
+                ["git", "ls-files", "--others", "--exclude-standard"],
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+            has_untracked_remaining = bool(untracked_check.stdout.strip())
+
+            return has_modified or has_untracked_remaining
+
+        except subprocess.CalledProcessError as e:
+            # If we can't check, assume there are real changes (safer)
+            logger.warning(f"Error checking for timestamp-only changes: {e}")
+            return True
+
     def _is_timestamp_only_change(self) -> bool:
         """Check if staged changes are only timestamp updates.
 
@@ -152,10 +301,9 @@ class GitAnnexService:
                 return False  # No changes staged
 
             # Check if ALL changed lines are timestamp-only updates
-            # Timestamp fields: fetched_at, updated_at, last_modified, last_updated
+            # Timestamp fields: fetched_at, last_modified, last_updated
             timestamp_patterns = [
                 '"fetched_at":',
-                '"updated_at":',
                 '"last_modified":',
                 '\tlast_updated\t',  # TSV column
             ]
@@ -206,6 +354,13 @@ class GitAnnexService:
             # Fall back to just waiting a moment for buffers to flush
             import time
             time.sleep(0.1)
+
+        # Filter out timestamp-only changes BEFORE staging
+        has_real_changes = self._filter_timestamp_only_changes()
+
+        if not has_real_changes:
+            logger.info("Skipping commit - only timestamp changes detected")
+            return False
 
         if files:
             for f in files:

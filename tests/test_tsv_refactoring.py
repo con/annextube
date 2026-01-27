@@ -281,7 +281,6 @@ def test_video_path_without_id():
             download_status="not_downloaded",
             source_url="https://youtube.com/watch?v=test_id_123",
             fetched_at=datetime.now(),
-            updated_at=datetime.now(),
         )
 
         # Get expected path

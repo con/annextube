@@ -29,8 +29,7 @@ def test_metadata_to_video_with_stored_schema():
         "has_auto_captions": False,
         "download_status": "pending",
         "source_url": "https://youtube.com/watch?v=test123",
-        "fetched_at": "2026-01-01T00:00:00",
-        "updated_at": "2026-01-01T00:00:00"
+        "fetched_at": "2026-01-01T00:00:00"
     }
     
     youtube = YouTubeService()
