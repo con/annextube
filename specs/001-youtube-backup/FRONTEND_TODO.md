@@ -7,6 +7,30 @@
 
 ---
 
+## Architecture Analysis
+
+**📖 See**: [FRONTEND_ARCHITECTURE_COMPARISON.md](./FRONTEND_ARCHITECTURE_COMPARISON.md)
+
+A comprehensive analysis of the mykrok fitness tracker frontend has been completed. Key lessons adopted:
+
+### ✅ Patterns Adopted from MyKrok
+
+1. **Lightweight TSV Parser**: Vanilla utility module (632 bytes in mykrok) for fast data loading
+2. **On-Demand Loading**: Load TSV for lists (fast), JSON for details (lazy)
+3. **Hash-Based URL State**: Full state in URL for shareable links and file:// compatibility
+4. **Jest + jsdom for Utilities**: Fast unit tests without browser overhead
+5. **Python CLI Integration**: Backend generates and builds frontend in one command
+
+### ❌ Patterns NOT Adopted
+
+1. **Vanilla JS Monolithic File**: Use Svelte components instead (mykrok's 5055-line file is hard to maintain)
+2. **No Component Tests**: Add @testing-library/svelte (mykrok only tests utilities)
+3. **Manual DOM Manipulation**: Use Svelte reactivity (cleaner than `document.getElementById()`)
+
+**Result**: Hybrid approach combining mykrok's simple data utilities with Svelte's component model for best of both worlds.
+
+---
+
 ## Overview
 
 Build a pure client-side web interface using Svelte that allows users to browse their YouTube archives offline (via file:// protocol), with search, filtering, video playback with captions, and comment viewing.
@@ -15,25 +39,37 @@ Build a pure client-side web interface using Svelte that allows users to browse 
 
 - **Client-side only**: No backend server required
 - **file:// protocol support**: Works locally without web server
-- **Fast loading**: Load from TSV files for quick initialization
+- **Fast loading**: Load from TSV files for quick initialization (mykrok pattern)
 - **Video playback**: HTML5 video with caption selection
 - **Comments**: Display with threading support
 - **Search & Filter**: Real-time search across titles/descriptions, date range filtering
-- **Shareable URLs**: Hash-based routing preserves filter/view state
+- **Shareable URLs**: Hash-based routing preserves filter/view state (mykrok pattern)
 
 ---
 
 ## Technology Stack
 
-- **Framework**: Svelte 4+ with SvelteKit (or plain Svelte + Vite for simpler setup)
+### Core Framework
+- **Framework**: Svelte 4+ (NOT vanilla JS - see architecture comparison)
 - **Language**: TypeScript (strict mode)
 - **Build Tool**: Vite (fast dev + optimized production builds)
 - **Routing**: Hash-based routing (for file:// protocol compatibility)
-- **Testing**:
-  - Vitest (unit/integration tests)
-  - @testing-library/svelte (component tests)
-  - Playwright (E2E tests)
-- **Type Generation**: Generate TypeScript types from `annextube/schema/models.json`
+
+### Data Layer (Inspired by MyKrok)
+- **TSV Parser**: Lightweight vanilla utility (no dependencies)
+- **Data Loading**: TSV for lists, on-demand JSON for details
+- **URL State**: Custom URLState manager (encode/decode URL hash)
+
+### Testing Strategy
+- **Utility Tests**: Jest + jsdom (for TSV parser, search, etc.)
+- **Component Tests**: Vitest + @testing-library/svelte
+- **E2E Tests**: Playwright (real browser)
+
+### Libraries
+- **Search**: Fuse.js or MiniSearch (client-side full-text)
+- **Video**: Native `<video>` element (no library needed)
+- **Icons**: lucide-svelte (modern icon set)
+- **Date**: date-fns (lightweight)
 
 ---
 
@@ -177,29 +213,122 @@ frontend/
 
 ---
 
+### Utility Layer (1 task) - **Inspired by MyKrok**
+
+#### T070 [P] Create lightweight TSV parser utility
+**Status**: ❌ Not Started
+**Dependencies**: T014
+**Pattern**: Adopted from mykrok (632-byte lightweight parser)
+
+**FR Mapping**: Foundation for FR-039 (fast TSV loading)
+
+**File**: `frontend/src/utils/tsv-parser.ts`
+
+**Goals**:
+- Parse TSV files without dependencies (pure TypeScript)
+- Handle Unix and Windows line endings
+- Support empty fields
+- Keep implementation <100 lines
+
+**Implementation** (inspired by mykrok's approach):
+```typescript
+/**
+ * Lightweight TSV parser with no dependencies.
+ * Based on mykrok's proven 632-byte implementation.
+ */
+export function parseTSV(tsvText: string): Record<string, string>[] {
+    const lines = tsvText.split(/\r?\n/);
+    if (lines.length < 2) return [];
+
+    const headers = lines[0].split('\t');
+    return lines.slice(1)
+        .filter(line => line.trim())  // Skip empty lines
+        .map(line => {
+            const values = line.split('\t');
+            return Object.fromEntries(
+                headers.map((header, i) => [header, values[i] || ''])
+            );
+        });
+}
+```
+
+**Action Items**:
+1. Create `frontend/src/utils/tsv-parser.ts` with parseTSV function
+2. Create `frontend/tests/unit/tsv-parser.test.ts` with Jest:
+   ```typescript
+   import { parseTSV } from '@/utils/tsv-parser';
+
+   describe('TSV Parser', () => {
+       test('parses videos.tsv format', () => {
+           const tsv = 'video_id\ttitle\tduration\nabc123\tTest Video\t300';
+           const result = parseTSV(tsv);
+           expect(result[0]).toEqual({
+               video_id: 'abc123',
+               title: 'Test Video',
+               duration: '300'
+           });
+       });
+
+       test('handles Windows CRLF line endings', () => {
+           const tsv = 'id\tname\r\n1\tAlice\r\n2\tBob';
+           expect(parseTSV(tsv)).toHaveLength(2);
+       });
+
+       test('handles empty fields', () => {
+           const tsv = 'id\tname\t1\t';
+           expect(parseTSV(tsv)[0].name).toBe('');
+       });
+   });
+   ```
+3. Configure Jest to run with `--experimental-vm-modules` (for ES6 modules)
+4. Add npm script: `"test:utils": "node --experimental-vm-modules node_modules/jest/bin/jest.js tests/unit"`
+
+**Validation**:
+- All test cases pass
+- Parser handles real videos.tsv and playlists.tsv files
+- No external dependencies added
+- TypeScript strict mode passes
+
+---
+
 ### Data Loading & Services (2 tasks)
 
 #### T063 Implement data loader service
 **Status**: ❌ Not Started
-**Dependencies**: T058 (types)
+**Dependencies**: T070 (TSV parser), T058 (types)
 
 **FR Mapping**: FR-039 (load metadata from TSV files)
 
 **File**: `frontend/src/services/data_loader.ts`
 
+**Pattern**: Inspired by mykrok's on-demand loading strategy
+
 **Features**:
-- Load `videos/videos.tsv` and parse into Video[]
+- Load `videos/videos.tsv` and parse into Video[] (fast initial load)
 - Load `playlists/playlists.tsv` and parse into Playlist[]
-- Load individual `videos/{video_id}/metadata.json` on demand
-- Load `videos/{video_id}/comments.json` on demand
+- Load individual `videos/{video_id}/metadata.json` **on demand** (lazy loading)
+- Load `videos/{video_id}/comments.json` **on demand** (mykrok pattern)
 - Load `videos/{video_id}/captions.tsv` to list available captions
 - Handle file:// protocol CORS restrictions
-- Implement caching to avoid re-parsing TSV files
+- Implement in-memory caching to avoid re-parsing TSV files
 
-**API Design**:
+**API Design** (uses TSV parser from T070):
 ```typescript
+import { parseTSV } from '@/utils/tsv-parser';
+
 export class DataLoader {
-  async loadVideos(): Promise<Video[]>
+  // Fast: Load summary data from TSV (mykrok pattern)
+  async loadVideos(): Promise<Video[]> {
+    const response = await fetch('videos/videos.tsv');
+    const text = await response.text();
+    return parseTSV(text).map(row => ({
+      video_id: row.video_id,
+      title: row.title,
+      duration: parseInt(row.duration),
+      // ... map all TSV fields
+    }));
+  }
+
   async loadPlaylists(): Promise<Playlist[]>
   async loadVideoMetadata(videoId: string): Promise<Video>
   async loadComments(videoId: string): Promise<Comment[]>
@@ -562,30 +691,83 @@ export const currentRoute: Readable<Route>
 
 ---
 
-#### T068 Implement shareable URL state
+#### T068 Implement shareable URL state **[MyKrok Pattern]**
 **Status**: ❌ Not Started
 **Dependencies**: T067 (routing)
 
 **FR Mapping**: FR-046 (preserve filter/view state in URL)
+**Pattern**: Directly adopted from mykrok's URLState manager
 
 **Features**:
-- Encode filter state in URL hash
-- Decode filter state from URL hash
+- Encode filter state in URL hash (full state for sharing)
+- Decode filter state from URL hash (restore on load)
 - Update URL when filters change (debounced)
 - Restore filter state on page load
 
-**URL Format**:
+**URL Format** (inspired by mykrok):
 ```
 #/?search=datalad&from=2024-01-01&to=2024-12-31&playlist=UCx1
-#/video/abc123
+#/video/abc123?t=120               # Video at timestamp (like mykrok's photo index)
+#/video/abc123?comment=xyz         # Jump to comment
+#/playlist/PL456?video=3           # Playlist at video 3
+```
+
+**Implementation** (mykrok's encode/decode pattern):
+```typescript
+// frontend/src/lib/url-state.ts
+export class URLState {
+    // Encode state to URL hash (like mykrok)
+    static encode(state: AppState): string {
+        const params = new URLSearchParams();
+        if (state.query) params.set('q', state.query);
+        if (state.dateFrom) params.set('from', state.dateFrom);
+        if (state.dateTo) params.set('to', state.dateTo);
+        if (state.playlist) params.set('playlist', state.playlist);
+        if (state.videoTimestamp) params.set('t', state.videoTimestamp.toString());
+        const queryStr = params.toString();
+        return '#/' + state.view + (queryStr ? '?' + queryStr : '');
+    }
+
+    // Decode state from URL hash (like mykrok)
+    static decode(): AppState {
+        const hash = location.hash.slice(2) || 'videos';
+        const [path, queryStr] = hash.split('?');
+        const params = new URLSearchParams(queryStr || '');
+        return {
+            view: path.split('/')[0] as View,
+            query: params.get('q') || '',
+            dateFrom: params.get('from') || '',
+            dateTo: params.get('to') || '',
+            playlist: params.get('playlist') || '',
+            videoTimestamp: params.get('t') ? parseInt(params.get('t')) : null
+        };
+    }
+
+    // Update URL without navigation (like mykrok's URLState.update)
+    static update(partialState: Partial<AppState>): void {
+        const current = this.decode();
+        const newState = { ...current, ...partialState };
+        history.replaceState(null, '', this.encode(newState));
+    }
+}
 ```
 
 **Action Items**:
-1. Create URL serializer (filters → query string)
-2. Create URL deserializer (query string → filters)
+1. Create URLState class with encode/decode methods (like mykrok)
+2. Integrate with Svelte stores (state → URL, URL → state)
 3. Update hash when filters change (debounced 500ms)
 4. Read filters from hash on mount
-5. Write tests (serialization roundtrip)
+5. Write Jest tests (serialization roundtrip):
+   ```typescript
+   test('encode/decode roundtrip', () => {
+       const state = { view: 'videos', query: 'react', dateFrom: '2024-01-01' };
+       const encoded = URLState.encode(state);
+       const decoded = URLState.decode(encoded);
+       expect(decoded).toEqual(state);
+   });
+   ```
+
+**Reference**: See mykrok's URLState implementation in map-browser.js:318-399
 
 ---
 
