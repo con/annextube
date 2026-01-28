@@ -477,16 +477,109 @@ Deep Learning State of the Art  Lex Fridman  2020-01-10  5261      100000  5000 
 - Lock file pattern for cron safety
 - Config storage in .datalad/config
 
+## Future Enhancements (Post v0.1.0)
+
+These features are deferred to future versions but are planned for consideration:
+
+### Geolocation & Map Visualization (v0.2.0+)
+
+**Feature**: Display videos on interactive map based on recording location
+
+**Rationale**: Videos with recording location metadata (travel vlogs, conference talks, nature documentaries) could benefit from geographic browsing and filtering.
+
+**Requirements**:
+- Extract `recordingDetails.location` from YouTube API (latitude, longitude, altitude, description)
+- Store in Video model schema (add `recording_location` object)
+- Add to videos.tsv for fast frontend loading
+- Frontend map component using Leaflet.js or Mapbox GL JS
+- Map view page showing video markers clustered by region
+- Click marker to view video details
+- Filter videos by geographic bounding box or region selection
+- Works offline (map tiles can be cached or use static tiles)
+
+**Challenges**:
+- Most videos don't have location data (low adoption by creators)
+- Requires YouTube API `recordingDetails` part (additional quota)
+- Map tile caching for offline use adds complexity
+- Privacy considerations (some users may not want location exposed)
+
+**Estimated Effort**: 3-5 days (backend + frontend)
+
+**Priority**: Low (P4) - Nice to have but not essential for core archival workflow
+
+---
+
+### Advanced Caption Editing Integration (v0.2.0+)
+
+**Feature**: Direct integration with external caption editing services and LLM-based caption enhancement
+
+**Requirements**:
+- Export captions to external editing tools (e.g., Subtitle Edit, Aegisub)
+- API integration for LLM-based caption correction (OpenAI, Anthropic)
+- Batch caption processing for multiple videos
+- Caption diff view (original vs edited)
+- Upload edited captions back to YouTube (via API)
+
+**Priority**: Medium (P3) - Mentioned in original spec as curation platform goal
+
+---
+
+### Video Analytics Dashboard (v0.2.0+)
+
+**Feature**: Visualize archive statistics over time
+
+**Requirements**:
+- View count trends over time
+- Comment activity heatmaps
+- Channel growth metrics
+- Playlist composition changes
+- Interactive charts (Chart.js or similar)
+
+**Priority**: Low (P4) - Informational only, not critical
+
+---
+
+### Mobile-Optimized Progressive Web App (v0.3.0+)
+
+**Feature**: Enhanced mobile experience with offline-first design
+
+**Requirements**:
+- Service worker for offline caching
+- Install as PWA on mobile devices
+- Touch-optimized controls
+- Responsive video player
+- Mobile-friendly search and filtering
+
+**Priority**: Medium (P3) - Web interface works on mobile but not optimized
+
+---
+
+### Multi-Archive Management (v0.3.0+)
+
+**Feature**: Manage multiple separate archives from single interface
+
+**Requirements**:
+- Archive switcher in UI
+- Merged search across archives
+- Cross-archive deduplication detection
+- Archive sync/merge utilities
+
+**Priority**: Low (P4) - Advanced use case
+
+---
+
 ## Out of Scope
+
+These features are explicitly not planned for annextube:
 
 - Direct video upload to YouTube (only caption upload preparation)
 - Real-time monitoring of YouTube channels (polling-based updates only)
 - Video transcoding or format conversion
 - Automated content moderation or filtering based on content analysis
 - Support for non-YouTube video platforms in initial version
-- Mobile app interface (web interface works on mobile browsers)
 - Multi-user collaboration features (single-user archive model)
-- Video playback analytics or tracking
+- Video playback analytics or tracking beyond view counts
 - Integration with video editing software
 - Automated caption generation (relies on YouTube's auto-captions)
 - Social features like sharing, commenting within archive
+- Video streaming to other devices (local playback only)
