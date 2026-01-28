@@ -6,7 +6,7 @@
  * 2. Fetch JSON details on demand (lazy loading)
  */
 
-import { parseTSV, parseIntField, parseBooleanField } from '@/utils/tsv-parser';
+import { parseTSV, parseIntField } from '@/utils/tsv-parser';
 import type {
   Video,
   Playlist,
