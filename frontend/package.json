@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run generate-types && vite build",
     "preview": "vite preview",
     "test": "vitest",
     "test:ui": "vitest --ui",
@@ -13,7 +13,8 @@
     "test:e2e": "playwright test",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts,.svelte",
-    "format": "prettier --write 'src/**/*.{ts,svelte,css}'"
+    "format": "prettier --write 'src/**/*.{ts,svelte,css}'",
+    "generate-types": "node scripts/generate-types.js"
   },
   "dependencies": {
     "date-fns": "^3.0.0",

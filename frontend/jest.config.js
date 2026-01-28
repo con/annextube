@@ -4,6 +4,11 @@ export default {
   roots: ['<rootDir>/tests/unit'],
   testMatch: ['**/*.test.ts'],
   extensionsToTreatAsEsm: ['.ts'],
+  globals: {
+    'ts-jest': {
+      useESM: true,
+    },
+  },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
@@ -15,4 +20,5 @@ export default {
       },
     ],
   },
+  setupFilesAfterEnv: ['<rootDir>/tests/unit/setup.ts'],
 };
