@@ -53,6 +53,8 @@ dmypy.json
 # IDEs
 .vscode/
 .idea/
+.vim/
+.viminfo
 *.swp
 *.swo
 *~
@@ -62,6 +64,7 @@ Thumbs.db
 # Project specific
 .annextube/
 test-archive/
+test-archives/
 *.tmp
 
 # Node.js (frontend)

@@ -214,7 +214,9 @@ def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = 
 
 
 def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
-                            comments_depth: Optional[int] = None, enable_captions: bool = True) -> str:
+                            comments_depth: Optional[int] = None, enable_captions: bool = True,
+                            enable_thumbnails: bool = True, limit: Optional[int] = None,
+                            include_playlists: str = "none") -> str:
     """Generate a template configuration file in TOML format.
 
     Args:
@@ -222,6 +224,9 @@ def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
         enable_videos: Enable video downloading (default: True)
         comments_depth: Comments to fetch (None=unlimited, 0=disabled, default: None)
         enable_captions: Enable captions (default: True)
+        enable_thumbnails: Enable thumbnails (default: True)
+        limit: Limit to N most recent videos (default: None = no limit)
+        include_playlists: Playlist inclusion ("none", "all", or regex pattern, default: "none")
 
     Returns:
         TOML configuration template as string
@@ -229,6 +234,7 @@ def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
     # Convert values to TOML format
     videos_str = str(enable_videos).lower()
     captions_str = str(enable_captions).lower()
+    thumbnails_str = str(enable_thumbnails).lower()
 
     # Handle comments_depth: None means don't set it (use default = unlimited)
     if comments_depth is None:
@@ -242,11 +248,12 @@ def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
         for url in urls:
             # Detect if playlist or channel
             url_type = "playlist" if ("playlist?" in url or "list=" in url) else "channel"
+            playlist_line = f'\ninclude_playlists = "{include_playlists}"' if url_type == "channel" and include_playlists != "none" else ""
             sources_section += f'''
 [[sources]]
 url = "{url}"
 type = "{url_type}"
-enabled = true
+enabled = true{playlist_line}
 '''
         sources_section += '''
 # Add more sources by adding [[sources]] sections above
@@ -268,6 +275,20 @@ enabled = true
 # url = "https://www.youtube.com/playlist?list=PLxxx"
 # type = "playlist"
 # enabled = true
+'''
+
+    # Build filters section
+    if limit is not None:
+        filters_section = f'''
+# Filters for selective archival
+[filters]
+limit = {limit}  # Limit to {limit} most recent videos (by upload date, newest first)
+'''
+    else:
+        filters_section = '''
+# Filters for selective archival
+[filters]
+# limit = 10  # Uncomment to limit to N most recent videos (by upload date, newest first)
 '''
 
     return f'''# annextube Configuration File
@@ -297,7 +318,7 @@ metadata = true          # Fetch video metadata
                          #           N = limit to N comments
                          # Note: Incremental - merges new comments with existing
 captions = {captions_str}          # Fetch captions matching language filter
-thumbnails = true        # Download thumbnails
+thumbnails = {thumbnails_str}        # Download thumbnails
 
 caption_languages = ".*"  # Regex pattern for caption languages to download
                           # Examples:
@@ -332,12 +353,7 @@ playlist_prefix_width = 4  # Zero-padding width for playlist symlinks (e.g., 000
 
 playlist_prefix_separator = "_"  # Separator between index and path (underscore, not hyphen)
                                  # Example: 0001_2020-01-10_video-title (not 0001-2020-01-10...)
-
-# Filters for selective archival
-[filters]
-limit = 10  # Limit to N most recent videos (by upload date, newest first)
-            # Remove or comment out to backup all videos
-
+{filters_section}
 # Optional date range filter
 # date_start = "2024-01-01"  # ISO 8601 date
 # date_end = "2024-12-31"
@@ -359,7 +375,8 @@ limit = 10  # Limit to N most recent videos (by upload date, newest first)
 
 def save_config_template(config_dir: Path, urls: list[str] = None,
                         enable_videos: bool = True, comments_depth: Optional[int] = None,
-                        enable_captions: bool = True) -> Path:
+                        enable_captions: bool = True, enable_thumbnails: bool = True,
+                        limit: Optional[int] = None, include_playlists: str = "none") -> Path:
     """Save configuration template to directory.
 
     Args:
@@ -368,6 +385,9 @@ def save_config_template(config_dir: Path, urls: list[str] = None,
         enable_videos: Enable video downloading (default: True)
         comments_depth: Comments to fetch (None=unlimited, 0=disabled, default: None)
         enable_captions: Enable captions (default: True)
+        enable_thumbnails: Enable thumbnails (default: True)
+        limit: Limit to N most recent videos (default: None = no limit)
+        include_playlists: Playlist inclusion ("none", "all", or regex pattern, default: "none")
 
     Returns:
         Path to created config file
@@ -376,6 +396,7 @@ def save_config_template(config_dir: Path, urls: list[str] = None,
     config_path = config_dir / "config.toml"
 
     with open(config_path, "w") as f:
-        f.write(generate_config_template(urls, enable_videos, comments_depth, enable_captions))
+        f.write(generate_config_template(urls, enable_videos, comments_depth, enable_captions,
+                                        enable_thumbnails, limit, include_playlists))
 
     return config_path

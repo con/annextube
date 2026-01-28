@@ -22,8 +22,11 @@ logger = get_logger(__name__)
 @click.option("--videos/--no-videos", default=True, help="Enable video downloading (default: enabled)")
 @click.option("--comments", type=int, default=-1, help="Comments depth (-1=unlimited (default), 0=disabled, N=limit to N)")
 @click.option("--captions/--no-captions", default=True, help="Enable captions (default: enabled)")
+@click.option("--thumbnails/--no-thumbnails", default=True, help="Enable thumbnails (default: enabled)")
+@click.option("--limit", type=int, default=None, help="Limit to N most recent videos")
+@click.option("--include-playlists", default="none", help="Playlist inclusion: 'none', 'all', or regex pattern")
 @click.pass_context
-def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool):
+def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
@@ -61,7 +64,10 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
             urls=list(urls),
             enable_videos=videos,
             comments_depth=comments_depth_value,
-            enable_captions=captions
+            enable_captions=captions,
+            enable_thumbnails=thumbnails,
+            limit=limit,
+            include_playlists=include_playlists
         )
 
         # Initial commit
@@ -91,6 +97,11 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         else:
             click.echo(f"  - Comments: up to {comments}")
         click.echo(f"  - Captions: {'enabled' if captions else 'disabled'}")
+        click.echo(f"  - Thumbnails: {'enabled' if thumbnails else 'disabled'}")
+        if limit:
+            click.echo(f"  - Limit: {limit} most recent videos")
+        if include_playlists != "none":
+            click.echo(f"  - Playlists: {include_playlists}")
         click.echo()
         click.echo("Next steps:")
         if not urls:
