@@ -78,6 +78,7 @@ yarn-error.log*
 # Build artifacts
 *.min.js
 *.min.css
+web/
 frontend/dist/
 frontend/build/
 
