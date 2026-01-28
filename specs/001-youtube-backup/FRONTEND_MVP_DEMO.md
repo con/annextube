@@ -1,7 +1,7 @@
 # Frontend MVP Demo - YouTube Archive Browser
 
 **Date**: 2026-01-28
-**Status**: ✅ Complete - Phases 1-4 Implemented
+**Status**: ✅ Complete - Phases 1-5 Implemented
 **Test Results**: 25/25 tests passing
 
 ## Overview
@@ -10,8 +10,12 @@ The frontend MVP provides a lightweight, client-side web interface for browsing 
 
 **Key Features**:
 - 📋 Fast video list display from TSV files
+- 🎥 HTML5 video player with VTT caption support
+- 🔗 Hash-based routing for shareable URLs
+- 💬 Threaded comment display with replies
+- 📊 Full metadata view (tags, categories, stats)
 - 🎨 YouTube-inspired responsive design
-- 🚀 Tiny bundle size (~22 KB total, 96% smaller than mykrok)
+- 🚀 Tiny bundle size (~37 KB total, 94% smaller than mykrok)
 - 📁 Works with file:// protocol (no web server needed)
 - ⚡ On-demand loading: TSV fast, JSON lazy
 - 🔍 Type-safe TypeScript implementation
@@ -118,12 +122,12 @@ archive/
 File                      Size      Gzipped
 ----------------------------------------
 index.html               487 B     331 B
-assets/index-*.css       4.72 KB   1.58 KB
-assets/index-*.js        17.19 KB  6.45 KB
+assets/index-*.css       8.24 KB   2.01 KB
+assets/index-*.js        28.99 KB  9.93 KB
 ----------------------------------------
-Total                    ~22 KB    ~8 KB
+Total                    ~37 KB    ~12 KB
 
-Compare: mykrok frontend = 594 KB (27x larger)
+Compare: mykrok frontend = 594 KB (16x larger)
 ```
 
 **Why so small?**
@@ -131,6 +135,12 @@ Compare: mykrok frontend = 594 KB (27x larger)
 - Minimal dependencies (fuse.js + date-fns only)
 - Efficient code splitting and tree shaking
 - No heavy UI libraries
+
+**Phase 5 additions** (~15 KB increase for video player, routing, comments):
+- VideoPlayer component with caption support
+- Router service (hash-based navigation)
+- CommentView with threading logic
+- VideoDetail with full metadata display
 
 ## Implementation Summary
 
@@ -157,12 +167,16 @@ Compare: mykrok frontend = 594 KB (27x larger)
 - App component (routing, state management)
 - YouTube-inspired styling
 
-### Phase 5: Video Player (Pending)
-- HTML5 `<video>` component
-- VTT caption support
-- Playback controls
-- Full metadata display
+### Phase 5: Video Player ✅
+- VideoPlayer component with HTML5 `<video>` element
+- VTT caption support (multiple language tracks)
+- Browser native playback controls
+- VideoDetail component with full metadata display
 - Hash-based routing (#/video/{id})
+- CommentView component with threaded replies
+- On-demand loading of metadata.json and comments.json
+- Collapsible description with tags, categories, stats
+- Direct YouTube link in description
 
 ### Phase 6: Advanced Features (Pending)
 - Search with fuse.js (fuzzy search)
@@ -273,35 +287,28 @@ npm run build
 
 ## Known Limitations (MVP)
 
-1. **No video player yet** (Phase 5)
-   - Clicking video shows metadata placeholder
-   - HTML5 `<video>` component planned
-
-2. **No search/filtering yet** (Phase 6)
+1. **No search/filtering yet** (Phase 6)
    - All videos displayed in grid
    - fuse.js integration planned
 
-3. **No routing yet** (Phase 5)
-   - No shareable URLs for videos
-   - Hash-based routing planned
-
-4. **Static detail view** (Phase 5)
-   - Shows basic metadata only
-   - Full metadata from JSON planned
-
-5. **No playlist browsing** (Phase 6)
+2. **No playlist browsing** (Phase 6)
    - Only videos.tsv loaded
    - playlists.tsv support planned
 
-## Next Steps
+3. **Video files may not exist**
+   - Frontend expects video files at `videos/{id}/{id}.mp4`
+   - git-annex symlinks need to be dereferenced
+   - Fallback: Download link provided
 
-### Immediate (Phase 5)
-- [ ] Implement VideoDetail component
-- [ ] Add HTML5 video player
-- [ ] Add VTT caption support
-- [ ] Implement hash-based routing
-- [ ] Load full metadata.json on video click
-- [ ] Add CommentView component
+4. **No component tests yet** (Phase 6)
+   - Only unit tests for utilities/services
+   - Vitest component tests planned
+
+5. **No E2E tests yet** (Phase 6)
+   - Playwright configured but no tests written
+   - E2E test suite planned
+
+## Next Steps
 
 ### Near-term (Phase 6)
 - [ ] Implement search with fuse.js
@@ -326,14 +333,18 @@ npm run build
 - [✅] Responsive design (1-4 columns)
 - [✅] YouTube-inspired UI styling
 - [✅] Works with file:// protocol
-- [✅] Bundle size < 100 KB (achieved 22 KB!)
+- [✅] Bundle size < 100 KB (achieved 37 KB!)
 - [✅] Type-safe TypeScript implementation
 - [✅] Comprehensive unit tests (25/25 passing)
 - [✅] Production build succeeds
 - [✅] No console errors on load
-- [⏳] Video player component (Phase 5)
-- [⏳] Hash-based routing (Phase 5)
-- [⏳] Full metadata display (Phase 5)
+- [✅] Video player component (Phase 5)
+- [✅] Hash-based routing (Phase 5)
+- [✅] Full metadata display (Phase 5)
+- [✅] Comment display with threading (Phase 5)
+- [⏳] Search/filter functionality (Phase 6)
+- [⏳] Component tests with Vitest (Phase 6)
+- [⏳] E2E tests with Playwright (Phase 6)
 
 ## Feedback Needed
 
