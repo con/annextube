@@ -1,21 +1,38 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Video } from '@/types/models';
+  import type { Video, Playlist } from '@/types/models';
   import { dataLoader } from '@/services/data-loader';
   import { router } from '@/services/router';
+  import { searchService } from '@/services/search';
   import VideoList from '@/components/VideoList.svelte';
   import VideoDetail from '@/components/VideoDetail.svelte';
+  import FilterPanel from '@/components/FilterPanel.svelte';
 
-  let videos: Video[] = [];
+  let allVideos: Video[] = [];
+  let filteredVideos: Video[] = [];
+  let playlists: Playlist[] = [];
   let loading = true;
   let error: string | null = null;
   let currentRoute = router.getCurrentRoute();
   let selectedVideo: Video | null = null;
 
   onMount(async () => {
-    // Load all videos for list view
+    // Load all videos and playlists
     try {
-      videos = await dataLoader.loadVideos();
+      allVideos = await dataLoader.loadVideos();
+      filteredVideos = allVideos;
+
+      // Initialize search service with all videos
+      searchService.initialize(allVideos);
+
+      // Load playlists (non-blocking, failure is OK)
+      try {
+        playlists = await dataLoader.loadPlaylists();
+      } catch (err) {
+        console.warn('Could not load playlists:', err);
+        playlists = [];
+      }
+
       loading = false;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error loading archive';
@@ -28,7 +45,7 @@
       if (route.name === 'video') {
         // Find video by ID and set as selected
         const videoId = route.params.video_id;
-        selectedVideo = videos.find((v) => v.video_id === videoId) || null;
+        selectedVideo = allVideos.find((v) => v.video_id === videoId) || null;
       } else {
         selectedVideo = null;
       }
@@ -42,6 +59,10 @@
   function handleBackToList() {
     router.navigate('home');
   }
+
+  function handleFilterChange(filtered: Video[]) {
+    filteredVideos = filtered;
+  }
 </script>
 
 <main>
@@ -50,7 +71,7 @@
       <h1>📹 YouTube Archive Browser</h1>
       <p class="subtitle">
         {#if !loading && !error}
-          {videos.length} videos archived
+          {allVideos.length} videos archived
         {/if}
       </p>
     </div>
@@ -60,8 +81,16 @@
     {#if selectedVideo}
       <VideoDetail video={selectedVideo} onBack={handleBackToList} />
     {:else}
+      {#if !loading && !error}
+        <FilterPanel
+          videos={allVideos}
+          {playlists}
+          onFilterChange={handleFilterChange}
+        />
+      {/if}
       <VideoList
-        {videos}
+        videos={filteredVideos}
+        totalVideos={allVideos.length}
         {loading}
         {error}
         onVideoClick={handleVideoClick}

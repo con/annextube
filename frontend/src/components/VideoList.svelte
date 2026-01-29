@@ -3,9 +3,12 @@
   import VideoCard from './VideoCard.svelte';
 
   export let videos: Video[];
+  export let totalVideos: number = 0;
   export let onVideoClick: (video: Video) => void = () => {};
   export let loading: boolean = false;
   export let error: string | null = null;
+
+  $: isFiltered = totalVideos > 0 && videos.length !== totalVideos;
 </script>
 
 <div class="video-list-container">
@@ -21,10 +24,26 @@
     </div>
   {:else if videos.length === 0}
     <div class="empty">
-      <p>No videos found in this archive.</p>
-      <p class="hint">Check that videos.tsv exists in the videos/ directory.</p>
+      {#if isFiltered}
+        <p>No videos match the current filters.</p>
+        <p class="hint">Try adjusting your search or filter criteria.</p>
+      {:else}
+        <p>No videos found in this archive.</p>
+        <p class="hint">Check that videos.tsv exists in the videos/ directory.</p>
+      {/if}
     </div>
   {:else}
+    {#if totalVideos > 0}
+      <div class="result-header">
+        <p class="result-count">
+          {#if isFiltered}
+            Showing {videos.length} of {totalVideos} videos
+          {:else}
+            {videos.length} videos
+          {/if}
+        </p>
+      </div>
+    {/if}
     <div class="video-grid">
       {#each videos as video (video.video_id)}
         <VideoCard {video} onClick={onVideoClick} />
@@ -37,6 +56,19 @@
   .video-list-container {
     width: 100%;
     min-height: 400px;
+  }
+
+  .result-header {
+    padding: 12px 0;
+    border-bottom: 1px solid #e0e0e0;
+    margin-bottom: 16px;
+  }
+
+  .result-count {
+    margin: 0;
+    font-size: 14px;
+    color: #606060;
+    font-weight: 500;
   }
 
   .video-grid {
