@@ -97,3 +97,17 @@ export function formatShortDate(isoDate: string): string {
     year: 'numeric',
   });
 }
+
+/**
+ * Format comment count with K suffix for thousands
+ *
+ * @param count - Comment count
+ * @returns Formatted string (e.g., "5.2K comments", "142 comments", "1 comment") or empty string if zero
+ */
+export function formatCommentCount(count: number): string {
+  if (count === 0) return '';  // Don't show if no comments
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(1)}K comments`;
+  }
+  return `${count} comment${count !== 1 ? 's' : ''}`;
+}

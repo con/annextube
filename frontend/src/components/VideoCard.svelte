@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Video } from '@/types/models';
-  import { formatDuration, formatViews, formatRelativeTime } from '@/utils/format';
+  import { formatDuration, formatViews, formatRelativeTime, formatCommentCount } from '@/utils/format';
 
   export let video: Video;
   export let onClick: (video: Video) => void = () => {};
@@ -17,6 +17,10 @@
     <div class="channel">{video.channel_name}</div>
     <div class="metadata">
       <span class="views">{formatViews(video.view_count)}</span>
+      {#if video.comment_count > 0}
+        <span class="separator">•</span>
+        <span class="comments">{formatCommentCount(video.comment_count)}</span>
+      {/if}
       <span class="separator">•</span>
       <span class="date">{formatRelativeTime(video.published_at)}</span>
     </div>
