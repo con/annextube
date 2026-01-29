@@ -1,0 +1,4 @@
+video_id	title	channel_id	channel_name	published_at	duration	view_count	like_count	comment_count	thumbnail_url	download_status	source_url	path
+TEST001	Test Video Alpha	CH001	Test Channel	2024-01-01T00:00:00	300	1000	50	10	https://example.com/thumb1.jpg	tracked	https://www.youtube.com/watch?v=TEST001	test-video-alpha
+TEST002	Test Video Beta	CH001	Test Channel	2024-02-01T00:00:00	600	5000	200	50	https://example.com/thumb2.jpg	downloaded	https://www.youtube.com/watch?v=TEST002	test-video-beta
+TEST003	Another Channel Video	CH002	Another Channel	2024-03-01T00:00:00	120	500	20	5	https://example.com/thumb3.jpg	tracked	https://www.youtube.com/watch?v=TEST003	another-channel-video

@@ -1,0 +1,16 @@
+{
+  "playlist_id": "PL001",
+  "title": "Test Playlist",
+  "description": "A test playlist",
+  "channel_id": "CH001",
+  "channel_name": "Test Channel",
+  "video_count": 2,
+  "privacy_status": "public",
+  "last_modified": "2024-02-01T00:00:00",
+  "video_ids": [
+    "TEST001",
+    "TEST002"
+  ],
+  "updated_at": "2024-02-01T00:00:00",
+  "fetched_at": "2024-02-01T00:00:00"
+}
