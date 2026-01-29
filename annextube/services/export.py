@@ -63,18 +63,22 @@ class ExportService:
                 captions_available = metadata.get("captions_available", [])
                 caption_count = len(captions_available) if isinstance(captions_available, list) else 0
 
-                # Extract key fields for TSV (title-first column order)
+                # Extract key fields for TSV (frontend-compatible format)
+                video_id = metadata.get("video_id", "")
                 video_entry = {
+                    "video_id": video_id,
                     "title": metadata.get("title", ""),
-                    "channel": metadata.get("channel_name", ""),
-                    "published": metadata.get("published_at", ""),  # Full ISO 8601 datetime
+                    "channel_id": metadata.get("channel_id", ""),
+                    "channel_name": metadata.get("channel_name", ""),
+                    "published_at": metadata.get("published_at", ""),
                     "duration": str(metadata.get("duration", 0)),
-                    "views": str(metadata.get("view_count", 0)),
-                    "likes": str(metadata.get("like_count", 0)),
-                    "comments": str(metadata.get("comment_count", 0)),
-                    "captions": str(caption_count),  # Count, not boolean
+                    "view_count": str(metadata.get("view_count", 0)),
+                    "like_count": str(metadata.get("like_count", 0)),
+                    "comment_count": str(metadata.get("comment_count", 0)),
+                    "thumbnail_url": metadata.get("thumbnail_url", ""),
+                    "download_status": metadata.get("download_status", "not_downloaded"),
+                    "source_url": f"https://www.youtube.com/watch?v={video_id}",
                     "path": video_dir.name,  # Relative to videos/ directory
-                    "video_id": metadata.get("video_id", ""),
                 }
                 videos.append(video_entry)
 
@@ -133,15 +137,20 @@ class ExportService:
                 # Calculate total duration from symlinked videos
                 total_duration = self._calculate_playlist_duration(playlist_dir)
 
-                # Extract key fields for TSV (title-first column order)
+                # Use last_modified for both created_at and last_sync
+                last_modified = metadata.get("last_modified") or ""
+
+                # Extract key fields for TSV (frontend-compatible format)
                 playlist_entry = {
+                    "playlist_id": metadata.get("playlist_id", ""),
                     "title": metadata.get("title", ""),
-                    "channel": metadata.get("channel_name", ""),
+                    "channel_id": metadata.get("channel_id", ""),
+                    "channel_name": metadata.get("channel_name", ""),
                     "video_count": str(video_count),
                     "total_duration": str(total_duration),
-                    "last_updated": metadata.get("last_modified") or "",  # Full ISO 8601 datetime
-                    "path": playlist_dir.name,  # Relative folder name
-                    "playlist_id": metadata.get("playlist_id", ""),
+                    "privacy_status": metadata.get("privacy_status") or "public",
+                    "created_at": last_modified,
+                    "last_sync": last_modified,
                 }
                 playlists.append(playlist_entry)
 
@@ -205,22 +214,27 @@ class ExportService:
             videos: List of video dictionaries
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            # Write header (title-first column order, path and video_id last)
-            f.write("title\tchannel\tpublished\tduration\tviews\tlikes\tcomments\tcaptions\tpath\tvideo_id\n")
+            # Write header (frontend-compatible format)
+            f.write("video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\t"
+                    "duration\tview_count\tlike_count\tcomment_count\t"
+                    "thumbnail_url\tdownload_status\tsource_url\tpath\n")
 
             # Write rows
             for video in videos:
                 f.write(
+                    f"{video['video_id']}\t"
                     f"{video['title']}\t"
-                    f"{video['channel']}\t"
-                    f"{video['published']}\t"
+                    f"{video['channel_id']}\t"
+                    f"{video['channel_name']}\t"
+                    f"{video['published_at']}\t"
                     f"{video['duration']}\t"
-                    f"{video['views']}\t"
-                    f"{video['likes']}\t"
-                    f"{video['comments']}\t"
-                    f"{video['captions']}\t"
-                    f"{video['path']}\t"
-                    f"{video['video_id']}\n"
+                    f"{video['view_count']}\t"
+                    f"{video['like_count']}\t"
+                    f"{video['comment_count']}\t"
+                    f"{video['thumbnail_url']}\t"
+                    f"{video['download_status']}\t"
+                    f"{video['source_url']}\t"
+                    f"{video['path']}\n"
                 )
 
     def _write_playlists_tsv(self, output_path: Path, playlists: List[Dict[str, str]]) -> None:
@@ -231,19 +245,22 @@ class ExportService:
             playlists: List of playlist dictionaries
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            # Write header (title-first column order, path and playlist_id last)
-            f.write("title\tchannel\tvideo_count\ttotal_duration\tlast_updated\tpath\tplaylist_id\n")
+            # Write header (frontend-compatible format)
+            f.write("playlist_id\ttitle\tchannel_id\tchannel_name\tvideo_count\t"
+                    "total_duration\tprivacy_status\tcreated_at\tlast_sync\n")
 
             # Write rows
             for playlist in playlists:
                 f.write(
+                    f"{playlist['playlist_id']}\t"
                     f"{playlist['title']}\t"
-                    f"{playlist['channel']}\t"
+                    f"{playlist['channel_id']}\t"
+                    f"{playlist['channel_name']}\t"
                     f"{playlist['video_count']}\t"
                     f"{playlist['total_duration']}\t"
-                    f"{playlist['last_updated']}\t"
-                    f"{playlist['path']}\t"
-                    f"{playlist['playlist_id']}\n"
+                    f"{playlist['privacy_status']}\t"
+                    f"{playlist['created_at']}\t"
+                    f"{playlist['last_sync']}\n"
                 )
 
     def _write_empty_videos_tsv(self, output_path: Path) -> None:
@@ -253,7 +270,9 @@ class ExportService:
             output_path: Path to output file
         """
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write("title\tchannel\tpublished\tduration\tviews\tlikes\tcomments\tcaptions\tpath\tvideo_id\n")
+            f.write("video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\t"
+                    "duration\tview_count\tlike_count\tcomment_count\t"
+                    "thumbnail_url\tdownload_status\tsource_url\tpath\n")
 
     def _write_empty_playlists_tsv(self, output_path: Path) -> None:
         """Write empty playlists.tsv with header only.
@@ -265,4 +284,5 @@ class ExportService:
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(output_path, "w", encoding="utf-8") as f:
-            f.write("title\tchannel\tvideo_count\ttotal_duration\tlast_updated\tpath\tplaylist_id\n")
+            f.write("playlist_id\ttitle\tchannel_id\tchannel_name\tvideo_count\t"
+                    "total_duration\tprivacy_status\tcreated_at\tlast_sync\n")

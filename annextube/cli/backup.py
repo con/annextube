@@ -10,6 +10,7 @@ from annextube.lib.config import load_config
 from annextube.lib.date_utils import parse_date
 from annextube.lib.logging_config import get_logger
 from annextube.services.archiver import Archiver
+from annextube.services.export import ExportService
 from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
@@ -33,10 +34,11 @@ logger = get_logger(__name__)
         "social",               # Comments + captions only (shortcut)
         "playlists",            # Playlists only
         "comments",             # Comments only
-        "captions"              # Captions only
+        "captions",             # Captions only
+        "tsv_metadata"          # Regenerate TSVs only (no downloads)
     ], case_sensitive=False),
     default="videos-incremental",
-    help="Update mode: videos-incremental (new videos only, default), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components)",
+    help="Update mode: videos-incremental (new videos only, default), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
 )
 @click.option(
     "--from-date",
@@ -102,6 +104,18 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             update = "videos-incremental"
 
         click.echo(f"Update mode: {update}")
+
+        # Handle tsv_metadata mode - regenerate TSVs only
+        if update == "tsv_metadata":
+            click.echo("Regenerating TSV metadata files from existing JSON...")
+            exporter = ExportService(output_dir)
+            videos_tsv, playlists_tsv, authors_tsv = exporter.generate_all()
+            click.echo(f"✓ Generated: {videos_tsv}")
+            click.echo(f"✓ Generated: {playlists_tsv}")
+            click.echo(f"✓ Generated: {authors_tsv}")
+            click.echo()
+            click.echo("✓ TSV metadata regeneration complete!")
+            return
 
         # Parse date range (for all-incremental mode)
         date_from: Optional[datetime] = None
