@@ -54,8 +54,17 @@ export function formatViews(views: number): string {
  * @param isoDate - ISO 8601 date string
  * @returns Relative time string
  */
-export function formatRelativeTime(isoDate: string): string {
-  const date = new Date(isoDate);
+export function formatRelativeTime(dateInput: string | number): string {
+  // Handle both ISO date strings and Unix timestamps (in seconds)
+  let date: Date;
+  if (typeof dateInput === 'number') {
+    // Unix timestamp in seconds - convert to milliseconds for Date()
+    date = new Date(dateInput * 1000);
+  } else {
+    // ISO date string
+    date = new Date(dateInput);
+  }
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffSecs = Math.floor(diffMs / 1000);

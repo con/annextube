@@ -151,6 +151,7 @@ class ExportService:
                     "privacy_status": metadata.get("privacy_status") or "public",
                     "created_at": last_modified,
                     "last_sync": last_modified,
+                    "path": playlist_dir.name,  # Directory name for loading playlist.json
                 }
                 playlists.append(playlist_entry)
 
@@ -247,7 +248,7 @@ class ExportService:
         with open(output_path, "w", encoding="utf-8") as f:
             # Write header (frontend-compatible format)
             f.write("playlist_id\ttitle\tchannel_id\tchannel_name\tvideo_count\t"
-                    "total_duration\tprivacy_status\tcreated_at\tlast_sync\n")
+                    "total_duration\tprivacy_status\tcreated_at\tlast_sync\tpath\n")
 
             # Write rows
             for playlist in playlists:
@@ -260,7 +261,8 @@ class ExportService:
                     f"{playlist['total_duration']}\t"
                     f"{playlist['privacy_status']}\t"
                     f"{playlist['created_at']}\t"
-                    f"{playlist['last_sync']}\n"
+                    f"{playlist['last_sync']}\t"
+                    f"{playlist['path']}\n"
                 )
 
     def _write_empty_videos_tsv(self, output_path: Path) -> None:
@@ -285,4 +287,4 @@ class ExportService:
 
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("playlist_id\ttitle\tchannel_id\tchannel_name\tvideo_count\t"
-                    "total_duration\tprivacy_status\tcreated_at\tlast_sync\n")
+                    "total_duration\tprivacy_status\tcreated_at\tlast_sync\tpath\n")

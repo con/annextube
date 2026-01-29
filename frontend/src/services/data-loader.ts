@@ -172,18 +172,20 @@ export class DataLoader {
    * @returns Full Playlist object with video_ids
    */
   async loadPlaylistMetadata(playlistId: string): Promise<Playlist> {
-    // Determine playlist path from cached playlists if available
-    // Otherwise, we need to construct the path or fetch from a known location
-    // For now, we'll look for playlist.json in each playlist directory
-
-    // Try to find the playlist path from the TSV data
+    // Find playlist path from cached playlists
     let playlistPath = '';
     if (this.playlistsCache) {
       const cached = this.playlistsCache.find((p) => p.playlist_id === playlistId);
-      if (cached) {
-        // Use title to construct path (same as backend does)
-        playlistPath = cached.title.replace(/[/\\:*?"<>|]/g, '-');
+      if (cached && cached.path) {
+        // Use path from TSV (directory name)
+        playlistPath = cached.path;
       }
+    }
+
+    if (!playlistPath) {
+      throw new Error(
+        `Cannot load playlist metadata for ${playlistId}: path not found in cache`
+      );
     }
 
     // Fetch playlist.json from the playlist directory
@@ -284,6 +286,7 @@ export class DataLoader {
       privacy_status: row.privacy_status as Playlist['privacy_status'],
       created_at: row.created_at,
       last_sync: row.last_sync,
+      path: row.path, // Directory name for loading playlist.json
       // These fields require reading playlist.json
       video_ids: [],
       updated_at: row.last_sync,

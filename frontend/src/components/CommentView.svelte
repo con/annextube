@@ -60,22 +60,27 @@
           </div>
 
           {#if comment.replies && comment.replies.length > 0}
-            <div class="replies">
-              {#each comment.replies as reply}
-                <div class="comment reply">
-                  <div class="comment-header">
-                    <span class="author">{reply.author}</span>
-                    <span class="timestamp">{formatRelativeTime(reply.timestamp)}</span>
+            <details class="replies-details" open>
+              <summary class="replies-summary">
+                {comment.replies.length} {comment.replies.length === 1 ? 'reply' : 'replies'}
+              </summary>
+              <div class="replies">
+                {#each comment.replies as reply}
+                  <div class="comment reply">
+                    <div class="comment-header">
+                      <span class="author">{reply.author}</span>
+                      <span class="timestamp">{formatRelativeTime(reply.timestamp)}</span>
+                    </div>
+                    <div class="comment-text">{reply.text}</div>
+                    <div class="comment-meta">
+                      {#if reply.like_count > 0}
+                        <span class="likes">👍 {reply.like_count.toLocaleString()}</span>
+                      {/if}
+                    </div>
                   </div>
-                  <div class="comment-text">{reply.text}</div>
-                  <div class="comment-meta">
-                    {#if reply.like_count > 0}
-                      <span class="likes">👍 {reply.like_count.toLocaleString()}</span>
-                    {/if}
-                  </div>
-                </div>
-              {/each}
-            </div>
+                {/each}
+              </div>
+            </details>
           {/if}
         </div>
       {/each}
@@ -165,6 +170,23 @@
   .likes {
     font-size: 12px;
     color: #606060;
+  }
+
+  .replies-details {
+    margin-top: 8px;
+  }
+
+  .replies-summary {
+    font-size: 13px;
+    color: #065fd4;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 0;
+    font-weight: 500;
+  }
+
+  .replies-summary:hover {
+    text-decoration: underline;
   }
 
   .replies {

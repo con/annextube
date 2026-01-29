@@ -65,6 +65,7 @@ export interface Playlist {
   updated_at: string; // ISO 8601 datetime
   last_sync: string; // ISO 8601 datetime
   fetched_at: string; // ISO 8601 datetime
+  path?: string; // directory name for loading playlist.json
 }
 
 export interface Caption {
@@ -164,6 +165,7 @@ export interface PlaylistTSVRow {
   privacy_status: string;
   created_at: string;
   last_sync: string;
+  path: string; // directory name for loading playlist.json
 }
 
 /**
