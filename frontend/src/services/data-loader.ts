@@ -70,7 +70,27 @@ export class DataLoader {
     const rows = parseTSV(text) as unknown as PlaylistTSVRow[];
 
     // Convert TSV rows to Playlist objects
-    this.playlistsCache = rows.map((row) => this.parseTSVPlaylist(row));
+    const playlists = rows.map((row) => this.parseTSVPlaylist(row));
+
+    // Load video_ids from playlist.json files
+    await Promise.all(
+      playlists.map(async (playlist) => {
+        try {
+          const fullPlaylist = await this.loadPlaylistMetadata(
+            playlist.playlist_id
+          );
+          playlist.video_ids = fullPlaylist.video_ids;
+        } catch (err) {
+          // If playlist.json doesn't exist, keep empty array
+          console.warn(
+            `Could not load video_ids for playlist ${playlist.playlist_id}:`,
+            err
+          );
+        }
+      })
+    );
+
+    this.playlistsCache = playlists;
 
     return this.playlistsCache;
   }
@@ -87,9 +107,12 @@ export class DataLoader {
       return this.metadataCache.get(videoId)!;
     }
 
+    // Get file_path from videos cache (use path if available, otherwise video_id)
+    const filePath = this.getVideoPath(videoId);
+
     // Fetch from JSON file
     const response = await fetch(
-      `${this.baseUrl}/videos/${videoId}/metadata.json`
+      `${this.baseUrl}/videos/${filePath}/metadata.json`
     );
     if (!response.ok) {
       throw new Error(
@@ -117,9 +140,12 @@ export class DataLoader {
       return this.commentsCache.get(videoId)!;
     }
 
+    // Get file_path from videos cache
+    const filePath = this.getVideoPath(videoId);
+
     // Fetch from JSON file
     const response = await fetch(
-      `${this.baseUrl}/videos/${videoId}/comments.json`
+      `${this.baseUrl}/videos/${filePath}/comments.json`
     );
     if (!response.ok) {
       // Comments may not exist for some videos
@@ -140,6 +166,40 @@ export class DataLoader {
   }
 
   /**
+   * Load full playlist metadata from JSON
+   *
+   * @param playlistId - YouTube playlist ID
+   * @returns Full Playlist object with video_ids
+   */
+  async loadPlaylistMetadata(playlistId: string): Promise<Playlist> {
+    // Determine playlist path from cached playlists if available
+    // Otherwise, we need to construct the path or fetch from a known location
+    // For now, we'll look for playlist.json in each playlist directory
+
+    // Try to find the playlist path from the TSV data
+    let playlistPath = '';
+    if (this.playlistsCache) {
+      const cached = this.playlistsCache.find((p) => p.playlist_id === playlistId);
+      if (cached) {
+        // Use title to construct path (same as backend does)
+        playlistPath = cached.title.replace(/[/\\:*?"<>|]/g, '-');
+      }
+    }
+
+    // Fetch playlist.json from the playlist directory
+    const response = await fetch(
+      `${this.baseUrl}/playlists/${playlistPath}/playlist.json`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load playlist metadata for ${playlistId}: ${response.statusText}`
+      );
+    }
+
+    return (await response.json()) as Playlist;
+  }
+
+  /**
    * Get caption file path for a video
    *
    * @param videoId - YouTube video ID
@@ -147,7 +207,26 @@ export class DataLoader {
    * @returns Path to VTT caption file
    */
   getCaptionPath(videoId: string, languageCode: string): string {
-    return `${this.baseUrl}/videos/${videoId}/caption_${languageCode}.vtt`;
+    const filePath = this.getVideoPath(videoId);
+    return `${this.baseUrl}/videos/${filePath}/caption_${languageCode}.vtt`;
+  }
+
+  /**
+   * Get video file path (folder name) for a video
+   *
+   * @param videoId - YouTube video ID
+   * @returns File path (either path from TSV or video_id)
+   */
+  private getVideoPath(videoId: string): string {
+    // Find video in cache and use its file_path
+    if (this.videosCache) {
+      const video = this.videosCache.find((v) => v.video_id === videoId);
+      if (video && video.file_path) {
+        return video.file_path;
+      }
+    }
+    // Fallback to video_id if not found in cache
+    return videoId;
   }
 
   /**
@@ -177,6 +256,7 @@ export class DataLoader {
       thumbnail_url: row.thumbnail_url,
       download_status: row.download_status as Video['download_status'],
       source_url: row.source_url,
+      file_path: row.path || row.video_id, // Use path if available, otherwise video_id
       // These fields are only in full metadata.json
       license: 'standard', // Default, will be in metadata.json
       privacy_status: 'public',

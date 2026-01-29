@@ -151,6 +151,7 @@ export interface VideoTSVRow {
   thumbnail_url: string;
   download_status: string;
   source_url: string;
+  path?: string; // Optional: folder name for video files (older archives)
 }
 
 export interface PlaylistTSVRow {

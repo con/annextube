@@ -6,9 +6,11 @@
 
   // Get video file path (look for common video formats)
   // In a real archive, this would be in the video's directory
-  function getVideoPath(videoId: string): string {
+  function getVideoPath(): string {
+    // Use file_path from video object (supports both old and new archive formats)
+    const filePath = video.file_path || video.video_id;
     // Try common formats - the actual file will be git-annex symlinked
-    return `${baseUrl}/videos/${videoId}/${videoId}.mp4`;
+    return `${baseUrl}/videos/${filePath}/${video.video_id}.mp4`;
   }
 
   // Get caption tracks
@@ -17,12 +19,12 @@
 
 <div class="video-player">
   <video controls crossorigin="anonymous">
-    <source src={getVideoPath(video.video_id)} type="video/mp4" />
+    <source src={getVideoPath()} type="video/mp4" />
 
     {#each captionTracks as lang}
       <track
         kind="subtitles"
-        src={`${baseUrl}/videos/${video.video_id}/caption_${lang}.vtt`}
+        src={`${baseUrl}/videos/${video.file_path || video.video_id}/caption_${lang}.vtt`}
         srclang={lang}
         label={lang.toUpperCase()}
       />
@@ -30,7 +32,7 @@
 
     <p class="video-error">
       Your browser doesn't support HTML5 video.
-      <a href={getVideoPath(video.video_id)} download>Download the video</a> instead.
+      <a href={getVideoPath()} download>Download the video</a> instead.
     </p>
   </video>
 </div>
