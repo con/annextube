@@ -13,6 +13,7 @@ from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
 from annextube.models.playlist import Playlist
 from annextube.models.video import Video
+from annextube.services.youtube_api import YouTubeAPICommentsService
 
 logger = get_logger(__name__)
 
@@ -867,140 +868,181 @@ class YouTubeService:
         replies_str = f"{max_replies_per_thread} replies/thread" if max_replies_per_thread > 0 else "no replies"
         logger.info(f"Downloading comments for: {video_id} ({max_str}, {replies_str})")
 
-        video_url = f"https://www.youtube.com/watch?v={video_id}"
-
-        ydl_opts = {
-            "quiet": True,
-            "no_warnings": True,
-            "skip_download": True,
-            "getcomments": True,
-            "writeinfojson": False,  # Don't write info json
-        }
-
-        # Configure comment fetching with reply support
-        # Format: [max_parents, max_replies_per_thread, max_total_replies, reserved]
-        # See: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube.py#L3356
-        if max_depth or max_replies_per_thread > 0:
-            max_parents = str(max_depth) if max_depth else ''
-            max_replies = str(max_replies_per_thread) if max_replies_per_thread > 0 else '0'
-            # total_replies = unlimited (empty string)
-            ydl_opts["extractor_args"] = {
-                "youtube": {
-                    "max_comments": [max_parents, max_replies, '', '']
-                }
-            }
-
-        def _download():
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                # Extract info with comments
-                info = ydl.extract_info(video_url, download=False)
-                return info
+        # Try YouTube Data API first (supports reply threading properly)
+        comments = []
+        comment_source = "yt-dlp"  # Track which source we used
 
         try:
-            # Retry on rate limits
-            info = self._retry_on_rate_limit(_download)
+            api_service = YouTubeAPICommentsService()
+            logger.info(f"Attempting to fetch comments via YouTube Data API for: {video_id}")
 
-            if not info:
-                logger.warning(f"No info available for video: {video_id}")
-                return False
+            comments = api_service.fetch_comments(
+                video_id=video_id,
+                max_comments=max_depth,
+                max_replies_per_thread=max_replies_per_thread
+            )
 
-            # Extract comments
-            comments = info.get('comments', [])
+            if comments:
+                comment_source = "youtube-api"
+                logger.info(f"Successfully fetched {len(comments)} comments via YouTube Data API")
+        except ValueError as e:
+            # No API key configured - fall back to yt-dlp
+            logger.debug(f"YouTube Data API not available: {e}")
+            logger.info("Falling back to yt-dlp for comment fetching")
+        except Exception as e:
+            # API error (quota exceeded, network error, etc.) - fall back to yt-dlp
+            logger.warning(f"YouTube Data API failed: {e}")
+            logger.info("Falling back to yt-dlp for comment fetching")
 
-            if not comments and not existing_comments:
-                logger.info(f"No comments available for video: {video_id}")
-                # Still save empty comments file for consistency
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                with AtomicFileWriter(output_path) as f:
-                    json.dump([], f, indent=2)
-                return True
+        # Fall back to yt-dlp if API didn't return comments
+        if not comments:
+            video_url = f"https://www.youtube.com/watch?v={video_id}"
 
+            ydl_opts = {
+                "quiet": True,
+                "no_warnings": True,
+                "skip_download": True,
+                "getcomments": True,
+                "writeinfojson": False,  # Don't write info json
+            }
+
+            # Configure comment fetching with reply support
+            # Format: [max_parents, max_replies_per_thread, max_total_replies, reserved]
+            # See: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube.py#L3356
+            if max_depth or max_replies_per_thread > 0:
+                max_parents = str(max_depth) if max_depth else ''
+                max_replies = str(max_replies_per_thread) if max_replies_per_thread > 0 else '0'
+                # total_replies = unlimited (empty string)
+                ydl_opts["extractor_args"] = {
+                    "youtube": {
+                        "max_comments": [max_parents, max_replies, '', '']
+                    }
+                }
+
+            def _download():
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    # Extract info with comments
+                    info = ydl.extract_info(video_url, download=False)
+                    return info
+
+            try:
+                # Retry on rate limits
+                info = self._retry_on_rate_limit(_download)
+
+                if not info:
+                    logger.warning(f"No info available for video: {video_id}")
+                    return False
+
+                # Extract comments from yt-dlp
+                comments = info.get('comments', [])
+
+                if not comments and not existing_comments:
+                    logger.info(f"No comments available for video: {video_id}")
+                    # Still save empty comments file for consistency
+                    output_path.parent.mkdir(parents=True, exist_ok=True)
+                    with AtomicFileWriter(output_path) as f:
+                        json.dump([], f, indent=2)
+                    return True
+
+            except Exception as e:
+                logger.error(f"Failed to download comments via yt-dlp: {e}")
+                if not existing_comments:
+                    return False
+                # If we have existing comments, continue with those
+                comments = []
+
+        # Normalize comments to annextube format
+        # YouTube API already returns correct format, yt-dlp needs conversion
+        if comment_source == "yt-dlp" and comments:
             # Debug: Log sample comment fields to understand what yt-dlp provides
-            if comments and logger.isEnabledFor(5):  # DEBUG level
+            if logger.isEnabledFor(5):  # DEBUG level
                 sample = comments[0]
-                logger.debug(f"Sample comment fields: {list(sample.keys())}")
+                logger.debug(f"Sample yt-dlp comment fields: {list(sample.keys())}")
                 logger.debug(f"Sample timestamp type: {type(sample.get('timestamp'))}, value: {sample.get('timestamp')}")
 
-            # Format comments for storage
-            new_count = 0
-            updated_count = 0
+            # Convert yt-dlp format to annextube format
+            normalized_comments = []
             for comment in comments:
                 comment_id = comment.get('id', '')
                 if not comment_id:
                     continue
 
-                # Check if this is a new comment
-                if comment_id not in existing_comments:
-                    # New comment - add all fields
-                    new_count += 1
+                # Normalize timestamp
+                timestamp = comment.get('timestamp')
+                if timestamp is not None:
+                    timestamp = int(timestamp)
 
-                    # Normalize timestamp: ensure it's an integer (Unix timestamp from API)
-                    # yt-dlp provides timestamp as Unix epoch seconds (should be stable)
-                    timestamp = comment.get('timestamp')
-                    if timestamp is not None:
-                        # Convert to int if it's a float (removes sub-second precision variations)
-                        timestamp = int(timestamp)
+                normalized_comments.append({
+                    'comment_id': comment_id,
+                    'author': comment.get('author', ''),
+                    'author_id': comment.get('author_id', ''),
+                    'text': comment.get('text', ''),
+                    'timestamp': timestamp,
+                    'like_count': comment.get('like_count', 0),
+                    'is_favorited': comment.get('is_favorited', False),
+                    'parent': comment.get('parent', 'root'),
+                })
+            comments = normalized_comments
 
-                    existing_comments[comment_id] = {
-                        'comment_id': comment_id,
-                        'author': comment.get('author', ''),
-                        'author_id': comment.get('author_id', ''),
-                        'text': comment.get('text', ''),
-                        'timestamp': timestamp,  # Unix timestamp from YouTube API (stable)
-                        'like_count': comment.get('like_count', 0),
-                        'is_favorited': comment.get('is_favorited', False),
-                        'parent': comment.get('parent', 'root'),  # 'root' or parent comment ID
-                    }
-                else:
-                    # Existing comment - only update fields that can change
-                    # Preserve original timestamp, author, text, etc. (stable fields)
-                    existing = existing_comments[comment_id]
+        # Merge new comments with existing ones
+        new_count = 0
+        updated_count = 0
+        for comment in comments:
+            comment_id = comment.get('comment_id', '')
+            if not comment_id:
+                continue
 
-                    # Update like_count if changed
-                    new_like_count = comment.get('like_count', 0)
-                    if existing.get('like_count', 0) != new_like_count:
-                        existing['like_count'] = new_like_count
+            # Check if this is a new comment
+            if comment_id not in existing_comments:
+                # New comment - add all fields
+                new_count += 1
+                existing_comments[comment_id] = comment
+            else:
+                # Existing comment - only update fields that can change
+                # Preserve original timestamp, author, text, etc. (stable fields)
+                existing = existing_comments[comment_id]
+
+                # Update like_count if changed
+                new_like_count = comment.get('like_count', 0)
+                if existing.get('like_count', 0) != new_like_count:
+                    existing['like_count'] = new_like_count
+                    updated_count += 1
+
+                # Update is_favorited if changed
+                new_favorited = comment.get('is_favorited', False)
+                if existing.get('is_favorited', False) != new_favorited:
+                    existing['is_favorited'] = new_favorited
+                    if updated_count == 0:  # Only count once per comment
                         updated_count += 1
 
-                    # Update is_favorited if changed
-                    new_favorited = comment.get('is_favorited', False)
-                    if existing.get('is_favorited', False) != new_favorited:
-                        existing['is_favorited'] = new_favorited
-                        if updated_count == 0:  # Only count once per comment
-                            updated_count += 1
+        # Convert back to list and save
+        final_comments = list(existing_comments.values())
 
-            # Convert back to list and save
-            final_comments = list(existing_comments.values())
+        # Save comments to JSON file
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        with AtomicFileWriter(output_path) as f:
+            json.dump(final_comments, f, indent=2, ensure_ascii=False)
 
-            # Save comments to JSON file
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            with AtomicFileWriter(output_path) as f:
-                json.dump(final_comments, f, indent=2, ensure_ascii=False)
+        # Count root vs reply comments for better statistics
+        root_comments = [c for c in final_comments if c.get('parent') == 'root']
+        reply_comments = [c for c in final_comments if c.get('parent') != 'root']
 
-            # Count root vs reply comments for better statistics
-            root_comments = [c for c in final_comments if c.get('parent') == 'root']
-            reply_comments = [c for c in final_comments if c.get('parent') != 'root']
-
-            if new_count > 0 or updated_count > 0:
-                parts = []
-                if new_count > 0:
-                    parts.append(f"{new_count} new")
-                if updated_count > 0:
-                    parts.append(f"{updated_count} updated")
-                logger.info(
-                    f"Comments: {', '.join(parts)}, "
-                    f"total: {len(final_comments)} ({len(root_comments)} top-level, {len(reply_comments)} replies)"
-                )
-            else:
-                logger.info(
-                    f"No comment changes, {len(final_comments)} existing "
-                    f"({len(root_comments)} top-level, {len(reply_comments)} replies)"
-                )
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to download comments: {e}")
-            return False
+        if new_count > 0 or updated_count > 0:
+            parts = []
+            if new_count > 0:
+                parts.append(f"{new_count} new")
+            if updated_count > 0:
+                parts.append(f"{updated_count} updated")
+            logger.info(
+                f"Comments ({comment_source}): {', '.join(parts)}, "
+                f"total: {len(final_comments)} ({len(root_comments)} top-level, {len(reply_comments)} replies)"
+            )
+        else:
+            logger.info(
+                f"No comment changes ({comment_source}), {len(final_comments)} existing "
+                f"({len(root_comments)} top-level, {len(reply_comments)} replies)"
+            )
+        return True
 
     def metadata_to_video(self, metadata: Dict[str, Any]) -> Video:
         """Convert metadata to Video model.
