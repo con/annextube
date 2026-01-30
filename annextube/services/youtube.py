@@ -821,21 +821,29 @@ class YouTubeService:
             logger.error(f"Failed to download captions: {e}")
             return []
 
-    def download_comments(self, video_id: str, output_path: Path, max_depth: Optional[int] = None) -> bool:
+    def download_comments(
+        self,
+        video_id: str,
+        output_path: Path,
+        max_depth: Optional[int] = None,
+        max_replies_per_thread: int = 10
+    ) -> bool:
         """Download comments for a video with smart incremental fetching.
 
-        Fetches ALL comments by default (no limit). If comments.json already exists,
-        merges new comments with existing ones (deduplicates by comment_id).
+        Fetches ALL comments by default (no limit), including comment replies.
+        If comments.json already exists, merges new comments with existing ones
+        (deduplicates by comment_id).
 
-        NOTE: max_depth limits comments PER FETCH, not total. Total count can exceed
-        max_depth due to incremental merging across multiple runs. To limit new comment
-        growth, use a smaller max_depth value.
+        NOTE: max_depth limits top-level comments PER FETCH, not total. Total count
+        can exceed max_depth due to incremental merging across multiple runs.
 
         Args:
             video_id: YouTube video ID
             output_path: Path to save comments JSON file
-            max_depth: Maximum number of comments to fetch per run (None = unlimited, 0 = disabled)
-                      Total comments can exceed this due to incremental merging.
+            max_depth: Maximum number of top-level comments to fetch per run
+                      (None = unlimited, 0 = disabled)
+            max_replies_per_thread: Maximum number of replies to fetch per comment
+                      thread (default: 10). Set to 0 to disable reply fetching.
 
         Returns:
             True if successful, False otherwise
@@ -855,8 +863,9 @@ class YouTubeService:
             except Exception as e:
                 logger.warning(f"Failed to load existing comments: {e}")
 
-        max_str = f"up to {max_depth} new" if max_depth else "all new (unlimited)"
-        logger.info(f"Downloading comments for: {video_id} ({max_str})")
+        max_str = f"up to {max_depth} parents" if max_depth else "all parents (unlimited)"
+        replies_str = f"{max_replies_per_thread} replies/thread" if max_replies_per_thread > 0 else "no replies"
+        logger.info(f"Downloading comments for: {video_id} ({max_str}, {replies_str})")
 
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
@@ -868,9 +877,18 @@ class YouTubeService:
             "writeinfojson": False,  # Don't write info json
         }
 
-        # Only set max_comments if specified (otherwise fetch all)
-        if max_depth:
-            ydl_opts["max_comments"] = max_depth
+        # Configure comment fetching with reply support
+        # Format: [max_parents, max_replies_per_thread, max_total_replies, reserved]
+        # See: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube.py#L3356
+        if max_depth or max_replies_per_thread > 0:
+            max_parents = str(max_depth) if max_depth else ''
+            max_replies = str(max_replies_per_thread) if max_replies_per_thread > 0 else '0'
+            # total_replies = unlimited (empty string)
+            ydl_opts["extractor_args"] = {
+                "youtube": {
+                    "max_comments": [max_parents, max_replies, '', '']
+                }
+            }
 
         def _download():
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -959,15 +977,25 @@ class YouTubeService:
             with AtomicFileWriter(output_path) as f:
                 json.dump(final_comments, f, indent=2, ensure_ascii=False)
 
+            # Count root vs reply comments for better statistics
+            root_comments = [c for c in final_comments if c.get('parent') == 'root']
+            reply_comments = [c for c in final_comments if c.get('parent') != 'root']
+
             if new_count > 0 or updated_count > 0:
                 parts = []
                 if new_count > 0:
                     parts.append(f"{new_count} new")
                 if updated_count > 0:
                     parts.append(f"{updated_count} updated")
-                logger.info(f"Comments: {', '.join(parts)}, total: {len(final_comments)}")
+                logger.info(
+                    f"Comments: {', '.join(parts)}, "
+                    f"total: {len(final_comments)} ({len(root_comments)} top-level, {len(reply_comments)} replies)"
+                )
             else:
-                logger.info(f"No comment changes, {len(final_comments)} existing comment(s)")
+                logger.info(
+                    f"No comment changes, {len(final_comments)} existing "
+                    f"({len(root_comments)} top-level, {len(reply_comments)} replies)"
+                )
             return True
 
         except Exception as e:
