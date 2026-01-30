@@ -125,6 +125,42 @@
     selectedStatuses.length > 0,
     selectedPlaylists.length > 0,
   ].filter(Boolean).length;
+
+  // Date range presets
+  function setDateRange(preset: string) {
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+
+    switch (preset) {
+      case 'week':
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        dateFrom = weekAgo.toISOString().split('T')[0];
+        dateTo = today;
+        break;
+      case 'month':
+        const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+        dateFrom = monthAgo.toISOString().split('T')[0];
+        dateTo = today;
+        break;
+      case 'year':
+        const yearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        dateFrom = yearAgo.toISOString().split('T')[0];
+        dateTo = today;
+        break;
+      case 'thisyear':
+        dateFrom = `${now.getFullYear()}-01-01`;
+        dateTo = today;
+        break;
+      case 'lastyear':
+        dateFrom = `${now.getFullYear() - 1}-01-01`;
+        dateTo = `${now.getFullYear() - 1}-12-31`;
+        break;
+      case 'all':
+        dateFrom = '';
+        dateTo = '';
+        break;
+    }
+  }
 </script>
 
 <div class="filter-panel">
@@ -141,6 +177,13 @@
     <!-- Date Range -->
     <div class="filter-group">
       <label class="filter-label">Date Range</label>
+      <div class="date-presets">
+        <button type="button" class="preset-btn" on:click={() => setDateRange('week')}>Last Week</button>
+        <button type="button" class="preset-btn" on:click={() => setDateRange('month')}>Last Month</button>
+        <button type="button" class="preset-btn" on:click={() => setDateRange('year')}>Last Year</button>
+        <button type="button" class="preset-btn" on:click={() => setDateRange('thisyear')}>This Year</button>
+        <button type="button" class="preset-btn" on:click={() => setDateRange('all')}>All Time</button>
+      </div>
       <div class="date-inputs">
         <input type="date" bind:value={dateFrom} class="date-input" title="From date" />
         <span class="date-separator">to</span>
@@ -225,6 +268,7 @@
         <select bind:value={sortField} class="sort-select">
           <option value="date">Date</option>
           <option value="views">Views</option>
+          <option value="comments">Comments</option>
           <option value="duration">Duration</option>
           <option value="title">Title</option>
           {#if searchQuery.trim()}
@@ -390,6 +434,34 @@
 
   .clear-button:hover {
     background: #e0e0e0;
+  }
+
+  .date-presets {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .preset-btn {
+    padding: 6px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+
+  .preset-btn:hover {
+    background: #e8f0fe;
+    border-color: #4285f4;
+    color: #4285f4;
+  }
+
+  .preset-btn:active {
+    background: #d2e3fc;
   }
 
   @media (max-width: 768px) {

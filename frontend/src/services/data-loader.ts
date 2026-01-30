@@ -77,7 +77,8 @@ export class DataLoader {
       playlists.map(async (playlist) => {
         try {
           const fullPlaylist = await this.loadPlaylistMetadata(
-            playlist.playlist_id
+            playlist.playlist_id,
+            playlist.path  // Pass the path from TSV
           );
           playlist.video_ids = fullPlaylist.video_ids;
         } catch (err) {
@@ -171,10 +172,11 @@ export class DataLoader {
    * @param playlistId - YouTube playlist ID
    * @returns Full Playlist object with video_ids
    */
-  async loadPlaylistMetadata(playlistId: string): Promise<Playlist> {
-    // Find playlist path from cached playlists
-    let playlistPath = '';
-    if (this.playlistsCache) {
+  async loadPlaylistMetadata(playlistId: string, path?: string): Promise<Playlist> {
+    // Find playlist path from cached playlists or use provided path
+    let playlistPath = path || '';
+
+    if (!playlistPath && this.playlistsCache) {
       const cached = this.playlistsCache.find((p) => p.playlist_id === playlistId);
       if (cached && cached.path) {
         // Use path from TSV (directory name)

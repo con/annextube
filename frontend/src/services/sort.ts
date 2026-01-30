@@ -6,7 +6,7 @@
 
 import type { Video } from '@/types/models';
 
-export type SortField = 'views' | 'date' | 'duration' | 'title' | 'relevance';
+export type SortField = 'views' | 'date' | 'duration' | 'title' | 'comments' | 'relevance';
 export type SortDirection = 'asc' | 'desc';
 
 export interface SortCriteria {
@@ -39,6 +39,9 @@ export class SortService {
           break;
         case 'duration':
           comparison = a.duration - b.duration;
+          break;
+        case 'comments':
+          comparison = a.comment_count - b.comment_count;
           break;
         case 'title':
           comparison = a.title.localeCompare(b.title);
