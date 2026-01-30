@@ -27,6 +27,7 @@ dependencies = [
     "click>=8.0.0",
     "jsonschema>=4.0.0",
     "tomli>=2.0.0; python_version < '3.11'",
+    "google-api-python-client>=2.0.0",  # For YouTube Data API v3 comment fetching
 ]
 
 [project.optional-dependencies]
