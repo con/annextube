@@ -62,6 +62,9 @@ class Archiver:
         self.date_to = date_to
         self.git_annex = GitAnnexService(repo_path)
 
+        # Parse extractor args from ytdlp_extra_opts
+        extractor_args = self._parse_extractor_args(config.user.ytdlp_extra_opts)
+
         # Initialize YouTubeService with user config settings
         self.youtube = YouTubeService(
             cookies_file=config.user.cookies_file,
@@ -70,6 +73,7 @@ class Archiver:
             limit_rate=config.user.limit_rate,
             sleep_interval=config.user.sleep_interval,
             max_sleep_interval=config.user.max_sleep_interval,
+            extractor_args=extractor_args,
         )
 
         self.export = ExportService(repo_path)
@@ -86,6 +90,41 @@ class Archiver:
             max_sleep_interval=config.user.max_sleep_interval,
             extra_opts=config.user.ytdlp_extra_opts,
         )
+
+    def _parse_extractor_args(self, ytdlp_extra_opts: list[str]) -> dict:
+        """Parse ytdlp_extra_opts CLI-style options to Python API extractor_args format.
+
+        Converts ["--extractor-args", "youtube:player_client=android"]
+        to {"youtube": {"player_client": ["android"]}}
+
+        Args:
+            ytdlp_extra_opts: List of CLI-style yt-dlp options
+
+        Returns:
+            Dictionary of extractor arguments for yt-dlp Python API
+        """
+        extractor_args = {}
+
+        i = 0
+        while i < len(ytdlp_extra_opts):
+            opt = ytdlp_extra_opts[i]
+
+            if opt == "--extractor-args" and i + 1 < len(ytdlp_extra_opts):
+                # Parse "extractor:key=value" format
+                arg_value = ytdlp_extra_opts[i + 1]
+                if ":" in arg_value:
+                    extractor, key_value = arg_value.split(":", 1)
+                    if "=" in key_value:
+                        key, value = key_value.split("=", 1)
+                        if extractor not in extractor_args:
+                            extractor_args[extractor] = {}
+                        # Values are stored as lists in Python API
+                        extractor_args[extractor][key] = [value]
+                i += 2
+            else:
+                i += 1
+
+        return extractor_args
 
     def _should_process_video_by_date(self, video_metadata: dict) -> bool:
         """Check if video should be processed based on date filters.

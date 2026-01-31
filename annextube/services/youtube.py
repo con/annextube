@@ -35,6 +35,7 @@ class YouTubeService:
         limit_rate: Optional[str] = None,
         sleep_interval: Optional[int] = None,
         max_sleep_interval: Optional[int] = None,
+        extractor_args: Optional[Dict[str, Any]] = None,
     ):
         """Initialize YouTubeService.
 
@@ -46,6 +47,7 @@ class YouTubeService:
             limit_rate: Bandwidth limit (e.g., "500K")
             sleep_interval: Minimum seconds between downloads
             max_sleep_interval: Maximum seconds between downloads
+            extractor_args: Extractor-specific arguments (e.g., {"youtube": {"player_client": ["android"]}})
         """
         self.archive_file = archive_file
         self.cookies_file = cookies_file
@@ -54,6 +56,7 @@ class YouTubeService:
         self.limit_rate = limit_rate
         self.sleep_interval = sleep_interval
         self.max_sleep_interval = max_sleep_interval
+        self.extractor_args = extractor_args or {}
 
     def _retry_on_rate_limit(self, func, *args, **kwargs):
         """Retry function on rate limit errors with exponential backoff.
@@ -176,6 +179,10 @@ class YouTubeService:
 
         if self.max_sleep_interval is not None:
             opts["max_sleep_interval"] = self.max_sleep_interval
+
+        # Add extractor arguments (e.g., Android client workaround)
+        if self.extractor_args:
+            opts["extractor_args"] = self.extractor_args
 
         return opts
 
