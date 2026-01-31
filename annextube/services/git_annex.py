@@ -77,13 +77,13 @@ class GitAnnexService:
         # Cookies
         if cookies_file:
             cookie_path = Path(cookies_file).expanduser().resolve()
-            options.append(f'--cookies "{cookie_path}"')
+            options.append(f'--cookies {cookie_path}')
         elif cookies_from_browser:
             options.append(f'--cookies-from-browser {cookies_from_browser}')
 
         # Network settings
         if proxy:
-            options.append(f'--proxy "{proxy}"')
+            options.append(f'--proxy {proxy}')
 
         if limit_rate:
             options.append(f'--limit-rate {limit_rate}')
