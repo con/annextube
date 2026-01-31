@@ -2,18 +2,27 @@
 
 Loads configuration from .annextube/config.toml or ~/.config/annextube/config.toml
 in TOML format (similar to mykrok pattern).
+
+User-wide configuration (authentication, network settings) is loaded from
+platform-specific config directory using platformdirs.
 """
 
+import logging
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from platformdirs import user_config_dir
 
 # Handle tomli/tomllib compatibility
 if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -68,14 +77,72 @@ class OrganizationConfig:
 
 
 @dataclass
+class UserConfig:
+    """User-wide configuration (authentication, network, global preferences).
+
+    Loaded from platform-specific user config directory:
+    - Linux: ~/.config/annextube/config.toml
+    - macOS: ~/Library/Application Support/annextube/config.toml
+    - Windows: %APPDATA%/annextube/config.toml
+    """
+
+    # Authentication
+    cookies_file: Optional[str] = None  # Path to Netscape cookies.txt
+    cookies_from_browser: Optional[str] = None  # e.g., "firefox", "chrome:Profile 1"
+    api_key: Optional[str] = None  # YouTube Data API key (fallback if env var not set)
+
+    # Network settings
+    proxy: Optional[str] = None  # e.g., "socks5://127.0.0.1:9050"
+    limit_rate: Optional[str] = None  # e.g., "500K" - bandwidth limit
+    sleep_interval: Optional[int] = None  # Min seconds between downloads
+    max_sleep_interval: Optional[int] = None  # Max seconds between downloads
+
+    # Advanced
+    ytdlp_extra_opts: List[str] = field(default_factory=list)  # Extra CLI options for yt-dlp
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "UserConfig":
+        """Create UserConfig from dictionary (loaded from TOML)."""
+        return cls(
+            cookies_file=data.get("cookies_file"),
+            cookies_from_browser=data.get("cookies_from_browser"),
+            api_key=data.get("api_key"),
+            proxy=data.get("proxy"),
+            limit_rate=data.get("limit_rate"),
+            sleep_interval=data.get("sleep_interval"),
+            max_sleep_interval=data.get("max_sleep_interval"),
+            ytdlp_extra_opts=data.get("ytdlp_extra_opts", []),
+        )
+
+
+@dataclass
 class Config:
     """Main configuration for annextube."""
 
-    api_key: Optional[str] = None  # YouTube Data API v3 key
+    # User-wide settings (loaded from user config dir)
+    user: UserConfig = field(default_factory=UserConfig)
+
+    # Archive-specific settings
     sources: List[SourceConfig] = field(default_factory=list)
     components: ComponentsConfig = field(default_factory=ComponentsConfig)
     filters: FiltersConfig = field(default_factory=FiltersConfig)
     organization: OrganizationConfig = field(default_factory=OrganizationConfig)
+
+    # Convenience properties for backward compatibility
+    @property
+    def api_key(self) -> Optional[str]:
+        """Get API key from user config."""
+        return self.user.api_key
+
+    @property
+    def cookies_file(self) -> Optional[str]:
+        """Get cookies file path from user config."""
+        return self.user.cookies_file
+
+    @property
+    def cookies_from_browser(self) -> Optional[str]:
+        """Get cookies browser from user config."""
+        return self.user.cookies_from_browser
 
     @staticmethod
     def _normalize_include_podcasts(value: Any) -> str:
@@ -143,7 +210,6 @@ class Config:
         )
 
         return cls(
-            api_key=data.get("api_key"),
             sources=sources,
             components=components,
             filters=filters,
@@ -151,29 +217,107 @@ class Config:
         )
 
 
-def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = None) -> Config:
-    """Load configuration from TOML file.
+def get_user_config_path() -> Path:
+    """Get user config file path using platformdirs.
 
-    API key is read from YOUTUBE_API_KEY environment variable, not from config file.
+    Returns:
+        Path to user config file (may not exist)
+
+    Examples:
+        - Linux: ~/.config/annextube/config.toml
+        - macOS: ~/Library/Application Support/annextube/config.toml
+        - Windows: %APPDATA%/annextube/config.toml
+    """
+    config_dir = Path(user_config_dir("annextube", appauthor=False))
+    return config_dir / "config.toml"
+
+
+def load_user_config() -> UserConfig:
+    """Load user-wide configuration from platform-specific config directory.
+
+    Environment variables override user config file settings:
+    - ANNEXTUBE_COOKIES_FILE
+    - ANNEXTUBE_COOKIES_FROM_BROWSER
+    - YOUTUBE_API_KEY
+    - ANNEXTUBE_PROXY
+
+    Returns:
+        UserConfig object (with defaults if file doesn't exist)
+    """
+    config_path = get_user_config_path()
+
+    if not config_path.exists():
+        # No user config file - return defaults
+        logger.debug(f"No user config found at {config_path}, using defaults")
+        user_config = UserConfig()
+    else:
+        # Load user config
+        logger.debug(f"Loading user config from {config_path}")
+        try:
+            with open(config_path, "rb") as f:
+                data = tomllib.load(f)
+            user_config = UserConfig.from_dict(data)
+            logger.info(f"Loaded user config from {config_path}")
+        except Exception as e:
+            # Log warning but don't fail - use defaults
+            logger.warning(f"Failed to load user config from {config_path}: {e}")
+            user_config = UserConfig()
+
+    # Override with environment variables (highest precedence)
+    cookies_file = os.environ.get('ANNEXTUBE_COOKIES_FILE')
+    if cookies_file:
+        user_config.cookies_file = cookies_file
+        logger.debug(f"Using cookies file from env: {cookies_file}")
+
+    cookies_from_browser = os.environ.get('ANNEXTUBE_COOKIES_FROM_BROWSER')
+    if cookies_from_browser:
+        user_config.cookies_from_browser = cookies_from_browser
+        logger.debug(f"Using cookies from browser: {cookies_from_browser}")
+
+    api_key = os.environ.get('YOUTUBE_API_KEY')
+    if api_key:
+        user_config.api_key = api_key
+        logger.debug("Using API key from YOUTUBE_API_KEY env var")
+
+    proxy = os.environ.get('ANNEXTUBE_PROXY')
+    if proxy:
+        user_config.proxy = proxy
+        logger.debug(f"Using proxy from env: {proxy}")
+
+    return user_config
+
+
+def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = None) -> Config:
+    """Load configuration from TOML files (user + archive).
+
+    Loads user-wide config first (authentication, network settings),
+    then archive-specific config (sources, components, filters).
+
+    Config hierarchy (precedence: highest to lowest):
+    1. Environment variables (YOUTUBE_API_KEY, ANNEXTUBE_COOKIES_FILE, etc.)
+    2. Archive config (.annextube/config.toml)
+    3. User config (platform-specific user config dir)
+    4. Built-in defaults
 
     Args:
-        config_path: Optional path to config file. If not provided, searches:
+        config_path: Optional path to archive config file. If not provided, searches:
             1. {repo_path}/.annextube/config.toml (if repo_path provided)
             2. .annextube/config.toml (current directory)
-            3. ~/.config/annextube/config.toml (user config)
         repo_path: Optional path to repository root (for searching config file)
 
     Returns:
-        Config object
+        Config object with merged user + archive settings
 
     Raises:
-        FileNotFoundError: If no config file found
+        FileNotFoundError: If no archive config file found
         ValueError: If config file is invalid
     """
-    import os
+    # Step 1: Load user-wide config (authentication, network, etc.)
+    user_config = load_user_config()
 
+    # Step 2: Load archive-specific config (sources, components, filters)
     if config_path is None:
-        # Search for config file
+        # Search for archive config file
         search_paths = []
 
         # If repo_path provided, search there first
@@ -183,33 +327,30 @@ def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = 
         # Then try current directory
         search_paths.append(Path.cwd() / ".annextube" / "config.toml")
 
-        # Finally try user config
-        search_paths.append(Path.home() / ".config" / "annextube" / "config.toml")
-
         for path in search_paths:
             if path.exists():
                 config_path = path
                 break
         else:
             raise FileNotFoundError(
-                "No config file found. Expected .annextube/config.toml or "
-                "~/.config/annextube/config.toml"
+                "No archive config file found. Expected .annextube/config.toml"
             )
 
-    # Load TOML
+    # Load archive config
+    logger.debug(f"Loading archive config from {config_path}")
     try:
         with open(config_path, "rb") as f:
             data = tomllib.load(f)
     except Exception as e:
-        raise ValueError(f"Failed to parse config file {config_path}: {e}")
+        raise ValueError(f"Failed to parse archive config {config_path}: {e}")
 
+    # Parse archive-specific sections
     config = Config.from_dict(data)
 
-    # Override api_key with environment variable (never store in config!)
-    api_key = os.environ.get('YOUTUBE_API_KEY')
-    if api_key:
-        config.api_key = api_key
+    # Step 3: Merge user config into main config
+    config.user = user_config
 
+    logger.info(f"Loaded config: archive={config_path}, user={get_user_config_path()}")
     return config
 
 
@@ -399,4 +540,96 @@ def save_config_template(config_dir: Path, urls: list[str] = None,
         f.write(generate_config_template(urls, enable_videos, comments_depth, enable_captions,
                                         enable_thumbnails, limit, include_playlists))
 
+    return config_path
+
+
+def generate_user_config_template() -> str:
+    """Generate user-wide configuration template.
+
+    Returns:
+        TOML configuration template as string
+    """
+    return '''# annextube User Configuration
+# This file contains user-wide settings (authentication, network, preferences)
+# Location: Platform-specific user config directory
+#   - Linux: ~/.config/annextube/config.toml
+#   - macOS: ~/Library/Application Support/annextube/config.toml
+#   - Windows: %APPDATA%/annextube/config.toml
+
+# ============================================================================
+# Authentication (for age-restricted, members-only, or private content)
+# ============================================================================
+
+# YouTube cookies for authenticated access
+# Option 1: Use cookie file (Netscape format)
+# cookies_file = "~/.config/annextube/cookies/youtube.txt"
+
+# Option 2: Extract cookies from browser (requires browser to be installed)
+# cookies_from_browser = "firefox"  # or "chrome", "chrome:Profile 1", etc.
+
+# YouTube Data API v3 key (for comment replies and playlist metadata)
+# RECOMMENDED: Use environment variable instead!
+#   export YOUTUBE_API_KEY="your-key-here"
+# Only set here if you can't use environment variables
+# api_key = "your-api-key-here"
+
+# ============================================================================
+# Network Settings
+# ============================================================================
+
+# Proxy server (useful for privacy or bypassing restrictions)
+# proxy = "socks5://127.0.0.1:9050"  # Tor proxy example
+# proxy = "http://proxy.example.com:8080"  # HTTP proxy example
+
+# Bandwidth limit (prevents overwhelming your connection)
+# limit_rate = "500K"   # 500 KB/s
+# limit_rate = "1M"     # 1 MB/s
+
+# Rate limiting (delays between downloads to avoid YouTube throttling)
+# sleep_interval = 3      # Minimum seconds between downloads
+# max_sleep_interval = 5  # Maximum seconds (random delay between min and max)
+
+# ============================================================================
+# Advanced yt-dlp Options
+# ============================================================================
+
+# Extra options to pass to yt-dlp CLI (for git-annex integration)
+# ytdlp_extra_opts = [
+#     "--extractor-args", "youtube:player_client=android",  # Use Android client
+#     "--format-sort", "+size,+br",  # Prefer smaller files
+# ]
+
+# ============================================================================
+# Security Notes
+# ============================================================================
+# - NEVER commit this file to version control if it contains secrets!
+# - Use environment variables for API keys and cookies in CI/CD
+# - Cookie files should have permissions 600 (read/write owner only)
+# - Cookies expire periodically - you'll need to refresh them
+'''
+
+
+def save_user_config_template() -> Path:
+    """Save user configuration template to platform-specific config directory.
+
+    Returns:
+        Path to created config file
+
+    Raises:
+        FileExistsError: If user config file already exists
+    """
+    config_path = get_user_config_path()
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if config_path.exists():
+        # Don't overwrite existing user config
+        raise FileExistsError(
+            f"User config already exists at {config_path}. "
+            "Delete it first if you want to regenerate."
+        )
+
+    with open(config_path, "w") as f:
+        f.write(generate_user_config_template())
+
+    logger.info(f"Created user config template at {config_path}")
     return config_path

@@ -55,6 +55,7 @@ def cli(
 
 # Import commands
 from annextube.cli.init import init
+from annextube.cli.init_user_config import init_user_config
 from annextube.cli.backup import backup
 from annextube.cli.export import export
 from annextube.cli.generate_web import generate_web
@@ -62,6 +63,7 @@ from annextube.cli.info import info
 from annextube.cli.check import check
 
 cli.add_command(init)
+cli.add_command(init_user_config)
 cli.add_command(backup)
 cli.add_command(export)
 cli.add_command(generate_web)

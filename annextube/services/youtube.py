@@ -26,13 +26,34 @@ BACKOFF_MULTIPLIER = 2
 class YouTubeService:
     """Wrapper around yt-dlp for YouTube operations."""
 
-    def __init__(self, archive_file: Optional[Path] = None):
+    def __init__(
+        self,
+        archive_file: Optional[Path] = None,
+        cookies_file: Optional[str] = None,
+        cookies_from_browser: Optional[str] = None,
+        proxy: Optional[str] = None,
+        limit_rate: Optional[str] = None,
+        sleep_interval: Optional[int] = None,
+        max_sleep_interval: Optional[int] = None,
+    ):
         """Initialize YouTubeService.
 
         Args:
             archive_file: Optional path to yt-dlp archive file for tracking
+            cookies_file: Path to Netscape cookies file
+            cookies_from_browser: Browser to extract cookies from (e.g., "firefox")
+            proxy: Proxy URL (e.g., "socks5://127.0.0.1:9050")
+            limit_rate: Bandwidth limit (e.g., "500K")
+            sleep_interval: Minimum seconds between downloads
+            max_sleep_interval: Maximum seconds between downloads
         """
         self.archive_file = archive_file
+        self.cookies_file = cookies_file
+        self.cookies_from_browser = cookies_from_browser
+        self.proxy = proxy
+        self.limit_rate = limit_rate
+        self.sleep_interval = sleep_interval
+        self.max_sleep_interval = max_sleep_interval
 
     def _retry_on_rate_limit(self, func, *args, **kwargs):
         """Retry function on rate limit errors with exponential backoff.
@@ -115,7 +136,7 @@ class YouTubeService:
                 raise
 
     def _get_ydl_opts(self, download: bool = False) -> Dict[str, Any]:
-        """Get yt-dlp options.
+        """Get yt-dlp options including user config settings.
 
         Args:
             download: Whether to download video content
@@ -132,6 +153,29 @@ class YouTubeService:
 
         if self.archive_file:
             opts["download_archive"] = str(self.archive_file)
+
+        # Add cookie configuration (from user config)
+        if self.cookies_file:
+            opts["cookiefile"] = str(Path(self.cookies_file).expanduser().resolve())
+        elif self.cookies_from_browser:
+            # Parse browser:profile format
+            parts = self.cookies_from_browser.split(":", 1)
+            browser = parts[0]
+            profile = parts[1] if len(parts) > 1 else None
+            opts["cookiesfrombrowser"] = (browser, profile, None, None)
+
+        # Add network settings (from user config)
+        if self.proxy:
+            opts["proxy"] = self.proxy
+
+        if self.limit_rate:
+            opts["ratelimit"] = self.limit_rate
+
+        if self.sleep_interval is not None:
+            opts["sleep_interval"] = self.sleep_interval
+
+        if self.max_sleep_interval is not None:
+            opts["max_sleep_interval"] = self.max_sleep_interval
 
         return opts
 

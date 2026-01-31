@@ -48,6 +48,67 @@ class GitAnnexService:
 
         logger.info("Git-annex repository initialized")
 
+    def configure_ytdlp_options(
+        self,
+        cookies_file: Optional[str] = None,
+        cookies_from_browser: Optional[str] = None,
+        proxy: Optional[str] = None,
+        limit_rate: Optional[str] = None,
+        sleep_interval: Optional[int] = None,
+        max_sleep_interval: Optional[int] = None,
+        extra_opts: Optional[list[str]] = None,
+    ) -> None:
+        """Configure git-annex to pass user settings to yt-dlp.
+
+        Sets annex.youtube-dl-options based on user configuration.
+        This affects git-annex addurl --no-raw operations.
+
+        Args:
+            cookies_file: Path to Netscape cookies file
+            cookies_from_browser: Browser to extract cookies from
+            proxy: Proxy URL
+            limit_rate: Bandwidth limit
+            sleep_interval: Minimum seconds between downloads
+            max_sleep_interval: Maximum seconds between downloads
+            extra_opts: Additional yt-dlp CLI options
+        """
+        options = []
+
+        # Cookies
+        if cookies_file:
+            cookie_path = Path(cookies_file).expanduser().resolve()
+            options.append(f'--cookies "{cookie_path}"')
+        elif cookies_from_browser:
+            options.append(f'--cookies-from-browser {cookies_from_browser}')
+
+        # Network settings
+        if proxy:
+            options.append(f'--proxy "{proxy}"')
+
+        if limit_rate:
+            options.append(f'--limit-rate {limit_rate}')
+
+        if sleep_interval is not None:
+            options.append(f'--sleep-interval {sleep_interval}')
+
+        if max_sleep_interval is not None:
+            options.append(f'--max-sleep-interval {max_sleep_interval}')
+
+        # Extra options
+        if extra_opts:
+            options.extend(extra_opts)
+
+        if options:
+            option_str = " ".join(options)
+            subprocess.run(
+                ["git", "config", "annex.youtube-dl-options", option_str],
+                cwd=self.repo_path,
+                check=True,
+            )
+            logger.info(f"Configured git-annex yt-dlp options: {option_str}")
+        else:
+            logger.debug("No yt-dlp options to configure for git-annex")
+
     def configure_gitattributes(self) -> None:
         """Configure .gitattributes for file tracking rules.
 

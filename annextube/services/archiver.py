@@ -61,10 +61,31 @@ class Archiver:
         self.date_from = date_from
         self.date_to = date_to
         self.git_annex = GitAnnexService(repo_path)
-        self.youtube = YouTubeService()
+
+        # Initialize YouTubeService with user config settings
+        self.youtube = YouTubeService(
+            cookies_file=config.user.cookies_file,
+            cookies_from_browser=config.user.cookies_from_browser,
+            proxy=config.user.proxy,
+            limit_rate=config.user.limit_rate,
+            sleep_interval=config.user.sleep_interval,
+            max_sleep_interval=config.user.max_sleep_interval,
+        )
+
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache = None  # Cache for video ID to path mapping
         self._processed_video_ids = set()  # Track videos processed in current run (avoid duplicates)
+
+        # Configure git-annex with user config settings
+        self.git_annex.configure_ytdlp_options(
+            cookies_file=config.user.cookies_file,
+            cookies_from_browser=config.user.cookies_from_browser,
+            proxy=config.user.proxy,
+            limit_rate=config.user.limit_rate,
+            sleep_interval=config.user.sleep_interval,
+            max_sleep_interval=config.user.max_sleep_interval,
+            extra_opts=config.user.ytdlp_extra_opts,
+        )
 
     def _should_process_video_by_date(self, video_metadata: dict) -> bool:
         """Check if video should be processed based on date filters.
