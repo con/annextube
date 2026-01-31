@@ -36,6 +36,7 @@ class YouTubeService:
         sleep_interval: Optional[int] = None,
         max_sleep_interval: Optional[int] = None,
         extractor_args: Optional[Dict[str, Any]] = None,
+        remote_components: Optional[str] = None,
     ):
         """Initialize YouTubeService.
 
@@ -48,6 +49,7 @@ class YouTubeService:
             sleep_interval: Minimum seconds between downloads
             max_sleep_interval: Maximum seconds between downloads
             extractor_args: Extractor-specific arguments (e.g., {"youtube": {"player_client": ["android"]}})
+            remote_components: Remote components to enable (e.g., "ejs:github" for JS challenge solver)
         """
         self.archive_file = archive_file
         self.cookies_file = cookies_file
@@ -57,6 +59,7 @@ class YouTubeService:
         self.sleep_interval = sleep_interval
         self.max_sleep_interval = max_sleep_interval
         self.extractor_args = extractor_args or {}
+        self.remote_components = remote_components
 
     def _retry_on_rate_limit(self, func, *args, **kwargs):
         """Retry function on rate limit errors with exponential backoff.
@@ -183,6 +186,11 @@ class YouTubeService:
         # Add extractor arguments (e.g., Android client workaround)
         if self.extractor_args:
             opts["extractor_args"] = self.extractor_args
+
+        # Add remote components (e.g., ejs:github for JS challenge solver with deno)
+        if self.remote_components:
+            # remote_components should be a list in Python API
+            opts["remote_components"] = [self.remote_components]
 
         return opts
 

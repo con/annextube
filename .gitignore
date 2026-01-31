@@ -97,3 +97,5 @@ docs/.hugo_build.lock
 # Shell history and local config
 .bash_history
 .config/  # User config created during testing
+.anaconda/
+.conda/

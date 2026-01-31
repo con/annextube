@@ -62,8 +62,9 @@ class Archiver:
         self.date_to = date_to
         self.git_annex = GitAnnexService(repo_path)
 
-        # Parse extractor args from ytdlp_extra_opts
+        # Parse extractor args and remote components from ytdlp_extra_opts
         extractor_args = self._parse_extractor_args(config.user.ytdlp_extra_opts)
+        remote_components = self._parse_remote_components(config.user.ytdlp_extra_opts)
 
         # Initialize YouTubeService with user config settings
         self.youtube = YouTubeService(
@@ -74,6 +75,7 @@ class Archiver:
             sleep_interval=config.user.sleep_interval,
             max_sleep_interval=config.user.max_sleep_interval,
             extractor_args=extractor_args,
+            remote_components=remote_components,
         )
 
         self.export = ExportService(repo_path)
@@ -125,6 +127,28 @@ class Archiver:
                 i += 1
 
         return extractor_args
+
+    def _parse_remote_components(self, ytdlp_extra_opts: list[str]) -> Optional[str]:
+        """Parse --remote-components option from ytdlp_extra_opts.
+
+        Converts ["--remote-components", "ejs:github"] to "ejs:github"
+
+        Args:
+            ytdlp_extra_opts: List of CLI-style yt-dlp options
+
+        Returns:
+            Remote components value or None if not found
+        """
+        i = 0
+        while i < len(ytdlp_extra_opts):
+            opt = ytdlp_extra_opts[i]
+
+            if opt == "--remote-components" and i + 1 < len(ytdlp_extra_opts):
+                return ytdlp_extra_opts[i + 1]
+
+            i += 1
+
+        return None
 
     def _should_process_video_by_date(self, video_metadata: dict) -> bool:
         """Check if video should be processed based on date filters.
