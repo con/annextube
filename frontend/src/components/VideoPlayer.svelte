@@ -4,13 +4,13 @@
   export let video: Video;
   export let baseUrl: string = '..';
 
-  // Get video file path (look for common video formats)
-  // In a real archive, this would be in the video's directory
+  // Get video file path
   function getVideoPath(): string {
-    // Use file_path from video object (supports both old and new archive formats)
+    // Use path from videos.tsv (supports hierarchical structure like 2026/01/video_dir)
+    // Fall back to video_id for older archives
     const filePath = video.file_path || video.video_id;
-    // Try common formats - the actual file will be git-annex symlinked
-    return `${baseUrl}/videos/${filePath}/${video.video_id}.mp4`;
+    // Video files are named video.mkv (git-annex symlinked to actual content)
+    return `${baseUrl}/videos/${filePath}/video.mkv`;
   }
 
   // Get caption tracks
@@ -24,7 +24,7 @@
     {#each captionTracks as lang}
       <track
         kind="subtitles"
-        src={`${baseUrl}/videos/${video.file_path || video.video_id}/caption_${lang}.vtt`}
+        src={`${baseUrl}/videos/${video.file_path || video.video_id}/video.${lang}.vtt`}
         srclang={lang}
         label={lang.toUpperCase()}
       />
