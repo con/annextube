@@ -65,6 +65,10 @@ class ExportService:
                 # Get relative path from videos/ directory (supports hierarchical layouts)
                 relative_path = video_dir.relative_to(videos_dir)
 
+                # Determine download status by checking if video file exists
+                video_file = video_dir / "video.mkv"
+                download_status = "downloaded" if video_file.exists() else "not_downloaded"
+
                 video_entry = {
                     "video_id": video_id,
                     "title": metadata.get("title", ""),
@@ -76,7 +80,7 @@ class ExportService:
                     "like_count": str(metadata.get("like_count", 0)),
                     "comment_count": str(metadata.get("comment_count", 0)),
                     "thumbnail_url": metadata.get("thumbnail_url", ""),
-                    "download_status": metadata.get("download_status", "not_downloaded"),
+                    "download_status": download_status,
                     "source_url": f"https://www.youtube.com/watch?v={video_id}",
                     "path": str(relative_path),  # Relative to videos/ directory (e.g., "2026/01/video_dir" for hierarchical)
                 }
