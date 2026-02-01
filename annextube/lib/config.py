@@ -397,8 +397,8 @@ video_path_pattern = "{video_path_pattern}"  # Path pattern for videos (video_id
 #   "{{{{date}}}}_{{{{video_id}}}}_{{{{sanitized_title}}}}" - Include ID
 #   "{{{{video_id}}}}" - Just video ID (compact)
 
-channel_path_pattern = "{{channel_id}}"  # Path pattern for channels
-playlist_path_pattern = "{{playlist_id}}"  # Path pattern for playlists (uses sanitized name in practice)
+channel_path_pattern = "{channel_id}"  # Path pattern for channels
+playlist_path_pattern = "{playlist_id}"  # Path pattern for playlists (uses sanitized name in practice)
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
 
