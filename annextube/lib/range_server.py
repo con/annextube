@@ -26,13 +26,13 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Origin', '*')
         super().end_headers()
 
-    def do_HEAD(self):
-        """Serve a HEAD request - handle tuple return from send_head."""
+    def do_GET(self):
+        """Serve a GET request - handle tuple return from send_head."""
         f = self.send_head()
         if f:
-            if isinstance(f, tuple):
-                f[0].close()  # Close the file object from range response
-            else:
+            self.copyfile(f, self.wfile)
+            # copyfile closes the file for tuples, only close for non-tuples
+            if not isinstance(f, tuple):
                 f.close()
 
     def send_head(self):
@@ -96,7 +96,14 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                         self.end_headers()
 
                         f.seek(start)
-                        # Return tuple for copyfile to handle
+
+                        # For HEAD requests, close file and return None
+                        # (headers already sent, no body needed)
+                        if self.command == 'HEAD':
+                            f.close()
+                            return None
+
+                        # For GET requests, return tuple for copyfile to handle
                         return (f, start, length)
 
             # Normal response (no range request)
@@ -105,6 +112,13 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header("Content-Length", str(file_len))
             self.send_header("Last-Modified", self.date_time_string(fs.st_mtime))
             self.end_headers()
+
+            # For HEAD requests, close file and return None
+            if self.command == 'HEAD':
+                f.close()
+                return None
+
+            # For GET requests, return tuple for copyfile
             return (f, 0, file_len)
 
         except Exception:
