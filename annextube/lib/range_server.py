@@ -41,15 +41,13 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         f = None
 
         if os.path.isdir(path):
-            parts = self.path.rstrip('/').split('/')
-            if parts[-1] != '':
-                # Redirect to add trailing slash
+            # Redirect to add trailing slash if missing
+            if not self.path.endswith('/'):
                 self.send_response(301)
-                new_parts = parts + ['']
-                new_url = '/'.join(new_parts)
-                self.send_header('Location', new_url)
+                self.send_header('Location', self.path + '/')
                 self.end_headers()
                 return None
+            # Look for index files
             for index in "index.html", "index.htm":
                 index_path = os.path.join(path, index)
                 if os.path.exists(index_path):
