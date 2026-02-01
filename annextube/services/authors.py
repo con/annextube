@@ -58,15 +58,13 @@ class AuthorsService:
             logger.warning(f"Videos directory not found: {self.videos_dir}")
             return authors
 
-        # Scan all video directories
-        for video_dir in sorted(self.videos_dir.iterdir()):
-            if not video_dir.is_dir():
-                continue
+        # Find all video directories by looking for metadata.json files
+        # This supports both flat and hierarchical directory structures
+        for metadata_path in sorted(self.videos_dir.rglob("metadata.json")):
+            video_dir = metadata_path.parent
 
             # Process video metadata (uploader)
-            metadata_path = video_dir / "metadata.json"
-            if metadata_path.exists():
-                self._process_video_metadata(metadata_path, authors)
+            self._process_video_metadata(metadata_path, authors)
 
             # Process comments
             comments_path = video_dir / "comments.json"
