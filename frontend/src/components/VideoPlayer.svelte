@@ -18,8 +18,8 @@
 </script>
 
 <div class="video-player">
-  <video controls crossorigin="anonymous">
-    <source src={getVideoPath()} type="video/mp4" />
+  <video controls crossorigin="anonymous" preload="metadata">
+    <source src={getVideoPath()} />
 
     {#each captionTracks as lang}
       <track
