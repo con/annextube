@@ -1,6 +1,7 @@
 """Export service for generating TSV metadata files."""
 
 import json
+import os
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -65,9 +66,29 @@ class ExportService:
                 # Get relative path from videos/ directory (supports hierarchical layouts)
                 relative_path = video_dir.relative_to(videos_dir)
 
-                # Determine download status by checking if video file exists
+                # Determine download status by checking git-annex state
+                # video.mkv could be:
+                # - Missing: not_downloaded
+                # - Symlink to URL--* in git-annex: tracked (URL only, content not downloaded)
+                # - Symlink to content hash in git-annex: downloaded (actual content present)
                 video_file = video_dir / "video.mkv"
-                download_status = "downloaded" if video_file.exists() else "not_downloaded"
+                if not video_file.exists():
+                    download_status = "not_downloaded"
+                elif video_file.is_symlink():
+                    # Check if symlink points to URL entry (tracked only) or content (downloaded)
+                    # URL entries have "URL--" in their path
+                    try:
+                        target = os.readlink(video_file)
+                        if "URL--" in target:
+                            download_status = "tracked"
+                        else:
+                            download_status = "downloaded"
+                    except OSError:
+                        # Can't read symlink - assume tracked
+                        download_status = "tracked"
+                else:
+                    # Regular file (not symlink) - definitely downloaded
+                    download_status = "downloaded"
 
                 video_entry = {
                     "video_id": video_id,
