@@ -68,7 +68,7 @@ class FiltersConfig:
 class OrganizationConfig:
     """Configuration for repository organization and file paths."""
 
-    video_path_pattern: str = "{date}_{sanitized_title}"  # Default: no video_id (tracked in TSV)
+    video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}"  # Default: hierarchical by year/month
     channel_path_pattern: str = "{channel_id}"
     playlist_path_pattern: str = "{playlist_id}"
     video_filename: str = "video.mkv"  # Filename for video file within video directory
@@ -357,7 +357,8 @@ def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = 
 def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
                             comments_depth: Optional[int] = None, enable_captions: bool = True,
                             enable_thumbnails: bool = True, limit: Optional[int] = None,
-                            include_playlists: str = "none") -> str:
+                            include_playlists: str = "none",
+                            video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}") -> str:
     """Generate a template configuration file in TOML format.
 
     Args:
@@ -368,6 +369,7 @@ def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
         enable_thumbnails: Enable thumbnails (default: True)
         limit: Limit to N most recent videos (default: None = no limit)
         include_playlists: Playlist inclusion ("none", "all", or regex pattern, default: "none")
+        video_path_pattern: Path pattern for video directories (default: "{year}/{month}/{date}_{sanitized_title}")
 
     Returns:
         TOML configuration template as string
@@ -376,6 +378,38 @@ def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
     videos_str = str(enable_videos).lower()
     captions_str = str(enable_captions).lower()
     thumbnails_str = str(enable_thumbnails).lower()
+
+    # Build organization section separately to avoid f-string brace escaping issues
+    organization_section = f'''# Repository organization and file paths
+[organization]
+video_path_pattern = "{video_path_pattern}"  # Path pattern for videos (video_id tracked in TSV)
+# Available placeholders:
+#   {{{{year}}}} - Publication year (YYYY)
+#   {{{{month}}}} - Publication month (MM)
+#   {{{{date}}}} - Publication date (YYYY-MM-DD)
+#   {{{{video_id}}}} - YouTube video ID (optional, tracked in videos.tsv)
+#   {{{{sanitized_title}}}} - Video title (filesystem-safe, hyphens for words)
+#   {{{{channel_id}}}} - Channel ID
+#   {{{{channel_name}}}} - Channel name (sanitized)
+# Examples:
+#   "{{{{year}}}}/{{{{month}}}}/{{{{date}}}}_{{{{sanitized_title}}}}" - Hierarchical by year/month (default)
+#   "{{{{date}}}}_{{{{sanitized_title}}}}" - Flat layout with date + title
+#   "{{{{date}}}}_{{{{video_id}}}}_{{{{sanitized_title}}}}" - Include ID
+#   "{{{{video_id}}}}" - Just video ID (compact)
+
+channel_path_pattern = "{{{{channel_id}}}}"  # Path pattern for channels
+playlist_path_pattern = "{{{{playlist_id}}}}"  # Path pattern for playlists (uses sanitized name in practice)
+
+video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
+
+# Playlist organization
+playlist_prefix_width = 4  # Zero-padding width for playlist symlinks (e.g., 0001_, 0023_)
+                           # Supports playlists up to 10^width - 1 videos
+                           # 4 digits = up to 9999 videos per playlist
+
+playlist_prefix_separator = "_"  # Separator between index and path (underscore, not hyphen)
+                                 # Example: 0001_2020-01-10_video-title (not 0001-2020-01-10...)
+'''
 
     # Handle comments_depth: None means don't set it (use default = unlimited)
     if comments_depth is None:
@@ -468,33 +502,7 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
                           #   "en|es|fr" - English, Spanish, French only
                           #   "en-US" - US English only
 
-# Repository organization and file paths
-[organization]
-video_path_pattern = "{{date}}_{{sanitized_title}}"  # Path pattern for videos (video_id tracked in TSV)
-# Available placeholders:
-#   {{date}} - Publication date (YYYY-MM-DD)
-#   {{video_id}} - YouTube video ID (optional, tracked in videos.tsv)
-#   {{sanitized_title}} - Video title (filesystem-safe, hyphens for words)
-#   {{channel_id}} - Channel ID
-#   {{channel_name}} - Channel name (sanitized)
-# Examples:
-#   "{{date}}_{{sanitized_title}}" - Date + title (default, ID in TSV)
-#   "{{date}}_{{video_id}}_{{sanitized_title}}" - Include ID (legacy)
-#   "{{video_id}}" - Just video ID (compact)
-
-channel_path_pattern = "{{channel_id}}"  # Path pattern for channels
-playlist_path_pattern = "{{playlist_id}}"  # Path pattern for playlists (uses sanitized name in practice)
-
-video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
-
-# Playlist organization
-playlist_prefix_width = 4  # Zero-padding width for playlist symlinks (e.g., 0001_, 0023_)
-                           # Supports playlists up to 10^width - 1 videos
-                           # 4 digits = up to 9999 videos per playlist
-
-playlist_prefix_separator = "_"  # Separator between index and path (underscore, not hyphen)
-                                 # Example: 0001_2020-01-10_video-title (not 0001-2020-01-10...)
-{filters_section}
+{organization_section}{filters_section}
 # Optional date range filter
 # date_start = "2024-01-01"  # ISO 8601 date
 # date_end = "2024-12-31"
@@ -517,7 +525,8 @@ playlist_prefix_separator = "_"  # Separator between index and path (underscore,
 def save_config_template(config_dir: Path, urls: list[str] = None,
                         enable_videos: bool = True, comments_depth: Optional[int] = None,
                         enable_captions: bool = True, enable_thumbnails: bool = True,
-                        limit: Optional[int] = None, include_playlists: str = "none") -> Path:
+                        limit: Optional[int] = None, include_playlists: str = "none",
+                        video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}") -> Path:
     """Save configuration template to directory.
 
     Args:
@@ -529,6 +538,7 @@ def save_config_template(config_dir: Path, urls: list[str] = None,
         enable_thumbnails: Enable thumbnails (default: True)
         limit: Limit to N most recent videos (default: None = no limit)
         include_playlists: Playlist inclusion ("none", "all", or regex pattern, default: "none")
+        video_path_pattern: Path pattern for video directories (default: "{year}/{month}/{date}_{sanitized_title}")
 
     Returns:
         Path to created config file
@@ -538,7 +548,7 @@ def save_config_template(config_dir: Path, urls: list[str] = None,
 
     with open(config_path, "w") as f:
         f.write(generate_config_template(urls, enable_videos, comments_depth, enable_captions,
-                                        enable_thumbnails, limit, include_playlists))
+                                        enable_thumbnails, limit, include_playlists, video_path_pattern))
 
     return config_path
 

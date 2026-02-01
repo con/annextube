@@ -355,18 +355,27 @@ class Archiver:
         # Extract date from published_at (datetime object)
         try:
             if isinstance(video.published_at, datetime):
-                date_str = video.published_at.strftime('%Y-%m-%d')
+                date_obj = video.published_at
+                date_str = date_obj.strftime('%Y-%m-%d')
+                year_str = date_obj.strftime('%Y')
+                month_str = date_obj.strftime('%m')
             else:
                 # If it's a string, parse it
                 date_obj = datetime.fromisoformat(str(video.published_at).replace('Z', '+00:00'))
                 date_str = date_obj.strftime('%Y-%m-%d')
+                year_str = date_obj.strftime('%Y')
+                month_str = date_obj.strftime('%m')
         except Exception as e:
             logger.warning(f"Failed to parse date from published_at: {e}")
             date_str = 'unknown'
+            year_str = 'unknown'
+            month_str = 'unknown'
 
         # Build placeholders
         placeholders = {
             'date': date_str,
+            'year': year_str,
+            'month': month_str,
             'video_id': video.video_id,
             'sanitized_title': sanitize_filename(video.title),
             'channel_id': video.channel_id,
@@ -742,15 +751,16 @@ class Archiver:
             video_dir = self._get_video_path(video)
             if video_dir.exists():
                 # Create symlink with zero-padded numeric prefix
-                # Format: {NNNN}_{video_dir_name} -> ../../videos/{video_dir_name}
+                # Format: {NNNN}_{video_dir_name} -> ../../videos/{year}/{month}/{video_dir_name}
                 prefix = f"{i:0{prefix_width}d}{separator}"
                 symlink_name = f"{prefix}{video_dir.name}"
                 symlink_path = playlist_dir / symlink_name
 
                 # Create relative symlink (for repository portability)
                 # From: playlists/{playlist_name}/{symlink}
-                # To:   videos/{video_dir_name}
-                relative_target = Path("..") / ".." / "videos" / video_dir.name
+                # To:   videos/{year}/{month}/{video_dir_name} (or videos/{video_dir_name} for flat)
+                # Use relative_to() to support both flat and hierarchical layouts
+                relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
 
                 # Remove existing symlink if present
                 if symlink_path.exists() or symlink_path.is_symlink():
