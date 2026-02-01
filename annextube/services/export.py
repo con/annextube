@@ -45,15 +45,11 @@ class ExportService:
             return output_path
 
         # Collect video metadata
+        # Find all video directories by looking for metadata.json files
+        # This supports both flat and hierarchical directory structures
         videos = []
-        for video_dir in sorted(videos_dir.iterdir()):
-            if not video_dir.is_dir():
-                continue
-
-            metadata_path = video_dir / "metadata.json"
-            if not metadata_path.exists():
-                logger.warning(f"No metadata.json in {video_dir.name}, skipping")
-                continue
+        for metadata_path in sorted(videos_dir.rglob("metadata.json")):
+            video_dir = metadata_path.parent
 
             try:
                 with open(metadata_path, "r") as f:
@@ -65,6 +61,10 @@ class ExportService:
 
                 # Extract key fields for TSV (frontend-compatible format)
                 video_id = metadata.get("video_id", "")
+
+                # Get relative path from videos/ directory (supports hierarchical layouts)
+                relative_path = video_dir.relative_to(videos_dir)
+
                 video_entry = {
                     "video_id": video_id,
                     "title": metadata.get("title", ""),
@@ -78,12 +78,12 @@ class ExportService:
                     "thumbnail_url": metadata.get("thumbnail_url", ""),
                     "download_status": metadata.get("download_status", "not_downloaded"),
                     "source_url": f"https://www.youtube.com/watch?v={video_id}",
-                    "path": video_dir.name,  # Relative to videos/ directory
+                    "path": str(relative_path),  # Relative to videos/ directory (e.g., "2026/01/video_dir" for hierarchical)
                 }
                 videos.append(video_entry)
 
             except Exception as e:
-                logger.error(f"Failed to read metadata from {video_dir.name}: {e}")
+                logger.error(f"Failed to read metadata from {video_dir.relative_to(videos_dir)}: {e}")
 
         # Write TSV file
         self._write_videos_tsv(output_path, videos)
