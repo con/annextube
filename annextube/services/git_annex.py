@@ -155,7 +155,7 @@ class GitAnnexService:
         logger.info("Configured .gitattributes for file tracking")
 
     def addurl(
-        self, url: str, file_path: Path, relaxed: bool = True, fast: bool = True, no_raw: bool = True
+        self, url: str, file_path: Path, relaxed: bool = True, fast: bool = True, no_raw: bool = False
     ) -> None:
         """Add URL to git-annex without downloading content.
 
@@ -164,7 +164,12 @@ class GitAnnexService:
             file_path: Path where file would be stored
             relaxed: Use --relaxed mode (track URL without verifying)
             fast: Use --fast mode (no content verification)
-            no_raw: Use --no-raw mode (ensure yt-dlp is used, not raw download)
+            no_raw: Use --no-raw mode (requires yt-dlp to extract media URL; incompatible with --fast)
+
+        Note:
+            --no-raw with --fast is contradictory and will fail with older yt-dlp versions.
+            For URL tracking (--fast), use no_raw=False to store raw YouTube URLs.
+            For actual downloads (get_file), yt-dlp will still be used to extract media.
         """
         cmd = ["git", "annex", "addurl", url, "--file", str(file_path)]
 
@@ -172,7 +177,8 @@ class GitAnnexService:
             cmd.append("--relaxed")
         if fast:
             cmd.append("--fast")
-        if no_raw:
+        if no_raw and not fast:
+            # Only use --no-raw when not using --fast (they're contradictory)
             cmd.append("--no-raw")
 
         logger.debug(f"Adding URL to git-annex: {url} -> {file_path}")
