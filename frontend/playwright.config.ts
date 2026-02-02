@@ -1,4 +1,15 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Test archive path for E2E workflow tests
+const TEST_ARCHIVE_DIR = path.resolve(
+  __dirname,
+  '../test-archives/fake-home-hierarchical-test/apopyk-archive'
+);
+const ARCHIVE_SERVER_PORT = 8090;
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -19,29 +30,62 @@ export default defineConfig({
   reporter: 'html',
 
   use: {
-    // Base URL to use in actions like `await page.goto('/')`
-    baseURL: 'http://localhost:5173',
-
     // Collect trace when retrying the failed test
     trace: 'on-first-retry',
   },
 
   // Configure projects for major browsers
   projects: [
+    // Dev server projects (existing mock-data tests)
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: 'http://localhost:5173',
+      },
+      testIgnore: '**/archive-workflow*',
     },
     {
       name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
+      use: {
+        ...devices['Desktop Firefox'],
+        baseURL: 'http://localhost:5173',
+      },
+      testIgnore: '**/archive-workflow*',
+    },
+    // Archive server projects (real archive E2E tests)
+    {
+      name: 'archive-chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        baseURL: `http://localhost:${ARCHIVE_SERVER_PORT}`,
+      },
+      testMatch: '**/archive-workflow*',
+    },
+    {
+      name: 'archive-firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        baseURL: `http://localhost:${ARCHIVE_SERVER_PORT}`,
+      },
+      testMatch: '**/archive-workflow*',
     },
   ],
 
-  // Run your local dev server before starting the tests
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-  },
+  // Run servers before starting the tests
+  webServer: [
+    // Vite dev server for mock-data tests
+    {
+      command: 'npm run dev',
+      url: 'http://localhost:5173',
+      reuseExistingServer: !process.env.CI,
+    },
+    // annextube serve for real archive E2E tests
+    {
+      command: `${path.resolve(__dirname, '../.venv/bin/annextube')} serve --output-dir "${TEST_ARCHIVE_DIR}" --port ${ARCHIVE_SERVER_PORT} --no-watch`,
+      url: `http://localhost:${ARCHIVE_SERVER_PORT}/web/`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30000,
+    },
+  ],
 });
