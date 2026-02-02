@@ -141,6 +141,15 @@ test.describe('Complete Archive Workflow', () => {
       const videoElement = page.locator('.video-player .tab-content video');
       await expect(videoElement).toBeVisible();
       await expect(videoElement).toHaveAttribute('controls', '');
+
+      // Video should have non-zero dimensions (verify it's actually rendered)
+      const boundingBox = await videoElement.boundingBox();
+      expect(boundingBox).not.toBeNull();
+      expect(boundingBox!.width).toBeGreaterThan(0);
+      expect(boundingBox!.height).toBeGreaterThan(0);
+
+      // Video should have poster attribute
+      await expect(videoElement).toHaveAttribute('poster');
     });
 
     test('video element has correct source path', async ({ page }) => {
@@ -377,6 +386,95 @@ test.describe('Complete Archive Workflow', () => {
 
       // All videos should be back
       await expect(page.locator('.video-card')).toHaveCount(TOTAL_VIDEOS);
+    });
+  });
+
+  test.describe('Video player debugging', () => {
+    test('video actually plays and controls work', async ({ page }) => {
+      await navigateToVideo(page, DOWNLOADED_VIDEO_ID);
+
+      const videoElement = page.locator('.video-player .tab-content video');
+      await expect(videoElement).toBeVisible();
+
+      // Try to play the video
+      await videoElement.evaluate((video: HTMLVideoElement) => {
+        return video.play();
+      });
+
+      // Wait a bit for playback to start
+      await page.waitForTimeout(1000);
+
+      // Check if video is actually playing
+      const isPlaying = await videoElement.evaluate((video: HTMLVideoElement) => {
+        return !video.paused && video.currentTime > 0;
+      });
+
+      console.log('Video is playing:', isPlaying);
+      expect(isPlaying).toBe(true);
+
+      // Pause the video
+      await videoElement.evaluate((video: HTMLVideoElement) => {
+        video.pause();
+      });
+
+      const isPaused = await videoElement.evaluate((video: HTMLVideoElement) => {
+        return video.paused;
+      });
+
+      console.log('Video paused successfully:', isPaused);
+      expect(isPaused).toBe(true);
+    });
+
+    test('video element loads properly and has correct state', async ({ page }) => {
+      // Collect console messages
+      const consoleMessages: string[] = [];
+      page.on('console', (msg) => {
+        const text = msg.text();
+        if (text.includes('[VideoPlayer]')) {
+          consoleMessages.push(`[${msg.type()}] ${text}`);
+        }
+      });
+
+      // Navigate to downloaded video
+      await navigateToVideo(page, DOWNLOADED_VIDEO_ID);
+
+      // Wait for video element
+      const videoElement = page.locator('.video-player .tab-content video');
+      await expect(videoElement).toBeVisible();
+
+      // Get video state
+      const videoState = await videoElement.evaluate((video: HTMLVideoElement) => {
+        return {
+          readyState: video.readyState,
+          networkState: video.networkState,
+          duration: video.duration,
+          currentTime: video.currentTime,
+          paused: video.paused,
+          error: video.error ? {
+            code: video.error.code,
+            message: video.error.message,
+          } : null,
+          src: video.currentSrc,
+        };
+      });
+
+      // Log debug info
+      console.log('\n=== Video State ===');
+      console.log(JSON.stringify(videoState, null, 2));
+      console.log('\n=== Console Messages ===');
+      consoleMessages.forEach(msg => console.log(msg));
+
+      // Get poster attribute
+      const poster = await videoElement.getAttribute('poster');
+
+      // Assertions
+      expect(videoState.error).toBeNull();
+      expect(videoState.readyState).toBeGreaterThan(0); // Should have started loading
+      expect(videoState.src).toContain('/videos/'); // Should use absolute path
+      expect(videoState.src).toContain('video.mkv');
+      expect(poster).toContain('/videos/'); // Should use absolute path
+      expect(poster).toContain('thumbnail.jpg'); // Should use local thumbnail, not YouTube CDN
+      expect(poster).not.toContain('ytimg.com'); // Should NOT use YouTube CDN (CORS issues)
     });
   });
 
