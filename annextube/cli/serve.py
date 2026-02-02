@@ -1,6 +1,7 @@
 """Serve command for annextube - HTTP server with range support and auto-regeneration."""
 
 import os
+import shutil
 import socketserver
 import sys
 import time
@@ -16,6 +17,9 @@ from annextube.services.export import ExportService
 from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
+
+# Path to frontend build (relative to this file)
+FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "web"
 
 
 class ArchiveWatcher:
@@ -118,9 +122,10 @@ class ArchiveWatcher:
     help="Seconds between watch checks (default: 5)",
 )
 @click.option(
-    "--regenerate/--no-regenerate",
-    default=False,
-    help="Regenerate TSV files and web UI before serving (default: disabled)",
+    "--regenerate",
+    type=click.Choice(['tsv', 'web', 'all'], case_sensitive=False),
+    default=None,
+    help="Regenerate before serving: 'tsv' (TSV files only), 'web' (web UI only), 'all' (both)",
 )
 @click.pass_context
 def serve(
@@ -130,7 +135,7 @@ def serve(
     host: str,
     watch: bool,
     watch_interval: int,
-    regenerate: bool,
+    regenerate: str,
 ):
     """Serve archive web UI with HTTP range support for video seeking.
 
@@ -155,8 +160,14 @@ def serve(
         # Serve without watching for changes
         annextube serve --no-watch
 
-        # Regenerate before serving
-        annextube serve --regenerate
+        # Regenerate TSV files before serving
+        annextube serve --regenerate=tsv
+
+        # Regenerate web UI before serving
+        annextube serve --regenerate=web
+
+        # Regenerate everything before serving
+        annextube serve --regenerate=all
     """
     # Check if this is a git-annex repo
     git_annex = GitAnnexService(output_dir)
@@ -177,13 +188,35 @@ def serve(
 
     # Regenerate if requested
     if regenerate:
-        click.echo("Regenerating TSV files and web UI...")
         try:
-            export = ExportService(output_dir)
-            videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
-            click.echo(f"  ✓ {videos_tsv.name}")
-            click.echo(f"  ✓ {playlists_tsv.name}")
-            click.echo(f"  ✓ {authors_tsv.name}")
+            # Regenerate TSV files
+            if regenerate in ['tsv', 'all']:
+                click.echo("Regenerating TSV files...")
+                export = ExportService(output_dir)
+                videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
+                click.echo(f"  ✓ {videos_tsv.name}")
+                click.echo(f"  ✓ {playlists_tsv.name}")
+                click.echo(f"  ✓ {authors_tsv.name}")
+
+            # Regenerate web UI
+            if regenerate in ['web', 'all']:
+                click.echo("Regenerating web UI...")
+
+                # Check if frontend build exists
+                if not FRONTEND_BUILD_DIR.exists():
+                    click.echo(
+                        f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
+                        err=True,
+                    )
+                    click.echo("Run 'cd frontend && npm run build' to build the frontend first.")
+                    raise click.Abort()
+
+                # Copy frontend to web directory
+                if web_dir.exists():
+                    shutil.rmtree(web_dir)
+                shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
+                click.echo(f"  ✓ web/")
+
         except Exception as e:
             click.echo(f"Error regenerating: {e}", err=True)
             raise click.Abort()
