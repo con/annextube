@@ -123,8 +123,15 @@ export class DataLoader {
 
     const metadata = (await response.json()) as Video;
 
-    // Preserve file_path from TSV (metadata.json doesn't have this field)
-    metadata.file_path = filePath;
+    // Preserve fields from TSV that aren't in metadata.json
+    // (These are calculated during TSV export)
+    if (this.videosCache) {
+      const tsvVideo = this.videosCache.find((v) => v.video_id === videoId);
+      if (tsvVideo) {
+        metadata.file_path = filePath;
+        metadata.download_status = tsvVideo.download_status;
+      }
+    }
 
     // Cache for future requests
     this.metadataCache.set(videoId, metadata);
