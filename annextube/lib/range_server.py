@@ -141,7 +141,6 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             super().copyfile(source, outputfile)
 
     def log_message(self, format, *args):
-        """Log requests with custom format."""
-        # Only log errors and range requests (reduce noise)
-        if args[1].startswith('206') or args[1].startswith('4') or args[1].startswith('5'):
-            super().log_message(format, *args)
+        """Log all HTTP requests for monitoring."""
+        # Log all requests (helpful for debugging and monitoring)
+        super().log_message(format, *args)
