@@ -79,10 +79,11 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
     assert result["videos_processed"] == 2
 
     # Verify videos directory exists with 2 videos
+    # Note: With hierarchical structure, video dirs are nested (e.g., 2026/01/video_name/)
     videos_dir = tmp_git_annex_repo / "videos"
     assert videos_dir.exists()
-    video_dirs = sorted([d for d in videos_dir.iterdir() if d.is_dir()])
-    assert len(video_dirs) == 2
+    video_dirs = sorted([p.parent for p in videos_dir.rglob("metadata.json")])
+    assert len(video_dirs) == 2, f"Expected 2 video directories, found {len(video_dirs)}: {[d.relative_to(videos_dir) for d in video_dirs]}"
 
     # For each video, verify all components exist
     for video_dir in video_dirs:

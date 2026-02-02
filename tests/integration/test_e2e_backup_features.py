@@ -81,15 +81,16 @@ class TestE2EBackupFeatures:
             archiver.backup_channel(source.url, source)
 
             # --- Verify videos directory has content ---
+            # Note: With hierarchical structure, video dirs are nested (e.g., 2018/11/video_name/)
             videos_dir = repo_path / "videos"
             assert videos_dir.exists(), "videos/ directory should exist"
-            video_dirs = [d for d in videos_dir.iterdir() if d.is_dir()]
+            video_dirs = [p.parent for p in videos_dir.rglob("metadata.json")]
             assert len(video_dirs) >= 1, f"Should have at least 1 video dir, got {len(video_dirs)}"
 
             # --- Verify metadata.json exists for each video ---
             for vdir in video_dirs:
                 metadata_file = vdir / "metadata.json"
-                assert metadata_file.exists(), f"Missing metadata.json in {vdir.name}"
+                assert metadata_file.exists(), f"Missing metadata.json in {vdir.relative_to(videos_dir)}"
                 data = json.loads(metadata_file.read_text())
                 assert "video_id" in data
                 assert "title" in data
