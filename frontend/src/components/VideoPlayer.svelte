@@ -225,38 +225,25 @@
   .tab-content-wrapper {
     background: #000;
     position: relative;
+    width: 100%;
   }
 
   .tab-content {
     background: #000;
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%; /* 16:9 aspect ratio */
   }
 
   video,
   iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
     width: 100%;
-    height: auto;
+    height: 100%;
     display: block;
-    max-height: 70vh;
-    aspect-ratio: 16 / 9;
     border: none;
-  }
-
-  /* Fallback for older browsers without aspect-ratio support */
-  @supports not (aspect-ratio: 16 / 9) {
-    .tab-content {
-      position: relative;
-      padding-bottom: 56.25%; /* 16:9 aspect ratio */
-      height: 0;
-    }
-
-    video,
-    iframe {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
   }
 
   .youtube-wrapper {
