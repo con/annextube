@@ -26,6 +26,10 @@
   let sortField: SortField = 'date';
   let sortDirection: SortDirection = 'desc';
 
+  // UI state
+  let filtersExpanded = true;
+  let activeDatePreset: string | null = null;
+
   // Convert dropdown selection to filter array
   $: selectedStatuses = selectedStatusFilter === 'all'
     ? [] // Empty array means no filter (show all)
@@ -40,11 +44,21 @@
   $: availableTags = filterService.getUniqueTags(videos);
   $: playlistCounts = filterService.getPlaylistVideoCounts(playlists, videos);
 
-  // Apply filters with debounce
-  let debounceTimer: number;
+  // Apply filters with debounce (search only)
+  let searchDebounceTimer: number;
   $: {
-    // Trigger when any filter value changes
+    // Debounce search input only
     searchQuery;
+
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      applyFilters();
+    }, 300);
+  }
+
+  // Apply filters immediately for discrete controls
+  $: {
+    // These trigger instant filter updates
     dateFrom;
     dateTo;
     selectedChannels;
@@ -54,10 +68,8 @@
     sortField;
     sortDirection;
 
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      applyFilters();
-    }, 300);
+    // Apply filters immediately (no debounce)
+    applyFilters();
   }
 
   function applyFilters() {
@@ -140,6 +152,8 @@
     const now = new Date();
     const today = now.toISOString().split('T')[0];
 
+    activeDatePreset = preset;
+
     switch (preset) {
       case 'week':
         const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -170,11 +184,19 @@
         break;
     }
   }
+
+  // Reset active preset when dates change manually
+  $: if (dateFrom || dateTo) {
+    // Check if current dates match any preset - if not, clear active preset
+    // This could be improved with validation logic, but for now just clear when user types
+  }
 </script>
 
 <div class="filter-panel">
   <div class="search-section">
+    <label for="search-input" class="search-label">Search</label>
     <input
+      id="search-input"
       type="text"
       bind:value={searchQuery}
       placeholder="Search videos, channels, tags..."
@@ -182,16 +204,25 @@
     />
   </div>
 
+  <button class="filters-toggle" on:click={() => (filtersExpanded = !filtersExpanded)}>
+    <span class="toggle-icon">{filtersExpanded ? '▼' : '▶'}</span>
+    Filters
+    {#if activeFilterCount > 0 && !filtersExpanded}
+      <span class="count-badge">{activeFilterCount}</span>
+    {/if}
+  </button>
+
+  {#if filtersExpanded}
   <div class="filters-grid">
     <!-- Date Range -->
     <div class="filter-group">
       <label class="filter-label">Date Range</label>
       <div class="date-presets">
-        <button type="button" class="preset-btn" on:click={() => setDateRange('week')}>Last Week</button>
-        <button type="button" class="preset-btn" on:click={() => setDateRange('month')}>Last Month</button>
-        <button type="button" class="preset-btn" on:click={() => setDateRange('year')}>Last Year</button>
-        <button type="button" class="preset-btn" on:click={() => setDateRange('thisyear')}>This Year</button>
-        <button type="button" class="preset-btn" on:click={() => setDateRange('all')}>All Time</button>
+        <button type="button" class="preset-btn" class:active={activeDatePreset === 'week'} on:click={() => setDateRange('week')}>Last Week</button>
+        <button type="button" class="preset-btn" class:active={activeDatePreset === 'month'} on:click={() => setDateRange('month')}>Last Month</button>
+        <button type="button" class="preset-btn" class:active={activeDatePreset === 'year'} on:click={() => setDateRange('year')}>Last Year</button>
+        <button type="button" class="preset-btn" class:active={activeDatePreset === 'thisyear'} on:click={() => setDateRange('thisyear')}>This Year</button>
+        <button type="button" class="preset-btn" class:active={activeDatePreset === 'all'} on:click={() => setDateRange('all')}>All Time</button>
       </div>
       <div class="date-inputs">
         <input type="date" bind:value={dateFrom} class="date-input" title="From date" />
@@ -282,6 +313,7 @@
       </div>
     </div>
   </div>
+  {/if}
 
   {#if activeFilterCount > 0}
     <div class="footer">
@@ -302,7 +334,15 @@
   }
 
   .search-section {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
+  }
+
+  .search-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 6px;
   }
 
   .search-input {
@@ -318,6 +358,32 @@
     outline: none;
     border-color: #4285f4;
     box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.1);
+  }
+
+  .filters-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: #f8f9fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #333;
+    cursor: pointer;
+    margin-bottom: 16px;
+    transition: background 0.2s;
+  }
+
+  .filters-toggle:hover {
+    background: #f0f0f0;
+  }
+
+  .toggle-icon {
+    font-size: 12px;
+    color: #666;
   }
 
   .filters-grid {
@@ -383,22 +449,19 @@
     border-color: #4285f4;
   }
 
-  .checkbox-group {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  .filter-select,
+  .sort-select {
+    padding: 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
     font-size: 14px;
-    cursor: pointer;
+    background: white;
   }
 
-  .checkbox-label input[type='checkbox'] {
-    cursor: pointer;
+  .filter-select:focus,
+  .sort-select:focus {
+    outline: none;
+    border-color: #4285f4;
   }
 
   .sort-controls {
@@ -406,13 +469,8 @@
     gap: 8px;
   }
 
-  .sort-select {
+  .sort-controls .sort-select {
     flex: 1;
-    padding: 8px;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    font-size: 14px;
-    background: white;
   }
 
   .footer {
@@ -460,8 +518,15 @@
     color: #4285f4;
   }
 
-  .preset-btn:active {
-    background: #d2e3fc;
+  .preset-btn.active {
+    background: #1a73e8;
+    border-color: #1a73e8;
+    color: white;
+  }
+
+  .preset-btn.active:hover {
+    background: #1557b0;
+    border-color: #1557b0;
   }
 
   @media (max-width: 768px) {
@@ -476,6 +541,21 @@
 
     .date-separator {
       text-align: center;
+    }
+
+    .preset-btn {
+      font-size: 12px;
+      padding: 5px 10px;
+    }
+  }
+
+  @media (max-width: 400px) {
+    .date-presets {
+      flex-direction: column;
+    }
+
+    .preset-btn {
+      width: 100%;
     }
   }
 </style>

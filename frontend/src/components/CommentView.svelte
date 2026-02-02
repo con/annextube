@@ -38,13 +38,16 @@
 </script>
 
 <div class="comments-section">
-  <h3>{comments.length} Comment{comments.length !== 1 ? 's' : ''}</h3>
-
   {#if loading}
-    <div class="loading">Loading comments...</div>
-  {:else if comments.length === 0}
-    <p class="no-comments">No comments available for this video.</p>
+    <h3>Loading comments...</h3>
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+    </div>
   {:else}
+    <h3>{comments.length} Comment{comments.length !== 1 ? 's' : ''}</h3>
+    {#if comments.length === 0}
+      <p class="no-comments">No comments available for this video.</p>
+    {:else}
     <div class="comments-list">
       {#each commentTree as comment}
         <div class="comment">
@@ -85,6 +88,7 @@
         </div>
       {/each}
     </div>
+    {/if}
   {/if}
 </div>
 
@@ -100,10 +104,28 @@
     color: #030303;
   }
 
-  .loading {
-    color: #606060;
-    padding: 20px;
-    text-align: center;
+  .loading-spinner {
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px;
+  }
+
+  .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #065fd4;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
   }
 
   .no-comments {

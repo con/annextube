@@ -65,11 +65,21 @@
 
     <div class="metadata-row">
       <div class="metadata-left">
+        <span class="channel-name">{fullMetadata.channel_name}</span>
+        <span class="separator">•</span>
         <span class="views">{formatViews(fullMetadata.view_count)}</span>
         <span class="separator">•</span>
         <span class="date">{formatRelativeTime(fullMetadata.published_at)}</span>
       </div>
       <div class="metadata-right">
+        <a
+          href={fullMetadata.source_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="youtube-link"
+        >
+          View on YouTube ↗
+        </a>
         <div class="stat">
           <span class="stat-value">{fullMetadata.like_count.toLocaleString()}</span>
           <span class="stat-label">likes</span>
@@ -77,25 +87,19 @@
       </div>
     </div>
 
-    <div class="channel-section">
-      <div class="channel-info">
-        <div class="channel-name">{fullMetadata.channel_name}</div>
-      </div>
-    </div>
-
-    <div class="description-section">
+    <div class="details-section">
       <button
-        class="description-toggle"
+        class="details-toggle"
         on:click={() => showDescription = !showDescription}
       >
-        {showDescription ? '▼' : '▶'} Description
+        {showDescription ? '▼' : '▶'} Video Details
       </button>
       {#if showDescription}
-        <div class="description-content">
-          <div class="description-meta">
+        <div class="details-content">
+          <div class="details-meta">
             <div><strong>Published:</strong> {new Date(fullMetadata.published_at).toLocaleDateString()}</div>
             <div><strong>Duration:</strong> {formatDuration(fullMetadata.duration)}</div>
-            <div><strong>Status:</strong> {fullMetadata.download_status}</div>
+            <div><strong>Download Status:</strong> {fullMetadata.download_status}</div>
             {#if fullMetadata.tags && fullMetadata.tags.length > 0}
               <div><strong>Tags:</strong> {fullMetadata.tags.join(', ')}</div>
             {/if}
@@ -105,11 +109,12 @@
             {#if fullMetadata.captions_available.length > 0}
               <div><strong>Captions:</strong> {fullMetadata.captions_available.join(', ')}</div>
             {/if}
-          </div>
-          <div class="source-link">
-            <a href={fullMetadata.source_url} target="_blank" rel="noopener noreferrer">
-              View on YouTube ↗
-            </a>
+            {#if fullMetadata.description}
+              <div class="description-text">
+                <strong>Description:</strong>
+                <p>{fullMetadata.description}</p>
+              </div>
+            {/if}
           </div>
         </div>
       {/if}
@@ -200,29 +205,34 @@
     color: #606060;
   }
 
-  .channel-section {
-    display: flex;
-    align-items: center;
-    padding: 16px 0;
-    border-bottom: 1px solid #e0e0e0;
-  }
-
-  .channel-info {
-    flex: 1;
-  }
-
   .channel-name {
-    font-size: 14px;
     font-weight: 500;
     color: #030303;
   }
 
-  .description-section {
-    margin-top: 16px;
-    padding: 16px 0;
+  .youtube-link {
+    color: #065fd4;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border: 1px solid #065fd4;
+    border-radius: 4px;
+    transition: all 0.2s;
   }
 
-  .description-toggle {
+  .youtube-link:hover {
+    background: #065fd4;
+    color: white;
+  }
+
+  .details-section {
+    margin-top: 16px;
+    padding: 16px 0;
+    border-top: 1px solid #e0e0e0;
+  }
+
+  .details-toggle {
     background: none;
     border: none;
     padding: 8px 0;
@@ -235,11 +245,11 @@
     gap: 8px;
   }
 
-  .description-toggle:hover {
+  .details-toggle:hover {
     color: #065fd4;
   }
 
-  .description-content {
+  .details-content {
     margin-top: 12px;
     padding: 16px;
     background: #f9f9f9;
@@ -248,36 +258,39 @@
     line-height: 1.6;
   }
 
-  .description-meta {
+  .details-meta {
     display: flex;
     flex-direction: column;
     gap: 8px;
     color: #030303;
   }
 
-  .description-meta strong {
+  .details-meta strong {
     font-weight: 500;
   }
 
-  .source-link {
-    margin-top: 16px;
-    padding-top: 16px;
+  .description-text {
+    margin-top: 12px;
+    padding-top: 12px;
     border-top: 1px solid #e0e0e0;
   }
 
-  .source-link a {
-    color: #065fd4;
-    text-decoration: none;
-    font-size: 14px;
-  }
-
-  .source-link a:hover {
-    text-decoration: underline;
+  .description-text p {
+    margin: 8px 0 0 0;
+    white-space: pre-wrap;
   }
 
   @media (max-width: 768px) {
     .video-detail {
       padding: 16px 0;
+    }
+
+    .back-button {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      margin-bottom: 12px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
     .title {
@@ -288,6 +301,10 @@
       flex-direction: column;
       align-items: flex-start;
       gap: 12px;
+    }
+
+    .youtube-link {
+      align-self: flex-start;
     }
   }
 </style>
