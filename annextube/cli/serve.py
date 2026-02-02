@@ -200,8 +200,10 @@ def serve(
     # Change to archive directory
     os.chdir(output_dir)
 
-    # Create server
+    # Create server with socket reuse enabled
     try:
+        # Enable SO_REUSEADDR to allow binding to recently-used ports
+        socketserver.TCPServer.allow_reuse_address = True
         with socketserver.TCPServer((host, port), RangeHTTPRequestHandler) as httpd:
             click.echo()
             click.echo(f"🚀 Serving annextube archive at http://{host}:{port}/")

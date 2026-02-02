@@ -45,7 +45,7 @@ export interface Video {
   has_auto_captions: boolean;
   file_path?: string;
   file_size?: number;
-  download_status: 'not_downloaded' | 'tracked' | 'downloaded' | 'failed';
+  download_status: 'metadata_only' | 'tracked' | 'downloaded' | 'failed';
   source_url: string;
   fetched_at: string; // ISO 8601 datetime
   updated_at: string; // ISO 8601 datetime

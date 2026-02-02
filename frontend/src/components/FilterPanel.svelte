@@ -21,10 +21,19 @@
   let dateTo = '';
   let selectedChannels: string[] = [];
   let selectedTags: string[] = [];
-  let selectedStatuses: string[] = [];
+  let selectedStatusFilter: string = 'all'; // Dropdown: 'all', 'downloaded', 'metadata_only'
   let selectedPlaylists: string[] = [];
   let sortField: SortField = 'date';
   let sortDirection: SortDirection = 'desc';
+
+  // Convert dropdown selection to filter array
+  $: selectedStatuses = selectedStatusFilter === 'all'
+    ? [] // Empty array means no filter (show all)
+    : selectedStatusFilter === 'downloaded'
+    ? ['downloaded'] // Show only downloaded videos
+    : selectedStatusFilter === 'metadata_only'
+    ? ['metadata_only'] // Show only metadata-only videos
+    : [];
 
   // Derived values for dropdowns
   $: availableChannels = filterService.getUniqueChannels(videos);
@@ -40,7 +49,7 @@
     dateTo;
     selectedChannels;
     selectedTags;
-    selectedStatuses;
+    selectedStatusFilter;
     selectedPlaylists;
     sortField;
     sortDirection;
@@ -110,7 +119,7 @@
     dateTo = '';
     selectedChannels = [];
     selectedTags = [];
-    selectedStatuses = [];
+    selectedStatusFilter = 'all';
     selectedPlaylists = [];
     sortField = 'date';
     sortDirection = 'desc';
@@ -122,7 +131,7 @@
     dateFrom.length > 0 || dateTo.length > 0,
     selectedChannels.length > 0,
     selectedTags.length > 0,
-    selectedStatuses.length > 0,
+    selectedStatusFilter !== 'all',
     selectedPlaylists.length > 0,
   ].filter(Boolean).length;
 
@@ -244,21 +253,12 @@
 
     <!-- Download Status -->
     <div class="filter-group">
-      <label class="filter-label">Download Status</label>
-      <div class="checkbox-group">
-        <label class="checkbox-label">
-          <input type="checkbox" value="downloaded" bind:group={selectedStatuses} />
-          Downloaded
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="tracked" bind:group={selectedStatuses} />
-          Tracked
-        </label>
-        <label class="checkbox-label">
-          <input type="checkbox" value="not_downloaded" bind:group={selectedStatuses} />
-          Not Downloaded
-        </label>
-      </div>
+      <label class="filter-label">Video Availability</label>
+      <select bind:value={selectedStatusFilter} class="filter-select">
+        <option value="all">All Videos</option>
+        <option value="downloaded">Backup Available (Local)</option>
+        <option value="metadata_only">Metadata Only</option>
+      </select>
     </div>
 
     <!-- Sort -->

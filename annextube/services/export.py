@@ -67,25 +67,32 @@ class ExportService:
                 relative_path = video_dir.relative_to(videos_dir)
 
                 # Determine download status by checking git-annex state
-                # video.mkv could be:
-                # - Missing: not_downloaded
-                # - Symlink to URL--* in git-annex: tracked (URL only, content not downloaded)
-                # - Symlink to content hash in git-annex: downloaded (actual content present)
+                # video.mkv states:
+                # 1. Missing: metadata_only (no video file)
+                # 2. Symlink exists but target missing: metadata_only (broken link)
+                # 3. Symlink target exists and small (<1MB): tracked (URL-only, can stream from YouTube)
+                # 4. Symlink target exists and large (>1MB): downloaded (actual video content)
                 video_file = video_dir / "video.mkv"
                 if not video_file.exists():
-                    download_status = "not_downloaded"
+                    download_status = "metadata_only"
                 elif video_file.is_symlink():
-                    # Check if symlink points to URL entry (tracked only) or content (downloaded)
-                    # URL entries have "URL--" in their path
                     try:
-                        target = os.readlink(video_file)
-                        if "URL--" in target:
-                            download_status = "tracked"
+                        # Check if symlink target actually exists
+                        target_path = video_file.resolve()
+                        if not target_path.exists():
+                            download_status = "metadata_only"
                         else:
-                            download_status = "downloaded"
-                    except OSError:
-                        # Can't read symlink - assume tracked
-                        download_status = "tracked"
+                            # Check file size to distinguish URL-only vs actual content
+                            # URL-only: typically < 1KB
+                            # Video content: typically > 1MB
+                            file_size = target_path.stat().st_size
+                            if file_size > 1024 * 1024:  # > 1MB
+                                download_status = "downloaded"
+                            else:
+                                download_status = "tracked"
+                    except (OSError, RuntimeError):
+                        # Broken symlink or error reading
+                        download_status = "metadata_only"
                 else:
                     # Regular file (not symlink) - definitely downloaded
                     download_status = "downloaded"
