@@ -99,3 +99,4 @@ docs/.hugo_build.lock
 .config/  # User config created during testing
 .anaconda/
 .conda/
+.claude/settings.local.json
