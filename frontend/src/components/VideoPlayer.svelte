@@ -2,7 +2,6 @@
   import type { Video } from '@/types/models';
 
   export let video: Video;
-  export let baseUrl: string = '..';
 
   // Active tab: 'local' or 'youtube'
   let activeTab: 'local' | 'youtube' = video.download_status === 'downloaded' ? 'local' : 'youtube';
@@ -15,13 +14,23 @@
   let videoErrorMessage = '';
   let youtubeLoading = true;
 
-  // Get video file path
+  // Get video file path (absolute path from server root)
   function getVideoPath(): string {
     // Use path from videos.tsv (supports hierarchical structure like 2026/01/video_dir)
     // Fall back to video_id for older archives
     const filePath = video.file_path || video.video_id;
     // Video files are named video.mkv (git-annex symlinked to actual content)
-    return `${baseUrl}/videos/${filePath}/video.mkv`;
+    // Use absolute path from server root to avoid relative path issues with hash routing
+    const path = `/videos/${filePath}/video.mkv`;
+    console.log('[VideoPlayer] Video path:', path, 'download_status:', video.download_status);
+    return path;
+  }
+
+  // Get local thumbnail path (use local file instead of YouTube CDN to avoid CORS issues)
+  function getThumbnailPath(): string {
+    const filePath = video.file_path || video.video_id;
+    // Use absolute path from server root
+    return `/videos/${filePath}/thumbnail.jpg`;
   }
 
   // Get YouTube embed URL
@@ -37,6 +46,16 @@
     videoError = true;
     const videoEl = event.target as HTMLVideoElement;
     const error = videoEl.error;
+
+    console.error('[VideoPlayer] Video error event:', {
+      error: error ? {
+        code: error.code,
+        message: error.message,
+      } : 'no error object',
+      src: videoEl.src,
+      networkState: videoEl.networkState,
+      readyState: videoEl.readyState,
+    });
 
     if (error) {
       switch (error.code) {
@@ -56,6 +75,19 @@
           videoErrorMessage = 'An unknown error occurred while loading the video.';
       }
     }
+  }
+
+  // Add debug logging for video events
+  function handleVideoLoadStart() {
+    console.log('[VideoPlayer] Video load started');
+  }
+
+  function handleVideoLoadedMetadata() {
+    console.log('[VideoPlayer] Video metadata loaded');
+  }
+
+  function handleVideoCanPlay() {
+    console.log('[VideoPlayer] Video can play');
   }
 
   // Handle iframe load
@@ -130,14 +162,24 @@
             controls
             crossorigin="anonymous"
             preload="metadata"
+            poster={getThumbnailPath()}
             on:error={handleVideoError}
+            on:loadstart={handleVideoLoadStart}
+            on:loadedmetadata={handleVideoLoadedMetadata}
+            on:canplay={handleVideoCanPlay}
           >
-            <source src={getVideoPath()} type="video/x-matroska" />
+            <!--
+              NOTE: No type attribute specified - let browser auto-detect format.
+              Specifying type="video/x-matroska" causes some browsers to reject the video
+              before even trying to load it (networkState: NETWORK_NO_SOURCE).
+              Without the type attribute, browsers will load the file and detect format.
+            -->
+            <source src={getVideoPath()} />
 
             {#each captionTracks as lang}
               <track
                 kind="subtitles"
-                src={`${baseUrl}/videos/${video.file_path || video.video_id}/video.${lang}.vtt`}
+                src={`/videos/${video.file_path || video.video_id}/video.${lang}.vtt`}
                 srclang={lang}
                 label={lang.toUpperCase()}
               />
@@ -157,7 +199,7 @@
           {#if youtubeLoading}
             <div class="youtube-loading">
               <img
-                src={video.thumbnail_url}
+                src={getThumbnailPath()}
                 alt={video.title}
                 class="thumbnail-placeholder"
               />
