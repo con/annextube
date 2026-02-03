@@ -35,7 +35,7 @@ class ArchiveWatcher:
         self.web_dir = web_dir
         self.watch_interval = watch_interval
         self.running = False
-        self.last_mtimes = {}
+        self.last_mtimes: dict[str, float] = {}
 
         # Track metadata files
         self.watched_patterns = [

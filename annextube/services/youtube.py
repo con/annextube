@@ -676,7 +676,7 @@ class YouTubeService:
 
     def download_captions(
         self, video_id: str, output_dir: Path, language_pattern: str = ".*",
-        auto_translated_langs: list[str] | None = None, base_filename: str = None
+        auto_translated_langs: list[str] | None = None, base_filename: str | None = None
     ) -> list[dict[str, Any]]:
         """Download captions for a video, excluding auto-translated by default.
 

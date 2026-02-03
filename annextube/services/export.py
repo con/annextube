@@ -21,7 +21,7 @@ class ExportService:
         """
         self.repo_path = repo_path
 
-    def generate_videos_tsv(self, output_path: Path = None) -> Path:
+    def generate_videos_tsv(self, output_path: Path | None = None) -> Path:
         """Generate videos/videos.tsv with summary metadata for all videos.
 
         Scans videos/ directory and extracts key metadata from each
@@ -118,7 +118,7 @@ class ExportService:
 
         return output_path
 
-    def generate_playlists_tsv(self, output_path: Path = None) -> Path:
+    def generate_playlists_tsv(self, output_path: Path | None = None) -> Path:
         """Generate playlists/playlists.tsv mapping folder names to playlist metadata.
 
         Scans playlists/ directory and extracts metadata from each

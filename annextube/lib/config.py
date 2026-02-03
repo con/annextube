@@ -354,7 +354,7 @@ def load_config(config_path: Path | None = None, repo_path: Path | None = None) 
     return config
 
 
-def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
+def generate_config_template(urls: list[str] | None = None, enable_videos: bool = True,
                             comments_depth: int | None = None, enable_captions: bool = True,
                             enable_thumbnails: bool = True, limit: int | None = None,
                             include_playlists: str = "none",
@@ -522,7 +522,7 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
 '''
 
 
-def save_config_template(config_dir: Path, urls: list[str] = None,
+def save_config_template(config_dir: Path, urls: list[str] | None = None,
                         enable_videos: bool = True, comments_depth: int | None = None,
                         enable_captions: bool = True, enable_thumbnails: bool = True,
                         limit: int | None = None, include_playlists: str = "none",

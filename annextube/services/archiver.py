@@ -79,7 +79,7 @@ class Archiver:
 
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache = None  # Cache for video ID to path mapping
-        self._processed_video_ids = set()  # Track videos processed in current run (avoid duplicates)
+        self._processed_video_ids: set[str] = set()  # Track videos processed in current run (avoid duplicates)
 
         # Configure git-annex with user config settings
         self.git_annex.configure_ytdlp_options(
@@ -104,7 +104,7 @@ class Archiver:
         Returns:
             Dictionary of extractor arguments for yt-dlp Python API
         """
-        extractor_args = {}
+        extractor_args: dict[str, dict[str, list[str]]] = {}
 
         i = 0
         while i < len(ytdlp_extra_opts):
