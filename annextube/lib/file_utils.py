@@ -1,6 +1,7 @@
 """File utilities for safe operations with git-annex repositories."""
 
 from pathlib import Path
+from typing import IO, Any
 
 
 def atomic_write(file_path: Path, content: str, encoding: str = 'utf-8') -> None:
@@ -83,7 +84,7 @@ class AtomicFileWriter:
         self.file_path = Path(file_path)
         self.mode = mode
         self.encoding = encoding if 'b' not in mode else None
-        self.file = None
+        self.file: IO[Any] | None = None
 
     def __enter__(self):
         """Enter context: remove existing file and open for writing."""

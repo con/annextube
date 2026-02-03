@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -43,7 +44,7 @@ def info(ctx: click.Context, output_dir: Path):
             return
 
         # Collect statistics
-        stats = {
+        stats: dict[str, Any] = {
             "videos": 0,
             "metadata_files": 0,
             "thumbnails": 0,

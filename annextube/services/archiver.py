@@ -4,7 +4,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from annextube.lib.config import SourceConfig
@@ -510,7 +510,7 @@ class Archiver:
         """
         logger.info(f"Starting backup for channel: {channel_url} (mode: {self.update_mode})")
 
-        stats = {
+        stats: dict[str, Any] = {
             "channel_url": channel_url,
             "videos_processed": 0,
             "videos_tracked": 0,
@@ -659,7 +659,7 @@ class Archiver:
         """
         logger.info(f"Starting backup for playlist: {playlist_url}")
 
-        stats = {
+        stats: dict[str, Any] = {
             "playlist_url": playlist_url,
             "videos_processed": 0,
             "videos_tracked": 0,
@@ -894,8 +894,8 @@ class Archiver:
             should_fetch_captions = self.config.components.captions
         else:
             # Existing video: only download if captions available and mode allows
-            should_fetch_captions = self.config.components.captions and video.captions_available and \
-                                   self._should_process_component("captions")
+            should_fetch_captions = bool(self.config.components.captions and video.captions_available and
+                                        self._should_process_component("captions"))
         if should_fetch_captions:
             downloaded_captions = self._download_captions(video, video_dir)
             caption_count = len(downloaded_captions)

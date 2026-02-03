@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -173,7 +174,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 click.echo(f"Limit: {config.filters.limit} videos per source (most recent)")
             click.echo()
 
-            total_stats = {
+            total_stats: dict[str, Any] = {
                 "sources_processed": 0,
                 "videos_processed": 0,
                 "videos_tracked": 0,
