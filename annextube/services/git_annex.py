@@ -2,6 +2,7 @@
 
 import subprocess
 from pathlib import Path
+from typing import cast
 
 from annextube.lib.logging_config import get_logger
 
@@ -540,7 +541,7 @@ class GitAnnexService:
                 import json
                 data = json.loads(result.stdout)
                 # git-annex metadata JSON format: {"fields": {"key": ["value1", "value2"]}}
-                return data.get("fields", {})
+                return cast(dict[str, list[str]], data.get("fields", {}))
             return {}
         except subprocess.CalledProcessError:
             # File not in annex or no metadata

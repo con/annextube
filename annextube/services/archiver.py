@@ -78,7 +78,7 @@ class Archiver:
         )
 
         self.export = ExportService(repo_path)
-        self._video_id_to_path_cache = None  # Cache for video ID to path mapping
+        self._video_id_to_path_cache: dict[str, str] | None = None  # Cache for video ID to path mapping
         self._processed_video_ids: set[str] = set()  # Track videos processed in current run (avoid duplicates)
 
         # Configure git-annex with user config settings
@@ -233,7 +233,7 @@ class Archiver:
         # Default: process everything
         return True
 
-    def _load_video_paths(self) -> dict:
+    def _load_video_paths(self) -> dict[str, str]:
         """Load existing video ID to path mapping from videos.tsv.
 
         Returns:
@@ -292,13 +292,14 @@ class Archiver:
         if self._video_id_to_path_cache is None:
             self._video_id_to_path_cache = self._load_video_paths()
 
+        assert self._video_id_to_path_cache is not None  # Type narrowing for mypy
         # Check if this video already exists with a different path
         existing_rel_path = self._video_id_to_path_cache.get(video.video_id)
         if not existing_rel_path:
             # New video, no rename needed
             return new_path
 
-        existing_path = self.repo_path / "videos" / existing_rel_path
+        existing_path: Path = self.repo_path / "videos" / existing_rel_path
 
         # If paths are the same, no rename needed
         if existing_path == new_path:

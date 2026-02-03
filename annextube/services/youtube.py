@@ -5,7 +5,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yt_dlp
 
@@ -150,7 +150,7 @@ class YouTubeService:
         Returns:
             yt-dlp options dictionary
         """
-        opts = {
+        opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
             "extract_flat": False,  # Get full metadata
@@ -226,6 +226,7 @@ class YouTubeService:
         use_two_pass = existing_video_ids is not None and len(existing_video_ids) > 0
 
         if use_two_pass:
+            assert existing_video_ids is not None  # Type narrowing for mypy
             # First pass: Get just IDs with extract_flat
             flat_opts = ydl_opts.copy()
             flat_opts.update({
@@ -605,7 +606,7 @@ class YouTubeService:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(video_url, download=False)
-                return info
+                return cast(dict[str, Any] | None, info)
             except yt_dlp.utils.DownloadError as e:
                 error_msg = str(e).lower()
 
@@ -670,7 +671,7 @@ class YouTubeService:
                 break
 
         if best_format and "url" in best_format:
-            return best_format["url"]
+            return cast(str, best_format["url"])
 
         return video_url  # Fallback
 
@@ -957,7 +958,7 @@ class YouTubeService:
         if not comments:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-            ydl_opts = {
+            ydl_opts: dict[str, Any] = {
                 "quiet": True,
                 "no_warnings": True,
                 "skip_download": True,
