@@ -36,6 +36,13 @@ class SourceConfig:
     exclude_playlists: str | None = None  # Regex pattern to exclude playlists
     include_podcasts: str = "none"  # "all", "none", or regex pattern for podcast auto-discovery
 
+    # Per-source component overrides (None = use global config)
+    videos: bool | None = None  # Override: Download video content
+    metadata: bool | None = None  # Override: Save metadata
+    comments_depth: int | None = None  # Override: Comments depth
+    captions: bool | None = None  # Override: Download captions
+    thumbnails: bool | None = None  # Override: Download thumbnails
+
 
 @dataclass
 class ComponentsConfig:
@@ -163,6 +170,12 @@ class Config:
                 include_playlists=s.get("include_playlists", "none"),
                 exclude_playlists=s.get("exclude_playlists"),
                 include_podcasts=cls._normalize_include_podcasts(s.get("include_podcasts", "none")),
+                # Per-source component overrides
+                videos=s.get("videos"),
+                metadata=s.get("metadata"),
+                comments_depth=s.get("comments_depth"),
+                captions=s.get("captions"),
+                thumbnails=s.get("thumbnails"),
             )
             for s in data.get("sources", [])
         ]

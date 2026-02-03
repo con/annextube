@@ -4,12 +4,9 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import Any
 
-if TYPE_CHECKING:
-    from annextube.lib.config import SourceConfig
-
-from annextube.lib.config import Config
+from annextube.lib.config import Config, SourceConfig
 from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
 from annextube.models.playlist import Playlist
@@ -80,6 +77,7 @@ class Archiver:
         self.export = ExportService(repo_path)
         self._video_id_to_path_cache: dict[str, str] | None = None  # Cache for video ID to path mapping
         self._processed_video_ids: set[str] = set()  # Track videos processed in current run (avoid duplicates)
+        self._current_source_config: SourceConfig | None = None  # Current source being processed (for component overrides)
 
         # Configure git-annex with user config settings
         self.git_annex.configure_ytdlp_options(
@@ -91,6 +89,24 @@ class Archiver:
             max_sleep_interval=config.user.max_sleep_interval,
             extra_opts=config.user.ytdlp_extra_opts,
         )
+
+    def _get_component_value(self, component: str) -> Any:
+        """Get effective component value (source override or global config).
+
+        Args:
+            component: Component name (videos, metadata, comments_depth, captions, thumbnails)
+
+        Returns:
+            Effective component value
+        """
+        # Check if current source has an override
+        if self._current_source_config:
+            override = getattr(self._current_source_config, component, None)
+            if override is not None:
+                return override
+
+        # Fall back to global config
+        return getattr(self.config.components, component)
 
     def _parse_extractor_args(self, ytdlp_extra_opts: list[str]) -> dict:
         """Parse ytdlp_extra_opts CLI-style options to Python API extractor_args format.
@@ -498,16 +514,18 @@ class Archiver:
 
         return [p['url'] for p in playlists]
 
-    def backup_channel(self, channel_url: str, source_config: Optional['SourceConfig'] = None) -> dict:
+    def backup_channel(self, channel_url: str, source_config: SourceConfig | None = None) -> dict:
         """Backup a YouTube channel.
 
         Args:
             channel_url: YouTube channel URL
-            source_config: Optional source configuration for playlists
+            source_config: Optional source configuration for playlists and component overrides
 
         Returns:
             Summary dictionary with statistics
         """
+        # Set current source for component overrides
+        self._current_source_config = source_config
         logger.info(f"Starting backup for channel: {channel_url} (mode: {self.update_mode})")
 
         stats: dict[str, Any] = {
@@ -631,7 +649,7 @@ class Archiver:
 
             # Playlist errors will propagate (fail-fast)
             for playlist_url in playlist_urls:
-                playlist_stats = self.backup_playlist(playlist_url)
+                playlist_stats = self.backup_playlist(playlist_url, source_config=source_config)
                 stats["videos_processed"] += playlist_stats.get("videos_processed", 0)
                 stats["videos_tracked"] += playlist_stats.get("videos_tracked", 0)
                 stats["metadata_saved"] += playlist_stats.get("metadata_saved", 0)
@@ -648,15 +666,18 @@ class Archiver:
 
         return stats
 
-    def backup_playlist(self, playlist_url: str) -> dict:
+    def backup_playlist(self, playlist_url: str, source_config: SourceConfig | None = None) -> dict:
         """Backup a YouTube playlist.
 
         Args:
             playlist_url: YouTube playlist URL
+            source_config: Optional source configuration for component overrides
 
         Returns:
             Summary dictionary with statistics
         """
+        # Set current source for component overrides
+        self._current_source_config = source_config
         logger.info(f"Starting backup for playlist: {playlist_url}")
 
         stats: dict[str, Any] = {
@@ -870,7 +891,7 @@ class Archiver:
                 logger.debug(f"Set git-annex metadata for: {video_file}")
 
                 # If videos component enabled, download the content
-                if self.config.components.videos:
+                if self._get_component_value('videos'):
                     logger.info(f"Downloading video content: {video_file}")
                     self.git_annex.get_file(video_file)
 
@@ -880,7 +901,7 @@ class Archiver:
         # Download thumbnail (if enabled and mode allows)
         # For NEW videos: always fetch if configured, regardless of mode
         # For EXISTING videos: respect component-specific mode
-        should_fetch_thumbnail = self.config.components.thumbnails and video.thumbnail_url and \
+        should_fetch_thumbnail = self._get_component_value('thumbnails') and video.thumbnail_url and \
                                (is_new_video or self._should_process_component("metadata"))
         if should_fetch_thumbnail:
             self._download_thumbnail(video, video_dir)
@@ -891,10 +912,10 @@ class Archiver:
         caption_count = 0
         if is_new_video:
             # New video: try to download if captions enabled, regardless of what metadata says
-            should_fetch_captions = self.config.components.captions
+            should_fetch_captions = self._get_component_value('captions')
         else:
             # Existing video: only download if captions available and mode allows
-            should_fetch_captions = bool(self.config.components.captions and video.captions_available and
+            should_fetch_captions = bool(self._get_component_value('captions') and video.captions_available and
                                         self._should_process_component("captions"))
         if should_fetch_captions:
             downloaded_captions = self._download_captions(video, video_dir)
@@ -914,14 +935,14 @@ class Archiver:
         # For EXISTING videos: respect component-specific mode
         # comments_depth: None = unlimited, 0 = disabled, N = limit to N
         comments_fetched = False
-        should_fetch_comments = self.config.components.comments_depth != 0 and \
+        should_fetch_comments = self._get_component_value('comments_depth') != 0 and \
                                (is_new_video or self._should_process_component("comments"))
         if should_fetch_comments:
             comments_path = video_dir / "comments.json"
             comments_fetched = self.youtube.download_comments(
                 video.video_id,
                 comments_path,
-                max_depth=self.config.components.comments_depth
+                max_depth=self._get_component_value('comments_depth')
             )
 
             # Set git-annex metadata for comments file

@@ -187,7 +187,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
 
                 # Route to appropriate backup method
                 if source.type == "playlist":
-                    stats = archiver.backup_playlist(source.url)
+                    stats = archiver.backup_playlist(source.url, source_config=source)
                 else:
                     stats = archiver.backup_channel(source.url, source_config=source)
                 _print_stats(stats, prefix="  ")
