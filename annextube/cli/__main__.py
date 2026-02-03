@@ -5,6 +5,14 @@ from pathlib import Path
 
 import click
 
+from annextube.cli.backup import backup
+from annextube.cli.check import check
+from annextube.cli.export import export
+from annextube.cli.generate_web import generate_web
+from annextube.cli.info import info
+from annextube.cli.init import init
+from annextube.cli.init_user_config import init_user_config
+from annextube.cli.serve import serve
 from annextube.lib.logging_config import setup_logging
 
 # Version
@@ -51,16 +59,6 @@ def cli(
     ctx.obj["logger"] = logger
     ctx.obj["json_output"] = json_output
 
-
-# Import commands
-from annextube.cli.backup import backup
-from annextube.cli.check import check
-from annextube.cli.export import export
-from annextube.cli.generate_web import generate_web
-from annextube.cli.info import info
-from annextube.cli.init import init
-from annextube.cli.init_user_config import init_user_config
-from annextube.cli.serve import serve
 
 cli.add_command(init)
 cli.add_command(init_user_config)

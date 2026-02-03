@@ -115,4 +115,4 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
     except Exception as e:
         logger.error(f"Initialization failed: {e}")
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

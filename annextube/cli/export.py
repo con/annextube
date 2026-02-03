@@ -96,4 +96,4 @@ def export(ctx: click.Context, what: str, output_dir: Path, output: Path):
     except Exception as e:
         logger.error(f"Export failed: {e}")
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

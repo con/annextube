@@ -110,4 +110,4 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
     except Exception as e:
         logger.error(f"Web generation failed: {e}")
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

@@ -219,7 +219,7 @@ class GitAnnexService:
         if len(removed_lines) != len(added_lines):
             return False  # Different number of lines changed
 
-        for old, new in zip(removed_lines, added_lines):
+        for old, new in zip(removed_lines, added_lines, strict=True):
             # Replace all datetimes with a placeholder
             old_normalized = iso_datetime_pattern.sub('DATETIME', old)
             new_normalized = iso_datetime_pattern.sub('DATETIME', new)

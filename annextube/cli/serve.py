@@ -217,7 +217,7 @@ def serve(
 
         except Exception as e:
             click.echo(f"Error regenerating: {e}", err=True)
-            raise click.Abort()
+            raise click.Abort() from e
 
     # Start watcher thread if enabled
     watcher_thread = None
@@ -261,4 +261,4 @@ def serve(
             click.echo(f"Error: Port {port} is already in use. Try a different port with --port", err=True)
         else:
             click.echo(f"Error starting server: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

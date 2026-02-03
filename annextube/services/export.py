@@ -55,10 +55,6 @@ class ExportService:
                 with open(metadata_path) as f:
                     metadata = json.load(f)
 
-                # Count available captions
-                captions_available = metadata.get("captions_available", [])
-                caption_count = len(captions_available) if isinstance(captions_available, list) else 0
-
                 # Extract key fields for TSV (frontend-compatible format)
                 video_id = metadata.get("video_id", "")
 

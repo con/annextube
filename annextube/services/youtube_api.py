@@ -22,7 +22,7 @@ class YouTubeAPICommentsService:
     def __init__(self, api_key: str | None = None):
         """
         Initialize YouTube API client.
-        
+
         Args:
             api_key: YouTube Data API v3 key. If not provided, reads from YOUTUBE_API_KEY env var.
         """

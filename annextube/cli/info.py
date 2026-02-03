@@ -128,4 +128,4 @@ def info(ctx: click.Context, output_dir: Path):
     except Exception as e:
         logger.error(f"Failed to read archive info: {e}")
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

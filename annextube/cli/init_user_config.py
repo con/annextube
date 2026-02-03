@@ -40,12 +40,12 @@ def init_user_config():
         click.echo("  - Use environment variables (YOUTUBE_API_KEY, ANNEXTUBE_COOKIES_FILE)")
         click.echo("    for sensitive values in CI/CD environments")
 
-    except FileExistsError:
+    except FileExistsError as e:
         config_path = get_user_config_path()
         click.echo(f"User config already exists: {config_path}", err=True)
         click.echo("Delete it first to regenerate, or edit directly.", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
     except Exception as e:
         logger.error(f"Failed to create user config: {e}")
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e

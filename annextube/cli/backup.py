@@ -126,7 +126,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 click.echo(f"From date: {date_from.strftime('%Y-%m-%d')}")
             except ValueError as e:
                 click.echo(f"Error: Invalid --from-date: {e}", err=True)
-                raise click.Abort()
+                raise click.Abort() from None
 
         if to_date:
             try:
@@ -134,7 +134,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 click.echo(f"To date: {date_to.strftime('%Y-%m-%d')}")
             except ValueError as e:
                 click.echo(f"Error: Invalid --to-date: {e}", err=True)
-                raise click.Abort()
+                raise click.Abort() from None
 
         # For all-incremental mode, default to 1 week window for social updates if no dates specified
         if update == "all-incremental" and not from_date:
@@ -215,12 +215,12 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
         click.echo("Edit .annextube/config.toml to configure sources")
-        raise click.Abort()
+        raise click.Abort() from e
 
     except Exception as e:
         logger.error(f"Backup failed: {e}")
         click.echo(f"Error: {e}", err=True)
-        raise click.Abort()
+        raise click.Abort() from e
 
 
 def _print_stats(stats: dict, prefix: str = ""):

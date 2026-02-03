@@ -342,7 +342,7 @@ def load_config(config_path: Path | None = None, repo_path: Path | None = None) 
         with open(config_path, "rb") as f:
             data = tomllib.load(f)
     except Exception as e:
-        raise ValueError(f"Failed to parse archive config {config_path}: {e}")
+        raise ValueError(f"Failed to parse archive config {config_path}: {e}") from e
 
     # Parse archive-specific sections
     config = Config.from_dict(data)
