@@ -4,7 +4,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from annextube.lib.config import SourceConfig
@@ -12,7 +12,6 @@ if TYPE_CHECKING:
 from annextube.lib.config import Config
 from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
-from annextube.models.channel import Channel
 from annextube.models.playlist import Playlist
 from annextube.models.video import Video
 from annextube.services.export import ExportService
@@ -44,7 +43,7 @@ class Archiver:
     """Core archival logic coordinating git-annex and YouTube services."""
 
     def __init__(self, repo_path: Path, config: Config, update_mode: str = "videos-incremental",
-                 date_from: Optional[datetime] = None, date_to: Optional[datetime] = None):
+                 date_from: datetime | None = None, date_to: datetime | None = None):
         """Initialize Archiver.
 
         Args:
@@ -128,7 +127,7 @@ class Archiver:
 
         return extractor_args
 
-    def _parse_remote_components(self, ytdlp_extra_opts: list[str]) -> Optional[str]:
+    def _parse_remote_components(self, ytdlp_extra_opts: list[str]) -> str | None:
         """Parse --remote-components option from ytdlp_extra_opts.
 
         Converts ["--remote-components", "ejs:github"] to "ejs:github"
@@ -246,7 +245,7 @@ class Archiver:
 
         video_map = {}
         try:
-            with open(videos_tsv, 'r', encoding='utf-8') as f:
+            with open(videos_tsv, encoding='utf-8') as f:
                 lines = f.readlines()
                 if len(lines) < 2:  # No data rows
                     return {}
@@ -424,7 +423,7 @@ class Archiver:
         return self.repo_path / "playlists" / path_str
 
     def _discover_playlists(self, channel_url: str, include_pattern: str,
-                           exclude_pattern: Optional[str], include_podcasts: str) -> List[str]:
+                           exclude_pattern: str | None, include_podcasts: str) -> list[str]:
         """Discover and filter playlists from a channel.
 
         Args:
@@ -568,7 +567,7 @@ class Archiver:
             if videos_tsv_path.exists():
                 # Read existing videos from TSV
                 total_videos = 0
-                with open(videos_tsv_path, 'r', encoding='utf-8') as f:
+                with open(videos_tsv_path, encoding='utf-8') as f:
                     reader = csv.DictReader(f, delimiter='\t')
                     for row in reader:
                         total_videos += 1
@@ -701,7 +700,7 @@ class Archiver:
 
         if metadata_path.exists() and self.update_mode in ["videos-incremental", "all-incremental"]:
             try:
-                with open(metadata_path, 'r') as f:
+                with open(metadata_path) as f:
                     old_data = json.load(f)
                     old_video_ids = [v['video_id'] for v in old_data.get('videos', [])]
                     new_video_ids = [v.get('id') for v in videos_metadata if v.get('id')]
@@ -973,7 +972,7 @@ class Archiver:
         except Exception as e:
             logger.warning(f"Failed to download thumbnail: {e}")
 
-    def _download_captions(self, video: Video, video_dir: Path) -> List[str]:
+    def _download_captions(self, video: Video, video_dir: Path) -> list[str]:
         """Download video captions, generate captions.tsv, and set git-annex metadata.
 
         Captions are saved directly in video directory (not captions/ subdirectory)

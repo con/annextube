@@ -1,8 +1,6 @@
 """File utilities for safe operations with git-annex repositories."""
 
-import os
 from pathlib import Path
-from typing import Optional
 
 
 def atomic_write(file_path: Path, content: str, encoding: str = 'utf-8') -> None:
@@ -74,7 +72,7 @@ class AtomicFileWriter:
             json.dump(data, f, indent=2)
     """
 
-    def __init__(self, file_path: Path, mode: str = 'w', encoding: Optional[str] = 'utf-8'):
+    def __init__(self, file_path: Path, mode: str = 'w', encoding: str | None = 'utf-8'):
         """Initialize atomic file writer.
 
         Args:

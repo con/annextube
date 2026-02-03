@@ -7,7 +7,6 @@ human-readable output formats.
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 # Log levels mapping
 LOG_LEVELS = {
@@ -64,7 +63,7 @@ class HumanReadableFormatter(logging.Formatter):
 def setup_logging(
     level: str = "info",
     json_format: bool = False,
-    log_file: Optional[Path] = None,
+    log_file: Path | None = None,
     quiet: bool = False,
 ) -> logging.Logger:
     """Configure logging for annextube.

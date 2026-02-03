@@ -1,16 +1,16 @@
 """Integration tests for new video component fetching logic."""
 
-import pytest
-import tempfile
 import subprocess
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+import tempfile
 from datetime import datetime
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+from annextube.lib.config import ComponentsConfig, Config
 from annextube.models.video import Video
 from annextube.services.archiver import Archiver
-from annextube.services.youtube import YouTubeService
-from annextube.services.git_annex import GitAnnexService
-from annextube.lib.config import Config, ComponentsConfig, SourceConfig
 
 
 @pytest.fixture

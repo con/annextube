@@ -76,7 +76,7 @@ def test_videos_tsv_structure():
         assert tsv_path.exists(), "TSV file should be created"
 
         # Verify structure
-        with open(tsv_path, "r") as f:
+        with open(tsv_path) as f:
             lines = f.readlines()
 
         # Check header - actual TSV structure matches VideoTSVRow interface
@@ -148,7 +148,7 @@ def test_playlists_tsv_structure():
         assert tsv_path.exists(), "TSV file should be created"
 
         # Verify structure
-        with open(tsv_path, "r") as f:
+        with open(tsv_path) as f:
             lines = f.readlines()
 
         # Check header - actual TSV structure matches PlaylistTSVRow interface
@@ -228,7 +228,7 @@ def test_multiple_videos_with_different_metadata():
         # Generate TSV
         tsv_path = export_service.generate_videos_tsv()
 
-        with open(tsv_path, "r") as f:
+        with open(tsv_path) as f:
             lines = f.readlines()
 
         # Verify correct number of entries (header + 3 videos)
@@ -248,8 +248,8 @@ def test_multiple_videos_with_different_metadata():
 @pytest.mark.ai_generated
 def test_video_path_without_id():
     """Test that video paths don't include video_id by default."""
-    from annextube.services.archiver import Archiver, sanitize_filename
     from annextube.lib.config import Config
+    from annextube.services.archiver import Archiver
 
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)

@@ -2,7 +2,6 @@
 
 import re
 from datetime import datetime, timedelta
-from typing import Optional
 
 
 def parse_duration(duration_str: str) -> timedelta:
@@ -55,7 +54,7 @@ def parse_duration(duration_str: str) -> timedelta:
         raise ValueError(f"Unknown time unit: {unit}")
 
 
-def parse_date(date_str: str, reference_date: Optional[datetime] = None) -> datetime:
+def parse_date(date_str: str, reference_date: datetime | None = None) -> datetime:
     """Parse date string with support for relative dates and ISO format.
 
     Args:

@@ -22,7 +22,8 @@ Usage:
 import argparse
 import sys
 import time
-from playwright.sync_api import sync_playwright, Page
+
+from playwright.sync_api import Page, sync_playwright
 
 
 def test_main_page_loads(page: Page, base_url: str) -> bool:

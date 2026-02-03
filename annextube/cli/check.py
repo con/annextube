@@ -1,6 +1,5 @@
 """Check command for annextube."""
 
-import json
 import subprocess
 from pathlib import Path
 
@@ -139,7 +138,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 vtt_count = len(list(output_dir.rglob("*.vtt")))
                 if vtt_count == 0:
                     warnings.append("Captions enabled but no .vtt files found")
-                    click.echo(f"\r⚠ Components: Captions enabled but no .vtt files found")
+                    click.echo("\r⚠ Components: Captions enabled but no .vtt files found")
                 else:
                     click.echo(f"\r✓ Components: {vtt_count} caption files")
 
@@ -148,7 +147,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 comment_files = list(output_dir.rglob("comments.json"))
                 if len(comment_files) == 0:
                     warnings.append("Comments enabled but no comments.json files found")
-                    click.echo(f"  ⚠ Comments enabled but no comments.json found")
+                    click.echo("  ⚠ Comments enabled but no comments.json found")
                 else:
                     click.echo(f"  ✓ {len(comment_files)} comment files")
 
@@ -157,7 +156,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 thumb_count = len(list(output_dir.rglob("thumbnail.jpg")))
                 if thumb_count == 0:
                     warnings.append("Thumbnails enabled but no thumbnail.jpg files found")
-                    click.echo(f"  ⚠ Thumbnails enabled but no thumbnail.jpg found")
+                    click.echo("  ⚠ Thumbnails enabled but no thumbnail.jpg found")
                 else:
                     click.echo(f"  ✓ {thumb_count} thumbnails")
 
@@ -166,7 +165,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 playlists_dir = output_dir / "playlists"
                 if not playlists_dir.exists() or not list(playlists_dir.iterdir()):
                     warnings.append("Playlists enabled but no playlists directory found")
-                    click.echo(f"  ⚠ Playlists enabled but no playlists found")
+                    click.echo("  ⚠ Playlists enabled but no playlists found")
                 else:
                     playlist_count = len([d for d in playlists_dir.iterdir() if d.is_dir()])
                     click.echo(f"  ✓ {playlist_count} playlists")

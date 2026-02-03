@@ -1,6 +1,5 @@
 """Unit tests for git-annex metadata operations."""
 
-import os
 import subprocess
 import tempfile
 from pathlib import Path

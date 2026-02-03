@@ -7,7 +7,7 @@ from annextube.services.youtube import YouTubeService
 @pytest.mark.ai_generated
 def test_metadata_to_video_with_stored_schema():
     """Test that metadata_to_video handles our stored schema (video_id) not just yt-dlp schema (id)."""
-    
+
     # Simulate what's stored in metadata.json (our Video.to_dict() schema)
     stored_metadata = {
         "video_id": "test123",  # We use video_id in stored format
@@ -31,12 +31,12 @@ def test_metadata_to_video_with_stored_schema():
         "source_url": "https://youtube.com/watch?v=test123",
         "fetched_at": "2026-01-01T00:00:00"
     }
-    
+
     youtube = YouTubeService()
-    
+
     # This should NOT raise KeyError - should handle both schemas
     video = youtube.metadata_to_video(stored_metadata)
-    
+
     # Verify the video was created correctly
     assert video.video_id == "test123"
     assert video.title == "Test Video"
@@ -46,7 +46,7 @@ def test_metadata_to_video_with_stored_schema():
 @pytest.mark.ai_generated
 def test_metadata_to_video_with_ytdlp_schema():
     """Test that metadata_to_video still works with yt-dlp schema (id)."""
-    
+
     # yt-dlp schema uses 'id' not 'video_id'
     ytdlp_metadata = {
         "id": "test456",  # yt-dlp uses 'id'
@@ -67,12 +67,12 @@ def test_metadata_to_video_with_ytdlp_schema():
         "automatic_captions": {},
         "webpage_url": "https://youtube.com/watch?v=test456"
     }
-    
+
     youtube = YouTubeService()
-    
+
     # This should work with yt-dlp schema
     video = youtube.metadata_to_video(ytdlp_metadata)
-    
+
     # Verify the video was created correctly
     assert video.video_id == "test456"
     assert video.title == "YT-DLP Video"

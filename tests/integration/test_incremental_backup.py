@@ -1,8 +1,9 @@
 """Integration test for incremental backup functionality."""
 
+import subprocess
 import tempfile
 from pathlib import Path
-import subprocess
+
 import pytest
 
 
@@ -136,4 +137,4 @@ def test_incremental_backup_detects_new_videos():
         stdout_text = result.stdout
         # Check that 3 videos were processed
         assert "videos processed: 3" in stdout_text.lower(), \
-            f"Should have processed 3 new videos"
+            "Should have processed 3 new videos"

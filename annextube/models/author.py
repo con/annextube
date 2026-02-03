@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 
 @dataclass
@@ -11,9 +10,9 @@ class Author:
 
     author_id: str  # YouTube channel ID
     name: str  # Channel/author display name
-    channel_url: Optional[str] = None  # Full channel URL if available
-    first_seen: Optional[datetime] = None  # First time encountered
-    last_seen: Optional[datetime] = None  # Most recent encounter
+    channel_url: str | None = None  # Full channel URL if available
+    first_seen: datetime | None = None  # First time encountered
+    last_seen: datetime | None = None  # Most recent encounter
     video_count: int = 0  # Number of videos uploaded by this author
     comment_count: int = 0  # Number of comments made by this author
 

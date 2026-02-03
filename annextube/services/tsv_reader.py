@@ -4,7 +4,6 @@ import csv
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from annextube.lib.logging_config import get_logger
 
@@ -15,7 +14,7 @@ class TSVReader:
     """Utilities for reading state from TSV files (single source of truth)."""
 
     @staticmethod
-    def get_latest_video_datetime(videos_tsv_path: Path) -> Optional[datetime]:
+    def get_latest_video_datetime(videos_tsv_path: Path) -> datetime | None:
         """Get the latest video publication datetime from videos.tsv.
 
         Args:
@@ -29,7 +28,7 @@ class TSVReader:
             return None
 
         try:
-            with open(videos_tsv_path, 'r', encoding='utf-8') as f:
+            with open(videos_tsv_path, encoding='utf-8') as f:
                 reader = csv.DictReader(f, delimiter='\t')
                 latest = None
 
@@ -61,7 +60,7 @@ class TSVReader:
             return None
 
     @staticmethod
-    def get_latest_playlist_update(playlists_tsv_path: Path, playlist_id: str) -> Optional[datetime]:
+    def get_latest_playlist_update(playlists_tsv_path: Path, playlist_id: str) -> datetime | None:
         """Get the last_updated datetime for a specific playlist.
 
         Args:
@@ -75,7 +74,7 @@ class TSVReader:
             return None
 
         try:
-            with open(playlists_tsv_path, 'r', encoding='utf-8') as f:
+            with open(playlists_tsv_path, encoding='utf-8') as f:
                 reader = csv.DictReader(f, delimiter='\t')
 
                 for row in reader:
@@ -95,7 +94,7 @@ class TSVReader:
             return None
 
     @staticmethod
-    def get_latest_comment_datetime(comments_json_path: Path) -> Optional[datetime]:
+    def get_latest_comment_datetime(comments_json_path: Path) -> datetime | None:
         """Get the latest comment timestamp from comments.json.
 
         Args:
@@ -108,7 +107,7 @@ class TSVReader:
             return None
 
         try:
-            with open(comments_json_path, 'r', encoding='utf-8') as f:
+            with open(comments_json_path, encoding='utf-8') as f:
                 comments = json.load(f)
 
             if not comments:
@@ -147,7 +146,7 @@ class TSVReader:
             return 0
 
         try:
-            with open(videos_tsv_path, 'r', encoding='utf-8') as f:
+            with open(videos_tsv_path, encoding='utf-8') as f:
                 # Skip header, count remaining lines
                 return sum(1 for _ in f) - 1
         except Exception as e:
@@ -168,7 +167,7 @@ class TSVReader:
             return set()
 
         try:
-            with open(videos_tsv_path, 'r', encoding='utf-8') as f:
+            with open(videos_tsv_path, encoding='utf-8') as f:
                 reader = csv.DictReader(f, delimiter='\t')
                 video_ids = set()
 

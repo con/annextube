@@ -2,7 +2,6 @@
 
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Tuple
 
 import click
 
@@ -118,8 +117,8 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             return
 
         # Parse date range (for all-incremental mode)
-        date_from: Optional[datetime] = None
-        date_to: Optional[datetime] = None
+        date_from: datetime | None = None
+        date_to: datetime | None = None
 
         if from_date:
             try:

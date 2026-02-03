@@ -1,11 +1,12 @@
 """Integration test: Verify no commits are created for timestamp-only changes."""
 
-import pytest
+import json
 import subprocess
 import tempfile
-import json
 from pathlib import Path
-from datetime import datetime
+
+import pytest
+
 from annextube.services.git_annex import GitAnnexService
 
 

@@ -12,7 +12,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from platformdirs import user_config_dir
 
@@ -33,7 +33,7 @@ class SourceConfig:
     type: str  # 'channel' or 'playlist'
     enabled: bool = True
     include_playlists: str = "none"  # "all", "none", or regex pattern for auto-discovery
-    exclude_playlists: Optional[str] = None  # Regex pattern to exclude playlists
+    exclude_playlists: str | None = None  # Regex pattern to exclude playlists
     include_podcasts: str = "none"  # "all", "none", or regex pattern for podcast auto-discovery
 
 
@@ -43,25 +43,25 @@ class ComponentsConfig:
 
     videos: bool = False  # Track URLs only by default
     metadata: bool = True
-    comments_depth: Optional[int] = None  # Maximum comments to fetch (None = unlimited, 0 = disabled)
+    comments_depth: int | None = None  # Maximum comments to fetch (None = unlimited, 0 = disabled)
     captions: bool = True
     thumbnails: bool = True
     caption_languages: str = ".*"  # Regex pattern for caption languages (default: all)
-    auto_translated_captions: List[str] = field(default_factory=list)  # Auto-translated languages to download (empty = only auto-generated)
+    auto_translated_captions: list[str] = field(default_factory=list)  # Auto-translated languages to download (empty = only auto-generated)
 
 
 @dataclass
 class FiltersConfig:
     """Configuration for filtering videos."""
 
-    limit: Optional[int] = None  # Limit to N most recent videos
-    date_start: Optional[str] = None  # ISO 8601 date
-    date_end: Optional[str] = None  # ISO 8601 date
-    license: Optional[str] = None  # 'standard' or 'creativeCommon'
-    min_duration: Optional[int] = None  # Seconds
-    max_duration: Optional[int] = None  # Seconds
-    min_views: Optional[int] = None
-    tags: List[str] = field(default_factory=list)
+    limit: int | None = None  # Limit to N most recent videos
+    date_start: str | None = None  # ISO 8601 date
+    date_end: str | None = None  # ISO 8601 date
+    license: str | None = None  # 'standard' or 'creativeCommon'
+    min_duration: int | None = None  # Seconds
+    max_duration: int | None = None  # Seconds
+    min_views: int | None = None
+    tags: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -87,21 +87,21 @@ class UserConfig:
     """
 
     # Authentication
-    cookies_file: Optional[str] = None  # Path to Netscape cookies.txt
-    cookies_from_browser: Optional[str] = None  # e.g., "firefox", "chrome:Profile 1"
-    api_key: Optional[str] = None  # YouTube Data API key (fallback if env var not set)
+    cookies_file: str | None = None  # Path to Netscape cookies.txt
+    cookies_from_browser: str | None = None  # e.g., "firefox", "chrome:Profile 1"
+    api_key: str | None = None  # YouTube Data API key (fallback if env var not set)
 
     # Network settings
-    proxy: Optional[str] = None  # e.g., "socks5://127.0.0.1:9050"
-    limit_rate: Optional[str] = None  # e.g., "500K" - bandwidth limit
-    sleep_interval: Optional[int] = None  # Min seconds between downloads
-    max_sleep_interval: Optional[int] = None  # Max seconds between downloads
+    proxy: str | None = None  # e.g., "socks5://127.0.0.1:9050"
+    limit_rate: str | None = None  # e.g., "500K" - bandwidth limit
+    sleep_interval: int | None = None  # Min seconds between downloads
+    max_sleep_interval: int | None = None  # Max seconds between downloads
 
     # Advanced
-    ytdlp_extra_opts: List[str] = field(default_factory=list)  # Extra CLI options for yt-dlp
+    ytdlp_extra_opts: list[str] = field(default_factory=list)  # Extra CLI options for yt-dlp
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "UserConfig":
+    def from_dict(cls, data: dict[str, Any]) -> "UserConfig":
         """Create UserConfig from dictionary (loaded from TOML)."""
         return cls(
             cookies_file=data.get("cookies_file"),
@@ -123,24 +123,24 @@ class Config:
     user: UserConfig = field(default_factory=UserConfig)
 
     # Archive-specific settings
-    sources: List[SourceConfig] = field(default_factory=list)
+    sources: list[SourceConfig] = field(default_factory=list)
     components: ComponentsConfig = field(default_factory=ComponentsConfig)
     filters: FiltersConfig = field(default_factory=FiltersConfig)
     organization: OrganizationConfig = field(default_factory=OrganizationConfig)
 
     # Convenience properties for backward compatibility
     @property
-    def api_key(self) -> Optional[str]:
+    def api_key(self) -> str | None:
         """Get API key from user config."""
         return self.user.api_key
 
     @property
-    def cookies_file(self) -> Optional[str]:
+    def cookies_file(self) -> str | None:
         """Get cookies file path from user config."""
         return self.user.cookies_file
 
     @property
-    def cookies_from_browser(self) -> Optional[str]:
+    def cookies_from_browser(self) -> str | None:
         """Get cookies browser from user config."""
         return self.user.cookies_from_browser
 
@@ -153,7 +153,7 @@ class Config:
         return str(value) if value else "none"
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "Config":
+    def from_dict(cls, data: dict[str, Any]) -> "Config":
         """Create Config from dictionary (loaded from TOML)."""
         sources = [
             SourceConfig(
@@ -287,7 +287,7 @@ def load_user_config() -> UserConfig:
     return user_config
 
 
-def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = None) -> Config:
+def load_config(config_path: Path | None = None, repo_path: Path | None = None) -> Config:
     """Load configuration from TOML files (user + archive).
 
     Loads user-wide config first (authentication, network settings),
@@ -355,8 +355,8 @@ def load_config(config_path: Optional[Path] = None, repo_path: Optional[Path] = 
 
 
 def generate_config_template(urls: list[str] = None, enable_videos: bool = True,
-                            comments_depth: Optional[int] = None, enable_captions: bool = True,
-                            enable_thumbnails: bool = True, limit: Optional[int] = None,
+                            comments_depth: int | None = None, enable_captions: bool = True,
+                            enable_thumbnails: bool = True, limit: int | None = None,
                             include_playlists: str = "none",
                             video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}") -> str:
     """Generate a template configuration file in TOML format.
@@ -523,9 +523,9 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
 
 
 def save_config_template(config_dir: Path, urls: list[str] = None,
-                        enable_videos: bool = True, comments_depth: Optional[int] = None,
+                        enable_videos: bool = True, comments_depth: int | None = None,
                         enable_captions: bool = True, enable_thumbnails: bool = True,
-                        limit: Optional[int] = None, include_playlists: str = "none",
+                        limit: int | None = None, include_playlists: str = "none",
                         video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}") -> Path:
     """Save configuration template to directory.
 

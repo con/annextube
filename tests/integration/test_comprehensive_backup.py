@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from annextube.lib.config import Config, ComponentsConfig, FiltersConfig
+from annextube.lib.config import ComponentsConfig, Config, FiltersConfig
 from annextube.services.archiver import Archiver
 
 

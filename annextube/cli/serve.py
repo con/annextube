@@ -3,11 +3,9 @@
 import os
 import shutil
 import socketserver
-import sys
 import time
 from pathlib import Path
 from threading import Thread
-from typing import Optional
 
 import click
 
@@ -83,7 +81,7 @@ class ArchiveWatcher:
 
             current_mtime = self.get_latest_mtime()
             if current_mtime > max(self.last_mtimes.values()):
-                self.last_mtimes = {pattern: current_mtime for pattern in self.watched_patterns}
+                self.last_mtimes = dict.fromkeys(self.watched_patterns, current_mtime)
                 self.regenerate()
 
     def stop(self):
@@ -215,7 +213,7 @@ def serve(
                 if web_dir.exists():
                     shutil.rmtree(web_dir)
                 shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
-                click.echo(f"  ✓ web/")
+                click.echo("  ✓ web/")
 
         except Exception as e:
             click.echo(f"Error regenerating: {e}", err=True)

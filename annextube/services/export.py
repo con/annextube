@@ -1,11 +1,10 @@
 """Export service for generating TSV metadata files."""
 
 import json
-import os
 from pathlib import Path
-from typing import List, Dict, Any
 
 from annextube.lib.logging_config import get_logger
+
 from .authors import AuthorsService
 
 logger = get_logger(__name__)
@@ -53,7 +52,7 @@ class ExportService:
             video_dir = metadata_path.parent
 
             try:
-                with open(metadata_path, "r") as f:
+                with open(metadata_path) as f:
                     metadata = json.load(f)
 
                 # Count available captions
@@ -159,7 +158,7 @@ class ExportService:
                 continue
 
             try:
-                with open(metadata_path, "r") as f:
+                with open(metadata_path) as f:
                     metadata = json.load(f)
 
                 # Count symlinks (videos in playlist)
@@ -231,7 +230,7 @@ class ExportService:
                 metadata_path = video_dir / "metadata.json"
 
                 if metadata_path.exists():
-                    with open(metadata_path, "r") as f:
+                    with open(metadata_path) as f:
                         metadata = json.load(f)
                         total += metadata.get("duration", 0)
             except Exception as e:
@@ -239,7 +238,7 @@ class ExportService:
 
         return total
 
-    def _write_videos_tsv(self, output_path: Path, videos: List[Dict[str, str]]) -> None:
+    def _write_videos_tsv(self, output_path: Path, videos: list[dict[str, str]]) -> None:
         """Write videos to TSV file.
 
         Args:
@@ -270,7 +269,7 @@ class ExportService:
                     f"{video['path']}\n"
                 )
 
-    def _write_playlists_tsv(self, output_path: Path, playlists: List[Dict[str, str]]) -> None:
+    def _write_playlists_tsv(self, output_path: Path, playlists: list[dict[str, str]]) -> None:
         """Write playlists to TSV file.
 
         Args:

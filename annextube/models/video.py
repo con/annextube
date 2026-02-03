@@ -1,8 +1,7 @@
 """Video entity model."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
 
 
 @dataclass
@@ -23,16 +22,16 @@ class Video:
     license: str  # 'standard' or 'creativeCommon'
     privacy_status: str  # 'public', 'unlisted', 'private'
     availability: str  # 'public', 'private', 'deleted', 'unavailable'
-    tags: List[str]
-    categories: List[str]
-    captions_available: List[str]
+    tags: list[str]
+    categories: list[str]
+    captions_available: list[str]
     has_auto_captions: bool
     download_status: str  # 'not_downloaded', 'tracked', 'downloaded', 'failed'
     source_url: str
     fetched_at: datetime
-    language: Optional[str] = None
-    file_path: Optional[str] = None
-    file_size: Optional[int] = None
+    language: str | None = None
+    file_path: str | None = None
+    file_size: int | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""

@@ -8,7 +8,6 @@ Requires YouTube Data API v3 key.
 
 import os
 import time
-from typing import List, Dict, Optional
 
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -19,8 +18,8 @@ logger = get_logger(__name__)
 
 class YouTubeAPICommentsService:
     """Fetch comments using YouTube Data API v3 (supports replies)."""
-    
-    def __init__(self, api_key: Optional[str] = None):
+
+    def __init__(self, api_key: str | None = None):
         """
         Initialize YouTube API client.
         
@@ -30,15 +29,15 @@ class YouTubeAPICommentsService:
         self.api_key = api_key or os.environ.get('YOUTUBE_API_KEY')
         if not self.api_key:
             raise ValueError("YouTube API key required. Set YOUTUBE_API_KEY environment variable.")
-        
+
         self.youtube = build('youtube', 'v3', developerKey=self.api_key)
-    
+
     def fetch_comments(
         self,
         video_id: str,
-        max_comments: Optional[int] = None,
+        max_comments: int | None = None,
         max_replies_per_thread: int = 100
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """
         Fetch comments with replies for a video.
         
@@ -66,7 +65,7 @@ class YouTubeAPICommentsService:
         all_comments = []
         next_page_token = None
         fetched_threads = 0
-        
+
         try:
             while True:
                 # Fetch comment threads (top-level comments + their replies)
@@ -78,14 +77,14 @@ class YouTubeAPICommentsService:
                     textFormat='plainText',
                     order='time'  # Newest first
                 )
-                
+
                 response = request.execute()
-                
+
                 for item in response.get('items', []):
                     # Extract top-level comment
                     top_snippet = item['snippet']['topLevelComment']['snippet']
                     top_comment_id = item['snippet']['topLevelComment']['id']
-                    
+
                     # Add top-level comment
                     all_comments.append({
                         'comment_id': top_comment_id,
@@ -97,7 +96,7 @@ class YouTubeAPICommentsService:
                         'is_favorited': False,  # API doesn't provide this
                         'parent': 'root'
                     })
-                    
+
                     # Extract replies if present
                     if 'replies' in item:
                         replies = item['replies']['comments']
@@ -114,21 +113,21 @@ class YouTubeAPICommentsService:
                                 'is_favorited': False,
                                 'parent': reply_snippet.get('parentId', top_comment_id)
                             })
-                
+
                 fetched_threads += len(response.get('items', []))
-                
+
                 # Check if we should continue
                 next_page_token = response.get('nextPageToken')
                 if not next_page_token:
                     break  # No more pages
                 if max_comments and fetched_threads >= max_comments:
                     break  # Reached limit
-                
+
                 # Rate limiting - be nice to the API
                 time.sleep(0.1)
-            
+
             return all_comments
-            
+
         except HttpError as e:
             if e.resp.status == 403:
                 # Comments disabled or quota exceeded
@@ -139,7 +138,7 @@ class YouTubeAPICommentsService:
                 # Video not found
                 return []
             raise
-    
+
     def _parse_timestamp(self, iso_timestamp: str) -> int:
         """Convert ISO 8601 timestamp to Unix timestamp."""
         from datetime import datetime
@@ -150,7 +149,7 @@ class YouTubeAPICommentsService:
             return int(dt.timestamp())
         except:
             return 0
-    
+
     def get_quota_cost(self, num_threads: int) -> int:
         """
         Estimate API quota cost for fetching comments.

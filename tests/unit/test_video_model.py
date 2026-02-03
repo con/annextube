@@ -1,7 +1,9 @@
 """Unit tests for Video model - updated_at field removal."""
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from annextube.models.video import Video
 
 

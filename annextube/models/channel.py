@@ -1,8 +1,7 @@
 """Channel entity model."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
 
 
 @dataclass
@@ -15,14 +14,14 @@ class Channel:
     subscriber_count: int
     video_count: int
     avatar_url: str
-    videos: List[str]
-    playlists: List[str]
+    videos: list[str]
+    playlists: list[str]
     last_sync: datetime
     created_at: datetime
     fetched_at: datetime
-    custom_url: Optional[str] = None
-    banner_url: Optional[str] = None
-    country: Optional[str] = None
+    custom_url: str | None = None
+    banner_url: str | None = None
+    country: str | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""

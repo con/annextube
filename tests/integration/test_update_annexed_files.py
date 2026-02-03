@@ -7,7 +7,6 @@ from pathlib import Path
 import pytest
 
 from annextube.lib.file_utils import AtomicFileWriter
-from annextube.services.git_annex import GitAnnexService
 
 
 @pytest.mark.ai_generated

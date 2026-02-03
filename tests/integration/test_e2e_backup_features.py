@@ -51,7 +51,7 @@ class TestE2EBackupFeatures:
 
     def test_channel_backup_metadata_and_captions(self) -> None:
         """Backup a channel (no playlists), verify metadata + captions + thumbnails + clean git."""
-        from annextube.lib.config import Config, ComponentsConfig, SourceConfig, FiltersConfig
+        from annextube.lib.config import ComponentsConfig, Config, FiltersConfig, SourceConfig
         from annextube.services.archiver import Archiver
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -119,7 +119,7 @@ class TestE2EBackupFeatures:
 
     def test_playlist_backup_with_captions(self) -> None:
         """Backup a specific playlist, verify captions and symlinks."""
-        from annextube.lib.config import Config, ComponentsConfig, FiltersConfig
+        from annextube.lib.config import ComponentsConfig, Config, FiltersConfig
         from annextube.services.archiver import Archiver
 
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -1,11 +1,12 @@
 """Unit tests for git-annex timestamp-only change filtering."""
 
-import pytest
+import json
 import subprocess
 import tempfile
-import json
 from pathlib import Path
-from datetime import datetime
+
+import pytest
+
 from annextube.services.git_annex import GitAnnexService
 
 

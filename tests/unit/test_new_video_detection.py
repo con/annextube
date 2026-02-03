@@ -1,12 +1,14 @@
 """Unit tests for new video detection logic."""
 
-import pytest
 import tempfile
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
+import pytest
+
+from annextube.lib.config import ComponentsConfig, Config
 from annextube.models.video import Video
 from annextube.services.archiver import Archiver
-from annextube.lib.config import Config, ComponentsConfig
 
 
 @pytest.fixture

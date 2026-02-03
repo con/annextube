@@ -2,7 +2,6 @@
 
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
 
@@ -30,7 +29,7 @@ __version__ = "0.1.0"
 @click.pass_context
 def cli(
     ctx: click.Context,
-    config: Optional[Path],
+    config: Path | None,
     log_level: str,
     json_output: bool,
     quiet: bool,
@@ -54,14 +53,14 @@ def cli(
 
 
 # Import commands
-from annextube.cli.init import init
-from annextube.cli.init_user_config import init_user_config
 from annextube.cli.backup import backup
+from annextube.cli.check import check
 from annextube.cli.export import export
 from annextube.cli.generate_web import generate_web
-from annextube.cli.serve import serve
 from annextube.cli.info import info
-from annextube.cli.check import check
+from annextube.cli.init import init
+from annextube.cli.init_user_config import init_user_config
+from annextube.cli.serve import serve
 
 cli.add_command(init)
 cli.add_command(init_user_config)

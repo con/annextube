@@ -5,7 +5,7 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yt_dlp
 
@@ -28,15 +28,15 @@ class YouTubeService:
 
     def __init__(
         self,
-        archive_file: Optional[Path] = None,
-        cookies_file: Optional[str] = None,
-        cookies_from_browser: Optional[str] = None,
-        proxy: Optional[str] = None,
-        limit_rate: Optional[str] = None,
-        sleep_interval: Optional[int] = None,
-        max_sleep_interval: Optional[int] = None,
-        extractor_args: Optional[Dict[str, Any]] = None,
-        remote_components: Optional[str] = None,
+        archive_file: Path | None = None,
+        cookies_file: str | None = None,
+        cookies_from_browser: str | None = None,
+        proxy: str | None = None,
+        limit_rate: str | None = None,
+        sleep_interval: int | None = None,
+        max_sleep_interval: int | None = None,
+        extractor_args: dict[str, Any] | None = None,
+        remote_components: str | None = None,
     ):
         """Initialize YouTubeService.
 
@@ -141,7 +141,7 @@ class YouTubeService:
                 # Not a rate limit error or exhausted retries
                 raise
 
-    def _get_ydl_opts(self, download: bool = False) -> Dict[str, Any]:
+    def _get_ydl_opts(self, download: bool = False) -> dict[str, Any]:
         """Get yt-dlp options including user config settings.
 
         Args:
@@ -195,9 +195,9 @@ class YouTubeService:
         return opts
 
     def get_channel_videos(
-        self, channel_url: str, limit: Optional[int] = None,
-        existing_video_ids: Optional[set[str]] = None
-    ) -> List[Dict[str, Any]]:
+        self, channel_url: str, limit: int | None = None,
+        existing_video_ids: set[str] | None = None
+    ) -> list[dict[str, Any]]:
         """Get videos from a channel.
 
         Args:
@@ -256,7 +256,7 @@ class YouTubeService:
                             logger.debug(f"Skipping existing video: {video_id}")
                             consecutive_existing += 1
                             if consecutive_existing >= 10:
-                                logger.info(f"Stopping: found 10 consecutive existing videos")
+                                logger.info("Stopping: found 10 consecutive existing videos")
                                 break
                             continue
 
@@ -368,8 +368,8 @@ class YouTubeService:
                 return []
 
     def get_playlist_videos(
-        self, playlist_url: str, limit: Optional[int] = None
-    ) -> List[Dict[str, Any]]:
+        self, playlist_url: str, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         """Get videos from a playlist.
 
         Args:
@@ -434,7 +434,7 @@ class YouTubeService:
                 logger.error(f"Failed to fetch playlist videos: {e}", exc_info=True)
                 return []
 
-    def get_playlist_metadata(self, playlist_url: str) -> Optional[Playlist]:
+    def get_playlist_metadata(self, playlist_url: str) -> Playlist | None:
         """Get metadata for a playlist.
 
         Args:
@@ -487,7 +487,7 @@ class YouTubeService:
                 logger.error(f"Failed to fetch playlist metadata: {e}")
                 return None
 
-    def get_channel_playlists(self, channel_url: str) -> List[Dict[str, Any]]:
+    def get_channel_playlists(self, channel_url: str) -> list[dict[str, Any]]:
         """Get all playlists from a channel.
 
         Args:
@@ -536,7 +536,7 @@ class YouTubeService:
             logger.error(f"Failed to fetch channel playlists: {e}")
             return []
 
-    def get_channel_podcasts(self, channel_url: str) -> List[Dict[str, Any]]:
+    def get_channel_podcasts(self, channel_url: str) -> list[dict[str, Any]]:
         """Get all podcasts from a channel's Podcasts tab.
 
         Args:
@@ -585,7 +585,7 @@ class YouTubeService:
             logger.debug(f"Failed to fetch channel podcasts (may not have podcasts): {e}")
             return []
 
-    def get_video_metadata(self, video_url: str) -> Optional[Dict[str, Any]]:
+    def get_video_metadata(self, video_url: str) -> dict[str, Any] | None:
         """Get metadata for a single video.
 
         Args:
@@ -642,7 +642,7 @@ class YouTubeService:
                 logger.error(f"Failed to fetch video metadata: {e}")
                 return None
 
-    def extract_video_url(self, video_id: str) -> Optional[str]:
+    def extract_video_url(self, video_id: str) -> str | None:
         """Extract direct video URL for git-annex tracking.
 
         Args:
@@ -676,8 +676,8 @@ class YouTubeService:
 
     def download_captions(
         self, video_id: str, output_dir: Path, language_pattern: str = ".*",
-        auto_translated_langs: Optional[List[str]] = None, base_filename: str = None
-    ) -> List[Dict[str, Any]]:
+        auto_translated_langs: list[str] | None = None, base_filename: str = None
+    ) -> list[dict[str, Any]]:
         """Download captions for a video, excluding auto-translated by default.
 
         By default, downloads only:
@@ -885,7 +885,7 @@ class YouTubeService:
         self,
         video_id: str,
         output_path: Path,
-        max_depth: Optional[int] = None,
+        max_depth: int | None = None,
         max_replies_per_thread: int = 10
     ) -> bool:
         """Download comments for a video with smart incremental fetching.
@@ -916,7 +916,7 @@ class YouTubeService:
         existing_comments = {}
         if output_path.exists():
             try:
-                with open(output_path, 'r', encoding='utf-8') as f:
+                with open(output_path, encoding='utf-8') as f:
                     existing_list = json.load(f)
                     existing_comments = {c['comment_id']: c for c in existing_list if c.get('comment_id')}
                     logger.info(f"Loaded {len(existing_comments)} existing comments for incremental update")
@@ -1103,7 +1103,7 @@ class YouTubeService:
             )
         return True
 
-    def metadata_to_video(self, metadata: Dict[str, Any]) -> Video:
+    def metadata_to_video(self, metadata: dict[str, Any]) -> Video:
         """Convert metadata to Video model.
 
         Handles both yt-dlp schema (id) and our stored schema (video_id).

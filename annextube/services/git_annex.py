@@ -2,7 +2,6 @@
 
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from annextube.lib.logging_config import get_logger
 
@@ -50,13 +49,13 @@ class GitAnnexService:
 
     def configure_ytdlp_options(
         self,
-        cookies_file: Optional[str] = None,
-        cookies_from_browser: Optional[str] = None,
-        proxy: Optional[str] = None,
-        limit_rate: Optional[str] = None,
-        sleep_interval: Optional[int] = None,
-        max_sleep_interval: Optional[int] = None,
-        extra_opts: Optional[list[str]] = None,
+        cookies_file: str | None = None,
+        cookies_from_browser: str | None = None,
+        proxy: str | None = None,
+        limit_rate: str | None = None,
+        sleep_interval: int | None = None,
+        max_sleep_interval: int | None = None,
+        extra_opts: list[str] | None = None,
     ) -> None:
         """Configure git-annex to pass user settings to yt-dlp.
 
@@ -396,7 +395,7 @@ class GitAnnexService:
             # If we can't check, assume it's not timestamp-only (safer to commit)
             return False
 
-    def add_and_commit(self, message: str, files: Optional[list[Path]] = None) -> bool:
+    def add_and_commit(self, message: str, files: list[Path] | None = None) -> bool:
         """Add files and commit changes.
 
         Uses 'git annex add' to let git-annex decide based on .gitattributes

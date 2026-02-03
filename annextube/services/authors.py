@@ -2,12 +2,11 @@
 
 import json
 import logging
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
 
 from annextube.lib.file_utils import AtomicFileWriter
+
 from ..models.author import Author
 
 logger = logging.getLogger(__name__)
@@ -46,13 +45,13 @@ class AuthorsService:
         logger.info(f"Generated authors.tsv with {len(authors)} authors")
         return output_path
 
-    def _collect_authors(self) -> Dict[str, Author]:
+    def _collect_authors(self) -> dict[str, Author]:
         """Collect all unique authors from videos and comments.
 
         Returns:
             Dictionary mapping author_id to Author objects
         """
-        authors: Dict[str, Author] = {}
+        authors: dict[str, Author] = {}
 
         if not self.videos_dir.exists():
             logger.warning(f"Videos directory not found: {self.videos_dir}")
@@ -73,7 +72,7 @@ class AuthorsService:
 
         return authors
 
-    def _process_video_metadata(self, metadata_path: Path, authors: Dict[str, Author]) -> None:
+    def _process_video_metadata(self, metadata_path: Path, authors: dict[str, Author]) -> None:
         """Process video metadata to extract uploader information.
 
         Args:
@@ -81,7 +80,7 @@ class AuthorsService:
             authors: Dictionary to update with author information
         """
         try:
-            with open(metadata_path, 'r', encoding='utf-8') as f:
+            with open(metadata_path, encoding='utf-8') as f:
                 metadata = json.load(f)
 
             channel_id = metadata.get('channel_id')
@@ -125,7 +124,7 @@ class AuthorsService:
         except Exception as e:
             logger.warning(f"Failed to process video metadata {metadata_path}: {e}")
 
-    def _process_comments(self, comments_path: Path, authors: Dict[str, Author]) -> None:
+    def _process_comments(self, comments_path: Path, authors: dict[str, Author]) -> None:
         """Process comments to extract commenter information.
 
         Args:
@@ -133,7 +132,7 @@ class AuthorsService:
             authors: Dictionary to update with author information
         """
         try:
-            with open(comments_path, 'r', encoding='utf-8') as f:
+            with open(comments_path, encoding='utf-8') as f:
                 comments = json.load(f)
 
             for comment in comments:
@@ -179,7 +178,7 @@ class AuthorsService:
         except Exception as e:
             logger.warning(f"Failed to process comments {comments_path}: {e}")
 
-    def _write_tsv(self, authors: Dict[str, Author], output_path: Path) -> None:
+    def _write_tsv(self, authors: dict[str, Author], output_path: Path) -> None:
         """Write authors to TSV file.
 
         Args:

@@ -6,9 +6,10 @@ Tests that the new hierarchical structure works correctly:
 - Custom patterns can be specified via --video-path-pattern
 """
 
-import pytest
 from datetime import datetime
 from pathlib import Path
+
+import pytest
 
 from annextube.lib.config import OrganizationConfig
 from annextube.models.video import Video
@@ -25,7 +26,7 @@ def test_default_pattern_is_hierarchical() -> None:
 @pytest.mark.ai_generated
 def test_video_path_with_hierarchical_pattern(tmp_path: Path) -> None:
     """Test that _get_video_path generates year/month subdirectories."""
-    from annextube.lib.config import Config, ComponentsConfig
+    from annextube.lib.config import ComponentsConfig, Config
 
     # Create config with hierarchical pattern
     config = Config(
@@ -75,7 +76,7 @@ def test_video_path_with_hierarchical_pattern(tmp_path: Path) -> None:
 @pytest.mark.ai_generated
 def test_video_path_with_flat_pattern(tmp_path: Path) -> None:
     """Test backward compatibility with flat pattern."""
-    from annextube.lib.config import Config, ComponentsConfig
+    from annextube.lib.config import ComponentsConfig, Config
 
     # Create config with flat pattern (old default)
     config = Config(
@@ -122,7 +123,7 @@ def test_video_path_with_flat_pattern(tmp_path: Path) -> None:
 @pytest.mark.ai_generated
 def test_video_path_with_custom_pattern(tmp_path: Path) -> None:
     """Test custom pattern with only year (no month)."""
-    from annextube.lib.config import Config, ComponentsConfig
+    from annextube.lib.config import ComponentsConfig, Config
 
     config = Config(
         components=ComponentsConfig(),
@@ -170,7 +171,7 @@ def test_playlist_symlink_with_hierarchical_paths(tmp_path: Path) -> None:
 
     This is critical - symlinks must use relative_to() to support subdirectories.
     """
-    from annextube.lib.config import Config, ComponentsConfig
+    from annextube.lib.config import ComponentsConfig, Config
 
     # Create hierarchical config
     config = Config(
@@ -245,7 +246,7 @@ def test_playlist_symlink_with_hierarchical_paths(tmp_path: Path) -> None:
 @pytest.mark.ai_generated
 def test_multiple_videos_different_months(tmp_path: Path) -> None:
     """Test that videos from different months go into separate subdirectories."""
-    from annextube.lib.config import Config, ComponentsConfig
+    from annextube.lib.config import ComponentsConfig, Config
 
     config = Config(
         components=ComponentsConfig(),

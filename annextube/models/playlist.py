@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List, Optional
 
 
 @dataclass
@@ -30,10 +29,10 @@ class Playlist:
     channel_name: str
     video_count: int
     privacy_status: str
-    last_modified: Optional[datetime]
-    video_ids: List[str]
-    thumbnail_url: Optional[str] = None
-    fetched_at: Optional[datetime] = None
+    last_modified: datetime | None
+    video_ids: list[str]
+    thumbnail_url: str | None = None
+    fetched_at: datetime | None = None
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""

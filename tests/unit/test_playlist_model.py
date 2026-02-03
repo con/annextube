@@ -1,7 +1,9 @@
 """Unit tests for Playlist model - updated_at field removal."""
 
-import pytest
 from datetime import datetime
+
+import pytest
+
 from annextube.models.playlist import Playlist
 
 

@@ -1,9 +1,10 @@
 """Test date filtering functionality."""
-import pytest
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from annextube.services.archiver import Archiver
+import pytest
+
 from annextube.lib.config import Config
+from annextube.services.archiver import Archiver
 
 
 @pytest.mark.ai_generated

@@ -14,7 +14,6 @@ Usage:
 
 import argparse
 import csv
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -74,7 +73,7 @@ def check_tsv_accuracy(repo_path: Path, annex_states: dict) -> dict:
         return {}
 
     # Read TSV
-    with open(videos_tsv, 'r') as f:
+    with open(videos_tsv) as f:
         reader = csv.DictReader(f, delimiter='\t')
         tsv_data = {row['video_id']: row for row in reader}
 
@@ -86,7 +85,7 @@ def check_tsv_accuracy(repo_path: Path, annex_states: dict) -> dict:
         status = row.get('download_status', 'unknown')
         status_counts[status] = status_counts.get(status, 0) + 1
 
-    print(f"TSV status distribution:")
+    print("TSV status distribution:")
     for status, count in sorted(status_counts.items()):
         print(f"  {status}: {count}")
 
