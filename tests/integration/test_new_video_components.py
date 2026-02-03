@@ -82,8 +82,8 @@ def test_new_video_gets_all_configured_components_regardless_of_mode(git_annex_t
          patch.object(archiver.youtube, 'download_comments', return_value=True) as mock_comments, \
          patch.object(archiver, '_download_thumbnail') as mock_thumbnail, \
          patch.object(archiver.git_annex, 'addurl') as mock_addurl, \
-         patch.object(archiver.git_annex, 'set_metadata') as mock_set_metadata, \
-         patch.object(archiver.git_annex, 'set_metadata_if_changed') as mock_set_metadata_if_changed:
+         patch.object(archiver.git_annex, 'set_metadata'), \
+         patch.object(archiver.git_annex, 'set_metadata_if_changed'):
 
         # Process the NEW video
         archiver._process_video(test_video)
@@ -125,8 +125,8 @@ def test_existing_video_respects_component_mode(git_annex_test_repo: Path, test_
          patch.object(archiver.youtube, 'download_comments') as mock_comments, \
          patch.object(archiver, '_download_thumbnail') as mock_thumbnail, \
          patch.object(archiver.git_annex, 'addurl') as mock_addurl, \
-         patch.object(archiver.git_annex, 'set_metadata') as mock_set_metadata, \
-         patch.object(archiver.git_annex, 'set_metadata_if_changed') as mock_set_metadata_if_changed:
+         patch.object(archiver.git_annex, 'set_metadata'), \
+         patch.object(archiver.git_annex, 'set_metadata_if_changed'):
 
         # Process the EXISTING video
         archiver._process_video(test_video)

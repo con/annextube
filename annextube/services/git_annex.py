@@ -213,8 +213,8 @@ class GitAnnexService:
 
         # For each pair of lines (removed and added), check if only datetimes differ
         # Group lines by +/- (removed lines start with -, added lines start with +)
-        removed_lines = [l[1:] for l in changed_lines if l.startswith('-')]
-        added_lines = [l[1:] for l in changed_lines if l.startswith('+')]
+        removed_lines = [line[1:] for line in changed_lines if line.startswith('-')]
+        added_lines = [line[1:] for line in changed_lines if line.startswith('+')]
 
         if len(removed_lines) != len(added_lines):
             return False  # Different number of lines changed
@@ -289,10 +289,10 @@ class GitAnnexService:
                     continue
 
                 # Parse diff for changed lines
-                changed_lines = [l for l in diff.split('\n')
-                               if l.startswith('+') or l.startswith('-')]
-                changed_lines = [l for l in changed_lines
-                               if not (l.startswith('+++') or l.startswith('---'))]
+                changed_lines = [line for line in diff.split('\n')
+                               if line.startswith('+') or line.startswith('-')]
+                changed_lines = [line for line in changed_lines
+                               if not (line.startswith('+++') or line.startswith('---'))]
 
                 if not changed_lines:
                     continue
@@ -375,9 +375,9 @@ class GitAnnexService:
             ]
 
             lines = diff_output.split('\n')
-            changed_lines = [l for l in lines if l.startswith('+') or l.startswith('-')]
+            changed_lines = [line for line in lines if line.startswith('+') or line.startswith('-')]
             # Filter out diff metadata lines (+++, ---)
-            changed_lines = [l for l in changed_lines if not (l.startswith('+++') or l.startswith('---'))]
+            changed_lines = [line for line in changed_lines if not (line.startswith('+++') or line.startswith('---'))]
 
             if not changed_lines:
                 return False  # No actual content changes

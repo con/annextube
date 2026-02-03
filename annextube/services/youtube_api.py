@@ -40,12 +40,12 @@ class YouTubeAPICommentsService:
     ) -> list[dict]:
         """
         Fetch comments with replies for a video.
-        
+
         Args:
             video_id: YouTube video ID
             max_comments: Maximum number of top-level comments to fetch (None = all)
             max_replies_per_thread: Maximum replies to fetch per comment thread
-        
+
         Returns:
             List of comment dictionaries in annextube format:
             {
@@ -58,7 +58,7 @@ class YouTubeAPICommentsService:
                 'is_favorited': bool,
                 'parent': str  # 'root' or parent comment ID
             }
-        
+
         Raises:
             HttpError: If API request fails
         """
@@ -147,20 +147,20 @@ class YouTubeAPICommentsService:
         try:
             dt = datetime.fromisoformat(iso_timestamp.replace('Z', '+00:00'))
             return int(dt.timestamp())
-        except:
+        except Exception:
             return 0
 
     def get_quota_cost(self, num_threads: int) -> int:
         """
         Estimate API quota cost for fetching comments.
-        
+
         YouTube Data API v3 quota costs:
         - commentThreads.list: 1 unit per request
         - Each request returns up to 100 comment threads
-        
+
         Args:
             num_threads: Number of comment threads to fetch
-        
+
         Returns:
             Estimated quota units
         """
