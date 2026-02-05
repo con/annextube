@@ -72,6 +72,25 @@ class GitAnnexService:
             max_sleep_interval: Maximum seconds between downloads
             extra_opts: Additional yt-dlp CLI options
         """
+        # Configure yt-dlp executable path
+        # Prefer wrapper with deno in PATH if it exists
+        # Check actual user home, not overridden HOME (important for testing)
+        import os
+        import pwd
+        try:
+            actual_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        except Exception:
+            actual_home = Path.home()
+
+        ytdlp_path = actual_home / ".local" / "bin" / "yt-dlp"
+        if ytdlp_path.exists():
+            subprocess.run(
+                ["git", "config", "annex.youtube-dl-command", str(ytdlp_path)],
+                cwd=self.repo_path,
+                check=True,
+            )
+            logger.info(f"Configured git-annex to use yt-dlp at: {ytdlp_path}")
+
         options = []
 
         # Cookies

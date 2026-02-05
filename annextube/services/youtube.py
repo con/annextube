@@ -56,6 +56,19 @@ class YouTubeService:
             remote_components: Remote components to enable (e.g., "ejs:github" for JS challenge solver)
             youtube_api_key: YouTube Data API v3 key for enhanced metadata (optional)
         """
+        # Ensure deno is in PATH for EJS solver (if installed)
+        import os
+        import pwd
+        try:
+            actual_home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        except Exception:
+            actual_home = Path.home()
+
+        deno_bin = actual_home / ".deno" / "bin"
+        if deno_bin.exists() and str(deno_bin) not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = f"{deno_bin}:{os.environ.get('PATH', '')}"
+            logger.debug(f"Added deno to PATH: {deno_bin}")
+
         self.archive_file = archive_file
         self.cookies_file = cookies_file
         self.cookies_from_browser = cookies_from_browser
