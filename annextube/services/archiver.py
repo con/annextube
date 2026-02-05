@@ -571,12 +571,16 @@ class Archiver:
                 existing_video_ids=existing_video_ids
             )
 
-            # Apply date filter if specified
-            if self.date_from or self.date_to:
+            # Apply date filter if specified (but NOT on initial backup)
+            # On initial backup, we want ALL videos regardless of date filter
+            is_initial_backup = not existing_video_ids
+            if (self.date_from or self.date_to) and not is_initial_backup:
                 videos_metadata = [v for v in all_videos if self._should_process_video_by_date(v)]
                 logger.info(f"Filtered {len(all_videos)} videos to {len(videos_metadata)} within date range")
             else:
                 videos_metadata = all_videos
+                if is_initial_backup and (self.date_from or self.date_to):
+                    logger.info(f"Skipping date filter on initial backup - processing all {len(all_videos)} videos")
 
         # For component-specific modes, load existing videos from TSV
         if skip_video_fetch and not videos_metadata:
@@ -704,12 +708,18 @@ class Archiver:
         limit = self.config.filters.limit
         all_videos = self.youtube.get_playlist_videos(playlist_url, limit=limit)
 
-        # Apply date filter if specified
-        if self.date_from or self.date_to:
+        # Apply date filter if specified (but NOT on initial backup)
+        # Check if this is initial backup by looking for existing TSV
+        videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
+        is_initial_backup = not videos_tsv_path.exists()
+
+        if (self.date_from or self.date_to) and not is_initial_backup:
             videos_metadata = [v for v in all_videos if self._should_process_video_by_date(v)]
             logger.info(f"Filtered {len(all_videos)} videos to {len(videos_metadata)} within date range")
         else:
             videos_metadata = all_videos
+            if is_initial_backup and (self.date_from or self.date_to):
+                logger.info(f"Skipping date filter on initial backup - processing all {len(all_videos)} videos")
 
         if not videos_metadata:
             logger.warning("No videos found in playlist (after date filtering)")
