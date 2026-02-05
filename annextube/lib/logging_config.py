@@ -123,4 +123,9 @@ def get_logger(name: str) -> logging.Logger:
     Returns:
         Logger instance
     """
-    return logging.getLogger(f"annextube.{name}")
+    # If name already includes annextube prefix (from __name__), use as-is
+    # Otherwise, add annextube prefix for consistency
+    if name.startswith("annextube."):
+        return logging.getLogger(name)
+    else:
+        return logging.getLogger(f"annextube.{name}")

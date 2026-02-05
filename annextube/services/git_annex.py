@@ -85,7 +85,8 @@ class GitAnnexService:
             actual_home = Path.home()
 
         ytdlp_path = actual_home / ".local" / "bin" / "yt-dlp"
-        if ytdlp_path.exists():
+        # Only configure git-annex if this is actually a git repo (avoid errors in tests with temp dirs)
+        if ytdlp_path.exists() and self.is_annex_repo():
             subprocess.run(
                 ["git", "config", "annex.youtube-dl-command", str(ytdlp_path)],
                 cwd=self.repo_path,

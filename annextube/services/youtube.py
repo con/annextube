@@ -180,10 +180,23 @@ class YouTubeService:
         import logging as stdlib_logging
         enable_ytdlp_verbose = logger.level <= stdlib_logging.DEBUG
 
+        # Configure yt-dlp to use Python logging (so it goes through our formatter with datetime + logger name)
+        # Use standard "yt_dlp" logger name (not annextube.yt_dlp) for interoperability
+        ytdlp_logger = stdlib_logging.getLogger("yt_dlp")
+        ytdlp_logger.setLevel(stdlib_logging.DEBUG if enable_ytdlp_verbose else stdlib_logging.INFO)
+
+        # Configure yt_dlp logger to use same handlers as annextube logger (if not already configured)
+        annextube_logger = stdlib_logging.getLogger("annextube")
+        if annextube_logger.handlers and not ytdlp_logger.handlers:
+            for handler in annextube_logger.handlers:
+                ytdlp_logger.addHandler(handler)
+            ytdlp_logger.propagate = False
+
         opts: dict[str, Any] = {
             "quiet": not enable_ytdlp_verbose,  # Disable quiet in debug mode
             "no_warnings": not enable_ytdlp_verbose,  # Show warnings in debug mode
             "verbose": enable_ytdlp_verbose,  # Enable yt-dlp's verbose output
+            "logger": ytdlp_logger,  # Use Python logger for yt-dlp output (includes datetime + logger name)
             "extract_flat": False,  # Get full metadata
             "skip_download": not download,
         }
