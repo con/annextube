@@ -372,6 +372,49 @@ annextube backup
 
 ---
 
+## Phase 9: YouTube API Enhanced Metadata (Optional Enhancement)
+
+**Goal**: Enable accurate license detection and enhanced metadata extraction via YouTube Data API v3
+
+**Research**: See `research.md` § 7 (YouTube API Enhanced Metadata Extraction)
+
+### Implementation for YouTube API Enhancement
+
+- [X] T114 [P] Research and implement YouTube API v3 metadata client in annextube/services/youtube_api.py (YouTubeAPIMetadataClient, QuotaEstimator, support batch requests up to 50 videos)
+- [X] T114a [P] Extend Video model with 15 optional API-enhanced fields (licensed_content, embeddable, made_for_kids, recording_date/location, definition, dimension, projection, region_restriction, content_rating, topic_categories)
+- [X] T114b [P] Integrate API enhancement in YouTubeService.metadata_to_video() (optional enhancement, graceful fallback)
+- [X] T114c [P] Add API key configuration support in UserConfig (~/.config/annextube/config.toml or YOUTUBE_API_KEY env var)
+- [X] T114d [P] Create comprehensive tests (36 tests: quota estimation, API client, integration tests, backward compatibility)
+- [X] T114e [P] Document API capabilities, costs, quota management in research.md
+- [X] T114f [P] Test with real YouTube videos using API key from .git/secrets (created tools/test_api_metadata.py and wrapper script, verified license detection and enhanced metadata capture)
+- [ ] T115 [P] Implement estimate-cost command in annextube/cli/estimate_cost.py (DEFERRED - preview quota usage before archiving, show cost breakdown for N videos, warn if exceeds free tier)
+
+---
+
+## Phase 10: Test Infrastructure Improvement
+
+**Goal**: Create controlled test environment to eliminate dependency on external YouTube channels
+
+**Motivation**: Current integration tests use external channels (Khan Academy, etc.) which can have videos deleted or privacy settings changed, causing flaky test failures.
+
+### Implementation for Test Channel Setup
+
+- [ ] T116 [P] Create test channel on YouTube (manual step - create Google account, YouTube channel "AnnexTube Testing")
+- [ ] T117 [P] Setup Google Cloud OAuth credentials (manual step - enable YouTube Data API v3, create OAuth 2.0 desktop app credentials)
+- [X] T118 [P] Create video generation script in tools/setup_test_channel.py (generate 12 short test videos with ffmpeg, upload to YouTube, set licenses, create playlists, add captions/comments)
+- [X] T119 [P] Document test channel setup process in tools/README.md (prerequisites, usage, quota costs, integration with tests)
+- [ ] T120 [P] Execute test channel setup (run tools/setup_test_channel.py --upload-all, save video IDs and playlist IDs)
+- [ ] T121 [P] Update integration tests to use test channel (replace external channel URLs with TEST_CHANNEL_URL in tests/conftest.py)
+- [ ] T122 [P] Verify all integration tests pass with test channel (run full tox suite, confirm no flaky failures)
+
+**Benefits:**
+- Reliable test channel under our control
+- Fast test execution (videos are 1-5 seconds each)
+- Comprehensive metadata coverage (licenses, captions, locations, comments)
+- One-time quota cost (~21,000 units = $21 or 2 days free tier)
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -523,7 +566,7 @@ With multiple developers:
 
 ✅ **All tasks follow the required checklist format**:
 - Checkbox: `- [ ]` at start
-- Task ID: Sequential (T001-T113)
+- Task ID: Sequential (T001-T115)
 - [P] marker: Only for parallelizable tasks (different files, no dependencies)
 - [Story] label: Present for all user story phase tasks (US1-US8)
 - Description: Clear action with exact file path

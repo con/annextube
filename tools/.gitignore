@@ -1,0 +1,11 @@
+# OAuth credentials - DO NOT COMMIT
+client_secrets.json
+token.json
+
+# Test videos directory (these should be committed - they're tiny)
+# Uncomment if you want to exclude them:
+# test_videos/*.mp4
+# test_videos/*.vtt
+
+# But always commit the metadata file
+!test_videos/test_channel_metadata.json

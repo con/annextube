@@ -72,6 +72,7 @@ class Archiver:
             max_sleep_interval=config.user.max_sleep_interval,
             extractor_args=extractor_args,
             remote_components=remote_components,
+            youtube_api_key=config.user.api_key,
         )
 
         self.export = ExportService(repo_path)

@@ -527,6 +527,155 @@ def copy_to_remote(self, files, remote_name):
 
 ---
 
+### 7. YouTube API Enhanced Metadata Extraction
+
+**Question**: Can we obtain accurate license information and enhanced metadata (recording location, geographic restrictions, etc.) that yt-dlp doesn't provide?
+
+**Context**:
+- FR-016: Support license-based filtering (e.g., Creative Commons only)
+- yt-dlp returns `None` for `license` field, making CC video detection impossible
+- Need to identify redistributable content for archival use cases
+- Additional valuable metadata not available through yt-dlp:
+  - Recording date/location (GPS coordinates, location description)
+  - Geographic restrictions (region-specific availability)
+  - Technical details (HD/SD, 2D/3D, 360° projection)
+  - Content ratings (age restrictions)
+  - Embeddable status, made-for-kids classification
+
+**Research**:
+
+**yt-dlp Limitations**:
+- Testing confirms yt-dlp returns `None` for `license` field
+- No access to `contentDetails.licensedContent` (legal redistribution info)
+- No recording location/date extraction
+- No geographic restriction information
+- Cannot distinguish Creative Commons from standard YouTube license
+
+**YouTube Data API v3 Capabilities**:
+
+Available metadata parts (see: https://developers.google.com/youtube/v3/docs/videos):
+
+1. **status** (2 quota units):
+   - `license`: "youtube" or "creativeCommon" ✅ CRITICAL
+   - `embeddable`: Whether video can be embedded
+   - `madeForKids`: COPPA compliance flag
+
+2. **contentDetails** (2 quota units):
+   - `licensedContent`: Whether content is licensed ✅ KEY FIELD
+   - `definition`: "hd" or "sd"
+   - `dimension`: "2d" or "3d"
+   - `projection`: "rectangular" or "360"
+   - `regionRestriction`: Geographic availability (allowed/blocked countries)
+   - `contentRating`: Age ratings (MPAA, TV-PG, BBFC, etc.)
+
+3. **recordingDetails** (2 quota units):
+   - `recordingDate`: When video was actually recorded ✅ VERY USEFUL
+   - `location`: GPS coordinates (latitude, longitude, altitude)
+   - `locationDescription`: Human-readable location
+
+4. **statistics** (2 quota units):
+   - View count, like count, comment count (already from yt-dlp)
+
+5. **snippet** (2 quota units):
+   - Title, description, tags (already from yt-dlp)
+
+**Quota Costs**:
+
+- **Per video** (all useful parts): 10 units
+  - snippet: 2 units
+  - status: 2 units
+  - contentDetails: 2 units
+  - statistics: 2 units
+  - recordingDetails: 2 units
+
+- **Free tier**: 10,000 units/day (~1,000 videos)
+- **Batch requests**: Up to 50 videos per request (10 units total, not 500!)
+- **Cost beyond free tier**: $0.10 per 100 units ($10 per 1,000 videos)
+
+**Important Findings**:
+
+- ❌ **No programmatic quota checking**: YouTube API doesn't return quota usage in headers (unlike GitHub)
+- ❌ **YouTube Premium provides NO API benefits**: Completely separate systems
+- ✅ **Batch requests critical**: 50 videos = 10 units (not 50 × 10 = 500)
+- ✅ **Quota increases require audit**: Must request through Google Cloud Console with justification
+
+**Decision**: **Integrate YouTube Data API v3 for enhanced metadata (optional)**
+
+**Rationale**:
+- **Solves license detection**: Enables Creative Commons filtering (FR-016)
+- **Optional enhancement**: Works without API key (yt-dlp-only mode still functional)
+- **Valuable metadata**: Recording location enables geographic research
+- **Reasonable cost**: 1,000 videos/day free, $10 per 1,000 additional
+- **Efficient**: Batch requests maximize quota usage
+- **Backward compatible**: All new fields optional (existing metadata.json files still load)
+
+**Implementation**:
+
+Extended Video model with 15 new optional fields:
+```python
+@dataclass
+class Video:
+    # ... existing required fields ...
+
+    # License and usage rights (API-enhanced)
+    license: str  # Now: 'youtube' or 'creativeCommon' (not 'standard')
+    licensed_content: bool | None = None
+    embeddable: bool | None = None
+    made_for_kids: bool | None = None
+
+    # Recording metadata (API-enhanced)
+    recording_date: datetime | None = None
+    recording_location: dict | None = None  # {latitude, longitude, altitude}
+    location_description: str | None = None
+
+    # Technical details (API-enhanced)
+    definition: str | None = None  # 'hd' or 'sd'
+    dimension: str | None = None  # '2d' or '3d'
+    projection: str | None = None  # 'rectangular' or '360'
+
+    # Geographic restrictions (API-enhanced)
+    region_restriction: dict | None = None  # {allowed: [...], blocked: [...]}
+    content_rating: dict | None = None  # age ratings
+
+    # Topic classification (API-enhanced)
+    topic_categories: list[str] | None = None  # Wikipedia topic URLs
+```
+
+Created `annextube/services/youtube_api.py`:
+- `YouTubeAPIMetadataClient`: Fetch enhanced metadata
+- `QuotaEstimator`: Estimate and track quota usage
+- `create_api_client()`: Optional initialization (returns None if no key)
+
+Configuration (`~/.config/annextube/config.toml`):
+```toml
+# YouTube Data API v3 key (OPTIONAL - recommended for license detection)
+# Get your key: https://console.cloud.google.com/apis/credentials
+# api_key = "your-api-key-here"
+
+# Or use environment variable (recommended):
+# export YOUTUBE_API_KEY="your-key-here"
+```
+
+**Testing**:
+- ✅ 36 new tests created (unit + integration)
+- ✅ Backward compatibility verified (old metadata.json files load)
+- ✅ Graceful fallback when API unavailable
+- ✅ Creative Commons detection validated
+- ✅ Network tests for real API validation (Big Buck Bunny CC video)
+
+**Quota Management Strategies**:
+1. **Batch processing**: Always use 50-video batches
+2. **Incremental archiving**: Spread large archives over multiple days
+3. **Hybrid approach**: Use yt-dlp for most metadata, API for license/location critical cases
+4. **Cost estimation**: Pre-calculate quota before large operations (deferred to TODO)
+
+**TODO**:
+- [ ] Add `annextube estimate-cost` command to preview quota usage before archiving
+- [ ] Add quota tracking/reporting to archive metadata
+- [ ] Consider caching API responses to avoid re-fetching
+
+---
+
 ## Summary of Decisions
 
 | Unknown | Decision | Rationale |
@@ -537,6 +686,7 @@ def copy_to_remote(self, files, remote_name):
 | yt-dlp integration | **Python API with lazy download + archive file** | Better control, efficient incremental updates, aligns with FR-004 |
 | Hugo documentation | **Hugo extended + Congo theme + Diataxis** | Spec requirement, clear documentation organization, GitHub Pages compatible |
 | Git-annex remotes | **Support directory, S3, rclone with two-mode CI** | Flexibility, scalability, resource efficiency (index-only vs full backup) |
+| YouTube API metadata | **Optional YouTube Data API v3 integration** | Enables CC license detection (FR-016), recording location, reasonable cost (1,000 videos/day free), backward compatible |
 
 ## Action Items for Phase 1
 
@@ -558,3 +708,5 @@ def copy_to_remote(self, files, remote_name):
 - Hugo Congo theme: https://github.com/jpanther/congo
 - Diataxis framework: https://diataxis.fr/
 - Git-annex special remotes: https://git-annex.branchable.com/special_remotes/
+- YouTube Data API v3: https://developers.google.com/youtube/v3/docs/videos
+- YouTube API quota calculator: https://developers.google.com/youtube/v3/determine_quota_cost

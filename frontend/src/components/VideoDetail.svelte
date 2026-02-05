@@ -121,7 +121,7 @@
     </div>
   </div>
 
-  <CommentView {comments} loading={loadingComments} />
+  <CommentView {comments} commentCount={fullMetadata.comment_count} loading={loadingComments} />
 </div>
 
 <style>

@@ -590,7 +590,18 @@ def generate_user_config_template() -> str:
 # Option 2: Extract cookies from browser (requires browser to be installed)
 # cookies_from_browser = "firefox"  # or "chrome", "chrome:Profile 1", etc.
 
-# YouTube Data API v3 key (for comment replies and playlist metadata)
+# YouTube Data API v3 key (OPTIONAL but recommended)
+# Enables enhanced metadata extraction:
+#   - Accurate license information (Creative Commons vs Standard)
+#   - Recording location (GPS coordinates, location description)
+#   - Technical details (HD/SD, 2D/3D, 360° projection)
+#   - Geographic restrictions, content ratings, embeddable status
+#   - Comment replies with proper threading
+#
+# Get your API key: https://console.cloud.google.com/apis/credentials
+# Free tier: 10,000 units/day (~1,000 videos)
+# Quota cost: 10 units per video
+#
 # RECOMMENDED: Use environment variable instead!
 #   export YOUTUBE_API_KEY="your-key-here"
 # Only set here if you can't use environment variables

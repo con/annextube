@@ -77,6 +77,7 @@ markers = [
     "slow: Tests that take a long time to run",
     "integration: Integration tests",
     "contract: Contract tests for API boundaries",
+    "network: Tests that require network access and may use real APIs",
 ]
 
 [tool.coverage.run]

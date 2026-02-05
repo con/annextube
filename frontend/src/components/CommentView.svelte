@@ -3,6 +3,7 @@
   import { formatRelativeTime } from '@/utils/format';
 
   export let comments: Comment[];
+  export let commentCount: number | undefined = undefined;
   export let loading: boolean = false;
 
   // Build comment tree from flat list
@@ -44,9 +45,24 @@
       <div class="spinner"></div>
     </div>
   {:else}
-    <h3>{comments.length} Comment{comments.length !== 1 ? 's' : ''}</h3>
-    {#if comments.length === 0}
-      <p class="no-comments">No comments available for this video.</p>
+    {@const displayCount = commentCount !== undefined ? commentCount : comments.length}
+    {@const hasComments = comments.length > 0}
+    {@const commentsFetched = hasComments || commentCount === undefined}
+
+    <h3>
+      {displayCount.toLocaleString()} Comment{displayCount !== 1 ? 's' : ''}
+      {#if !commentsFetched && commentCount !== undefined && commentCount > 0}
+        <span class="not-fetched">(not fetched)</span>
+      {/if}
+    </h3>
+    {#if !hasComments}
+      <p class="no-comments">
+        {#if commentCount !== undefined && commentCount > 0}
+          Comments were not fetched for this video. Enable comments in the archive configuration to download them.
+        {:else}
+          No comments available for this video.
+        {/if}
+      </p>
     {:else}
     <div class="comments-list">
       {#each commentTree as comment}
@@ -102,6 +118,13 @@
     font-weight: 500;
     margin-bottom: 24px;
     color: #030303;
+  }
+
+  .not-fetched {
+    font-size: 14px;
+    font-weight: 400;
+    color: #606060;
+    margin-left: 8px;
   }
 
   .loading-spinner {

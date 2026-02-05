@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-"""
-YouTube Data API Comments Service
+"""YouTube Data API Services.
 
-Alternative to yt-dlp for fetching comments with proper reply threading.
-Requires YouTube Data API v3 key.
+This module provides direct access to YouTube's Data API v3 for:
+1. Fetching comments with proper reply threading (alternative to yt-dlp)
+2. Extracting enhanced video metadata not available through yt-dlp:
+   - Accurate license information (youtube vs creativeCommon)
+   - Licensed content status
+   - Recording location and date
+   - Technical details (HD/SD, 2D/3D, projection type)
+   - Geographic restrictions and content ratings
+
+Requires YouTube Data API v3 key from:
+https://console.cloud.google.com/apis/credentials
 """
 
 import os
@@ -167,3 +175,375 @@ class YouTubeAPICommentsService:
         # 1 unit per request, 100 threads per request
         requests_needed = (num_threads + 99) // 100
         return requests_needed
+
+
+class YouTubeAPIMetadataClient:
+    """Client for YouTube Data API v3 enhanced video metadata extraction."""
+
+    # API parts to request (total quota cost: 10 units per video)
+    # - snippet: 2 units (title, description, tags, etc.)
+    # - status: 2 units (license, embeddable, madeForKids)
+    # - contentDetails: 2 units (licensedContent, definition, restrictions)
+    # - statistics: 2 units (views, likes, comments)
+    # - recordingDetails: 2 units (location, recording date)
+    DEFAULT_PARTS = [
+        "snippet",
+        "status",
+        "contentDetails",
+        "statistics",
+        "recordingDetails",
+    ]
+
+    def __init__(self, api_key: str | None = None):
+        """Initialize YouTube API metadata client.
+
+        Args:
+            api_key: YouTube Data API v3 key. If not provided, reads from YOUTUBE_API_KEY env var.
+
+        Raises:
+            ValueError: If API key is not provided
+        """
+        self.api_key = api_key or os.environ.get("YOUTUBE_API_KEY")
+        if not self.api_key:
+            raise ValueError("YouTube API key required. Set YOUTUBE_API_KEY environment variable.")
+
+        self.youtube = build("youtube", "v3", developerKey=self.api_key, cache_discovery=False)
+        logger.info("YouTube API metadata client initialized (quota cost: 10 units/video)")
+
+    def get_video_details(
+        self,
+        video_ids: list[str] | str,
+        parts: list[str] | None = None,
+    ) -> dict[str, dict]:
+        """Fetch detailed metadata for one or more videos.
+
+        Args:
+            video_ids: Single video ID or list of video IDs (max 50 per request)
+            parts: List of API parts to fetch (default: all useful parts)
+
+        Returns:
+            Dictionary mapping video_id -> API response data
+            Returns empty dict if API call fails
+
+        Raises:
+            ValueError: If more than 50 video IDs provided
+        """
+        # Normalize to list
+        if isinstance(video_ids, str):
+            video_ids = [video_ids]
+
+        if not video_ids:
+            logger.warning("get_video_details called with empty video_ids list")
+            return {}
+
+        if len(video_ids) > 50:
+            raise ValueError(f"Maximum 50 video IDs per request, got {len(video_ids)}")
+
+        # Use default parts if not specified
+        parts = parts or self.DEFAULT_PARTS
+
+        try:
+            # Build request
+            request = self.youtube.videos().list(
+                part=",".join(parts),
+                id=",".join(video_ids),
+                maxResults=50,
+            )
+
+            # Execute request
+            logger.info(
+                f"Fetching YouTube API metadata for {len(video_ids)} video(s) "
+                f"(parts: {', '.join(parts)})"
+            )
+            response = request.execute()
+
+            # Parse response into dict
+            result = {}
+            for item in response.get("items", []):
+                video_id = item["id"]
+                result[video_id] = item
+                logger.debug(f"Fetched API metadata for video {video_id}")
+
+            # Check for missing videos
+            fetched_ids = set(result.keys())
+            requested_ids = set(video_ids)
+            missing_ids = requested_ids - fetched_ids
+
+            if missing_ids:
+                logger.warning(
+                    f"YouTube API did not return metadata for {len(missing_ids)} "
+                    f"video(s): {', '.join(sorted(missing_ids)[:5])}..."
+                )
+
+            logger.info(f"Successfully fetched API metadata for {len(result)} video(s)")
+            return result
+
+        except HttpError as e:
+            logger.error(
+                f"YouTube API HTTP error: {e.resp.status} - {e.content.decode()}",
+                exc_info=True,
+            )
+            return {}
+
+        except Exception as e:
+            logger.error(f"Failed to fetch YouTube API metadata: {e}", exc_info=True)
+            return {}
+
+    def extract_enhanced_metadata(self, api_data: dict) -> dict:
+        """Extract enhanced metadata fields from API response.
+
+        Args:
+            api_data: Raw YouTube API response for a single video
+
+        Returns:
+            Dictionary with extracted metadata fields for Video model
+        """
+        result = {}
+
+        # Extract status fields (license, embeddable, madeForKids)
+        if "status" in api_data:
+            status = api_data["status"]
+            result["license"] = status.get("license", "youtube")
+            result["embeddable"] = status.get("embeddable")
+            result["made_for_kids"] = status.get("madeForKids")
+            logger.debug(f"Status: license={result['license']}, embeddable={result['embeddable']}")
+
+        # Extract contentDetails (licensedContent, definition, dimension, etc.)
+        if "contentDetails" in api_data:
+            content = api_data["contentDetails"]
+
+            result["licensed_content"] = content.get("licensedContent")
+            result["definition"] = content.get("definition")
+            result["dimension"] = content.get("dimension")
+            result["projection"] = content.get("projection")
+
+            # Region restrictions
+            if "regionRestriction" in content:
+                result["region_restriction"] = {
+                    "allowed": content["regionRestriction"].get("allowed", []),
+                    "blocked": content["regionRestriction"].get("blocked", []),
+                }
+
+            # Content rating (age restrictions)
+            if "contentRating" in content:
+                result["content_rating"] = content["contentRating"]
+
+            logger.debug(
+                f"ContentDetails: def={result.get('definition')}, "
+                f"dim={result.get('dimension')}, "
+                f"licensed={result.get('licensed_content')}"
+            )
+
+        # Extract recordingDetails (location, recording date)
+        if "recordingDetails" in api_data:
+            recording = api_data["recordingDetails"]
+
+            if "recordingDate" in recording:
+                result["recording_date"] = recording["recordingDate"]
+
+            if "location" in recording:
+                loc = recording["location"]
+                result["recording_location"] = {
+                    "latitude": loc.get("latitude"),
+                    "longitude": loc.get("longitude"),
+                    "altitude": loc.get("altitude"),
+                }
+
+            if "locationDescription" in recording:
+                result["location_description"] = recording["locationDescription"]
+
+            if result.get("recording_location") or result.get("recording_date"):
+                logger.debug(
+                    f"Recording: date={result.get('recording_date')}, "
+                    f"location={result.get('location_description')}"
+                )
+
+        # Extract topicDetails (Wikipedia categories)
+        if "topicDetails" in api_data:
+            topics = api_data["topicDetails"]
+            result["topic_categories"] = topics.get("topicCategories", [])
+
+        return result
+
+    def enhance_video_metadata(
+        self,
+        video_ids: list[str] | str,
+    ) -> dict[str, dict]:
+        """Fetch and extract enhanced metadata for videos.
+
+        This is a convenience method that combines get_video_details() and
+        extract_enhanced_metadata() to return ready-to-use metadata.
+
+        Args:
+            video_ids: Single video ID or list of video IDs
+
+        Returns:
+            Dictionary mapping video_id -> extracted metadata fields
+        """
+        api_data = self.get_video_details(video_ids)
+
+        result = {}
+        for video_id, data in api_data.items():
+            result[video_id] = self.extract_enhanced_metadata(data)
+
+        return result
+
+
+def create_api_client(api_key: str | None) -> YouTubeAPIMetadataClient | None:
+    """Create YouTube API metadata client if API key is provided.
+
+    Args:
+        api_key: YouTube Data API v3 key (optional)
+
+    Returns:
+        YouTubeAPIMetadataClient instance if key provided, None otherwise
+    """
+    if not api_key or not api_key.strip():
+        logger.info("No YouTube API key provided - API-enhanced metadata disabled")
+        return None
+
+    try:
+        client = YouTubeAPIMetadataClient(api_key)
+        logger.info("YouTube API metadata client created successfully")
+        return client
+    except Exception as e:
+        logger.error(f"Failed to create YouTube API metadata client: {e}")
+        return None
+
+
+class QuotaEstimator:
+    """Estimate and track YouTube Data API v3 quota usage.
+
+    YouTube API Quota Costs:
+    - videos.list (with 5 parts): 10 units per video
+    - commentThreads.list: 1 unit per 100 comments
+    - Free tier: 10,000 units/day
+    - Paid tier: Additional quota available for purchase
+    """
+
+    # Quota costs per operation
+    COST_PER_VIDEO_METADATA = 10  # snippet + status + contentDetails + statistics + recordingDetails
+    COST_PER_100_COMMENTS = 1
+
+    # Daily quotas
+    FREE_TIER_DAILY_QUOTA = 10_000
+
+    @classmethod
+    def estimate_video_metadata_cost(cls, num_videos: int) -> int:
+        """Estimate quota cost for fetching video metadata.
+
+        Args:
+            num_videos: Number of videos to fetch metadata for
+
+        Returns:
+            Estimated quota units required
+        """
+        return num_videos * cls.COST_PER_VIDEO_METADATA
+
+    @classmethod
+    def estimate_comments_cost(cls, num_comment_threads: int) -> int:
+        """Estimate quota cost for fetching comments.
+
+        Args:
+            num_comment_threads: Number of top-level comment threads
+
+        Returns:
+            Estimated quota units required
+        """
+        # 1 unit per 100 comment threads
+        return (num_comment_threads + 99) // 100
+
+    @classmethod
+    def format_cost_report(
+        cls,
+        num_videos: int,
+        num_comments: int = 0,
+        include_pricing: bool = True,
+    ) -> str:
+        """Generate formatted cost estimation report.
+
+        Args:
+            num_videos: Number of videos
+            num_comments: Number of comment threads (optional)
+            include_pricing: Whether to include pricing information
+
+        Returns:
+            Formatted multi-line report string
+        """
+        video_cost = cls.estimate_video_metadata_cost(num_videos)
+        comment_cost = cls.estimate_comments_cost(num_comments) if num_comments > 0 else 0
+        total_cost = video_cost + comment_cost
+
+        # Calculate how many days needed at free tier
+        days_needed = (total_cost + cls.FREE_TIER_DAILY_QUOTA - 1) // cls.FREE_TIER_DAILY_QUOTA
+
+        # Calculate overage if exceeds free tier
+        if total_cost > cls.FREE_TIER_DAILY_QUOTA:
+            overage = total_cost - cls.FREE_TIER_DAILY_QUOTA
+            overage_cost_usd = (overage / 100) * 0.10  # $0.10 per 100 quota units
+        else:
+            overage = 0
+            overage_cost_usd = 0.0
+
+        report_lines = [
+            "YouTube API Quota Estimation",
+            "=" * 50,
+            f"Videos:           {num_videos:,} × 10 units = {video_cost:,} units",
+        ]
+
+        if num_comments > 0:
+            report_lines.append(
+                f"Comment threads:  {num_comments:,} ÷ 100 = {comment_cost:,} units"
+            )
+            report_lines.append(f"{'':17} {'-' * 30}")
+            report_lines.append(f"Total:            {total_cost:,} units")
+        else:
+            report_lines.append(f"{'':17} {'-' * 30}")
+            report_lines.append(f"Total:            {total_cost:,} units")
+
+        report_lines.extend([
+            "",
+            "Free Tier Analysis",
+            "-" * 50,
+            f"Daily free quota: {cls.FREE_TIER_DAILY_QUOTA:,} units/day",
+        ])
+
+        if total_cost <= cls.FREE_TIER_DAILY_QUOTA:
+            report_lines.append(f"✓ Fits within free tier ({total_cost / cls.FREE_TIER_DAILY_QUOTA * 100:.1f}% of daily quota)")
+        else:
+            report_lines.extend([
+                f"✗ Exceeds free tier by {overage:,} units",
+                f"  Requires {days_needed} day(s) at free tier rate",
+            ])
+
+        if include_pricing and overage > 0:
+            report_lines.extend([
+                "",
+                "Paid Quota Pricing (if purchased)",
+                "-" * 50,
+                f"Overage units:    {overage:,} units",
+                "Cost per 100:     $0.10 USD",
+                f"Estimated cost:   ${overage_cost_usd:.2f} USD",
+                "",
+                "Note: Additional quota must be requested from Google Cloud Console.",
+                "See: https://console.cloud.google.com/apis/api/youtube.googleapis.com/quotas",
+            ])
+
+        return "\n".join(report_lines)
+
+    @classmethod
+    def can_fit_in_free_tier(cls, num_videos: int, num_comments: int = 0) -> bool:
+        """Check if operation fits within daily free tier.
+
+        Args:
+            num_videos: Number of videos
+            num_comments: Number of comment threads
+
+        Returns:
+            True if operation fits in free tier, False otherwise
+        """
+        total_cost = (
+            cls.estimate_video_metadata_cost(num_videos) +
+            cls.estimate_comments_cost(num_comments)
+        )
+        return total_cost <= cls.FREE_TIER_DAILY_QUOTA

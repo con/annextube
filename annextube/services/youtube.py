@@ -13,7 +13,10 @@ from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
 from annextube.models.playlist import Playlist
 from annextube.models.video import Video
-from annextube.services.youtube_api import YouTubeAPICommentsService
+from annextube.services.youtube_api import (
+    YouTubeAPICommentsService,
+    create_api_client,
+)
 
 logger = get_logger(__name__)
 
@@ -37,6 +40,7 @@ class YouTubeService:
         max_sleep_interval: int | None = None,
         extractor_args: dict[str, Any] | None = None,
         remote_components: str | None = None,
+        youtube_api_key: str | None = None,
     ):
         """Initialize YouTubeService.
 
@@ -50,6 +54,7 @@ class YouTubeService:
             max_sleep_interval: Maximum seconds between downloads
             extractor_args: Extractor-specific arguments (e.g., {"youtube": {"player_client": ["android"]}})
             remote_components: Remote components to enable (e.g., "ejs:github" for JS challenge solver)
+            youtube_api_key: YouTube Data API v3 key for enhanced metadata (optional)
         """
         self.archive_file = archive_file
         self.cookies_file = cookies_file
@@ -60,6 +65,9 @@ class YouTubeService:
         self.max_sleep_interval = max_sleep_interval
         self.extractor_args = extractor_args or {}
         self.remote_components = remote_components
+
+        # Create YouTube API client for enhanced metadata if key provided
+        self.api_client = create_api_client(youtube_api_key)
 
     def _retry_on_rate_limit(self, func, *args, **kwargs):
         """Retry function on rate limit errors with exponential backoff.
@@ -1104,13 +1112,20 @@ class YouTubeService:
             )
         return True
 
-    def metadata_to_video(self, metadata: dict[str, Any]) -> Video:
+    def metadata_to_video(
+        self,
+        metadata: dict[str, Any],
+        enhance_with_api: bool = True,
+    ) -> Video:
         """Convert metadata to Video model.
 
         Handles both yt-dlp schema (id) and our stored schema (video_id).
+        Optionally enhances metadata with YouTube Data API v3 for accurate
+        license information and additional fields.
 
         Args:
             metadata: yt-dlp metadata dictionary OR stored Video.to_dict() format
+            enhance_with_api: Whether to enhance metadata with YouTube API (default: True)
 
         Returns:
             Video model instance
@@ -1122,6 +1137,18 @@ class YouTubeService:
         video_id = metadata.get("video_id") or metadata.get("id")
         if not video_id:
             raise ValueError(f"Missing video_id/id in metadata. Available keys: {list(metadata.keys())}")
+
+        # Enhance metadata with YouTube API if available and enabled
+        api_metadata = {}
+        if enhance_with_api and self.api_client and "video_id" not in metadata:
+            # Only enhance for yt-dlp metadata (new videos), not stored metadata
+            try:
+                api_data = self.api_client.enhance_video_metadata(video_id)
+                api_metadata = api_data.get(video_id, {})
+                if api_metadata:
+                    logger.info(f"Enhanced metadata for {video_id} with YouTube API")
+            except Exception as e:
+                logger.warning(f"Failed to enhance metadata with API for {video_id}: {e}")
 
         # Parse published date - handle both yt-dlp format and stored ISO format
         published_str = metadata.get("upload_date", "") or metadata.get("published_at", "")
@@ -1170,6 +1197,16 @@ class YouTubeService:
         # Handle thumbnail - yt-dlp uses "thumbnail", stored uses "thumbnail_url"
         thumbnail_url = metadata.get("thumbnail_url") or metadata.get("thumbnail", "")
 
+        # Parse recording_date from API if present
+        recording_date = None
+        if api_metadata.get("recording_date"):
+            try:
+                # Replace 'Z' with '+00:00' for Python 3.10 compatibility
+                date_str = api_metadata["recording_date"].replace('Z', '+00:00')
+                recording_date = datetime.fromisoformat(date_str)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid recording_date format: {api_metadata['recording_date']}")
+
         return Video(
             video_id=video_id,  # Use extracted video_id
             title=metadata.get("title", "Unknown"),
@@ -1182,7 +1219,8 @@ class YouTubeService:
             like_count=int(metadata.get("like_count", 0) or 0),
             comment_count=int(metadata.get("comment_count", 0) or 0),
             thumbnail_url=thumbnail_url,
-            license=metadata.get("license", "standard"),
+            # License - prefer API data (accurate), fallback to yt-dlp, default to "standard"
+            license=api_metadata.get("license") or metadata.get("license") or "standard",
             privacy_status=metadata.get("privacy_status", "public"),
             availability=metadata.get("availability", "public"),
             tags=tags,
@@ -1193,4 +1231,17 @@ class YouTubeService:
             download_status=metadata.get("download_status", "not_downloaded"),
             source_url=metadata.get("source_url") or metadata.get("webpage_url", f"https://www.youtube.com/watch?v={video_id}"),
             fetched_at=datetime.now(),
+            # Enhanced metadata from YouTube API (optional)
+            licensed_content=api_metadata.get("licensed_content"),
+            embeddable=api_metadata.get("embeddable"),
+            made_for_kids=api_metadata.get("made_for_kids"),
+            recording_date=recording_date,
+            recording_location=api_metadata.get("recording_location"),
+            location_description=api_metadata.get("location_description"),
+            definition=api_metadata.get("definition"),
+            dimension=api_metadata.get("dimension"),
+            projection=api_metadata.get("projection"),
+            region_restriction=api_metadata.get("region_restriction"),
+            content_rating=api_metadata.get("content_rating"),
+            topic_categories=api_metadata.get("topic_categories"),
         )

@@ -1,0 +1,22 @@
+{
+  "YE7VzlLtp-4": {
+    "license": "youtube",
+    "embeddable": true,
+    "made_for_kids": false,
+    "licensed_content": false,
+    "definition": "hd",
+    "dimension": "2d",
+    "projection": "rectangular",
+    "content_rating": {}
+  },
+  "dQw4w9WgXcQ": {
+    "license": "youtube",
+    "embeddable": true,
+    "made_for_kids": false,
+    "licensed_content": true,
+    "definition": "hd",
+    "dimension": "2d",
+    "projection": "rectangular",
+    "content_rating": {}
+  }
+}
