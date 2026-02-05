@@ -498,7 +498,9 @@ class GitAnnexService:
         Returns:
             True if git-annex repo, False otherwise
         """
-        git_dir = self.repo_path / ".git"
+        # Ensure repo_path is a Path object (may be str in tests)
+        repo = Path(self.repo_path) if isinstance(self.repo_path, str) else self.repo_path
+        git_dir = repo / ".git"
         annex_dir = git_dir / "annex"
         return git_dir.exists() and annex_dir.exists()
 
