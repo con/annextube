@@ -367,7 +367,7 @@ archive/
 │
 └── playlists/                     # Playlist-centric views (symlinks to videos/)
     ├── playlists.tsv              # Playlist index (title-first column order, path+id last)
-    └── {sanitized_playlist_name}/
+    └── {sanitized_playlist_title}/
         ├── playlist.json          # Playlist metadata (includes playlist_id)
         ├── {NNNN}_{video_path} -> ../../videos/{video_path}/  # Underscore separator
         ├── {NNNN}_{video_path} -> ../../videos/{video_path}/

@@ -399,10 +399,15 @@ class Archiver:
             'channel_name': sanitize_filename(video.channel_name),
         }
 
-        # Replace placeholders in pattern
-        path_str = pattern
-        for key, value in placeholders.items():
-            path_str = path_str.replace(f'{{{key}}}', value)
+        # Replace placeholders in pattern using .format()
+        # This will raise KeyError if pattern contains unknown placeholders
+        try:
+            path_str = pattern.format(**placeholders)
+        except KeyError as e:
+            raise ValueError(
+                f"Unknown placeholder {e} in video_path_pattern: {pattern}. "
+                f"Valid placeholders: {', '.join(sorted(placeholders.keys()))}"
+            ) from e
 
         return self.repo_path / "videos" / path_str
 
@@ -429,14 +434,15 @@ class Archiver:
             'playlist_title': sanitize_filename(playlist.title),
         }
 
-        # Replace placeholders in pattern
-        path_str = pattern
-        for key, value in placeholders.items():
-            path_str = path_str.replace(f'{{{key}}}', value)
-
-        # If still using default {playlist_id}, use sanitized title instead
-        if path_str == playlist.playlist_id:
-            path_str = sanitize_filename(playlist.title)
+        # Replace placeholders in pattern using .format()
+        # This will raise KeyError if pattern contains unknown placeholders
+        try:
+            path_str = pattern.format(**placeholders)
+        except KeyError as e:
+            raise ValueError(
+                f"Unknown placeholder {e} in playlist_path_pattern: {pattern}. "
+                f"Valid placeholders: {', '.join(sorted(placeholders.keys()))}"
+            ) from e
 
         return self.repo_path / "playlists" / path_str
 
@@ -793,7 +799,7 @@ class Archiver:
                 symlink_path = playlist_dir / symlink_name
 
                 # Create relative symlink (for repository portability)
-                # From: playlists/{playlist_name}/{symlink}
+                # From: playlists/{playlist_title}/{symlink}
                 # To:   videos/{year}/{month}/{video_dir_name} (or videos/{video_dir_name} for flat)
                 # Use relative_to() to support both flat and hierarchical layouts
                 relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)

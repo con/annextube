@@ -344,3 +344,92 @@ def test_config_template_with_custom_pattern() -> None:
 
     # Verify custom pattern appears in template
     assert f'video_path_pattern = "{custom_pattern}"' in template
+
+
+@pytest.mark.ai_generated
+def test_video_path_with_invalid_placeholder_raises_error(tmp_path: Path) -> None:
+    """Test that invalid placeholders in video_path_pattern raise ValueError."""
+    from annextube.lib.config import ComponentsConfig, Config
+
+    # Create config with invalid placeholder {invalid_placeholder}
+    config = Config(
+        components=ComponentsConfig(),
+        organization=OrganizationConfig(
+            video_path_pattern="{year}/{invalid_placeholder}/{date}_{sanitized_title}"
+        )
+    )
+
+    archiver = Archiver(tmp_path, config)
+
+    video = Video(
+        video_id="test123",
+        title="Test Video",
+        description="Test description",
+        channel_id="UC123",
+        channel_name="Test Channel",
+        published_at=datetime(2026, 1, 28, 12, 0, 0),
+        duration=300,
+        view_count=1000,
+        like_count=100,
+        comment_count=0,
+        thumbnail_url="https://example.com/thumb.jpg",
+        license="standard",
+        privacy_status="public",
+        availability="public",
+        tags=[],
+        categories=[],
+        captions_available=[],
+        has_auto_captions=False,
+        download_status="not_downloaded",
+        source_url="https://youtube.com/watch?v=test123",
+        fetched_at=datetime(2026, 1, 28, 12, 0, 0),
+    )
+
+    # Should raise ValueError with helpful message
+    with pytest.raises(ValueError) as exc_info:
+        archiver._get_video_path(video)
+
+    error_msg = str(exc_info.value)
+    assert "invalid_placeholder" in error_msg
+    assert "video_path_pattern" in error_msg
+    assert "Valid placeholders:" in error_msg
+
+
+@pytest.mark.ai_generated
+def test_playlist_path_with_invalid_placeholder_raises_error(tmp_path: Path) -> None:
+    """Test that invalid placeholders in playlist_path_pattern raise ValueError."""
+    from annextube.lib.config import ComponentsConfig, Config
+    from annextube.models.playlist import Playlist
+
+    # Create config with invalid placeholder {playlist_name}
+    config = Config(
+        components=ComponentsConfig(),
+        organization=OrganizationConfig(
+            playlist_path_pattern="{playlist_name}"  # Should be {playlist_title}
+        )
+    )
+
+    archiver = Archiver(tmp_path, config)
+
+    playlist = Playlist(
+        playlist_id="PLtest123",
+        title="Test Playlist",
+        description="Test description",
+        channel_id="UC123",
+        channel_name="Test Channel",
+        video_count=5,
+        privacy_status="public",
+        last_modified=datetime(2026, 1, 28, 0, 0, 0),
+        video_ids=["vid1", "vid2"],
+        fetched_at=datetime(2026, 1, 28, 0, 0, 0),
+    )
+
+    # Should raise ValueError with helpful message
+    with pytest.raises(ValueError) as exc_info:
+        archiver._get_playlist_path(playlist)
+
+    error_msg = str(exc_info.value)
+    assert "playlist_name" in error_msg
+    assert "playlist_path_pattern" in error_msg
+    assert "Valid placeholders:" in error_msg
+    assert "playlist_title" in error_msg  # Should suggest the correct placeholder
