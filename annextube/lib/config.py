@@ -78,9 +78,8 @@ class OrganizationConfig:
     video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}"  # Default: hierarchical by year/month
     channel_path_pattern: str = "{channel_id}"
     playlist_path_pattern: str = "{playlist_title}"  # Use sanitized playlist title by default
+    playlist_symlink_pattern: str = "{video_playlist_index:04d}_{video_dir_name}"  # Pattern for playlist symlinks
     video_filename: str = "video.mkv"  # Filename for video file within video directory
-    playlist_prefix_width: int = 4  # Zero-padded width for playlist symlink prefixes (e.g., 0001)
-    playlist_prefix_separator: str = "_"  # Separator between index and path (underscore, not hyphen)
 
 
 @dataclass
@@ -223,9 +222,10 @@ class Config:
             ),
             channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
             playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_title}"),
+            playlist_symlink_pattern=organization_data.get(
+                "playlist_symlink_pattern", "{video_playlist_index:04d}_{video_dir_name}"
+            ),
             video_filename=organization_data.get("video_filename", "video.mkv"),
-            playlist_prefix_width=organization_data.get("playlist_prefix_width", 4),
-            playlist_prefix_separator=organization_data.get("playlist_prefix_separator", "_"),
         )
 
         return cls(
@@ -426,15 +426,20 @@ playlist_path_pattern = "{{playlist_title}}"  # Path pattern for playlists (sani
 #   {{channel_id}} - Channel ID
 #   {{channel_name}} - Channel name (sanitized)
 
+playlist_symlink_pattern = "{{video_playlist_index:04d}}_{{video_dir_name}}"  # Pattern for playlist symlinks
+# Available placeholders for playlist symlinks:
+#   {{video_playlist_index}} - Position in playlist (1-based integer)
+#   {{video_dir_name}} - Video directory name (from video_path_pattern)
+#   {{sanitized_title}} - Video title (filesystem-safe)
+#   {{date}} - Video publication date (YYYY-MM-DD)
+#   {{video_id}} - YouTube video ID
+# Format specifiers supported (e.g., :04d for zero-padded 4 digits)
+# Examples:
+#   "{{video_playlist_index:04d}}_{{video_dir_name}}" - 0001_video-dir (default)
+#   "{{video_playlist_index:03d}}-{{sanitized_title}}" - 001-video-title
+#   "{{video_playlist_index}}_{{date}}_{{video_id}}" - 1_2024-01-15_abc123
+
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
-
-# Playlist organization
-playlist_prefix_width = 4  # Zero-padding width for playlist symlinks (e.g., 0001_, 0023_)
-                           # Supports playlists up to 10^width - 1 videos
-                           # 4 digits = up to 9999 videos per playlist
-
-playlist_prefix_separator = "_"  # Separator between index and path (underscore, not hyphen)
-                                 # Example: 0001_2020-01-10_video-title (not 0001-2020-01-10...)
 '''
 
     # Handle comments_depth: None means don't set it (use default = unlimited)

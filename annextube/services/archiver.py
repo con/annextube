@@ -446,6 +446,51 @@ class Archiver:
 
         return self.repo_path / "playlists" / path_str
 
+    def _get_playlist_symlink_name(self, video: Video, video_dir: Path, playlist_index: int) -> str:
+        """Generate playlist symlink name from pattern.
+
+        Args:
+            video: Video model instance
+            video_dir: Path to video directory
+            playlist_index: 1-based position in playlist
+
+        Returns:
+            Symlink filename (e.g., "0001_video-title")
+        """
+        pattern = self.config.organization.playlist_symlink_pattern
+
+        # Extract date from published_at
+        try:
+            if isinstance(video.published_at, datetime):
+                date_obj = video.published_at
+                date_str = date_obj.strftime('%Y-%m-%d')
+            else:
+                date_obj = datetime.fromisoformat(str(video.published_at).replace('Z', '+00:00'))
+                date_str = date_obj.strftime('%Y-%m-%d')
+        except Exception as e:
+            logger.warning(f"Failed to parse date from published_at: {e}")
+            date_str = 'unknown'
+
+        # Build placeholders
+        placeholders = {
+            'video_playlist_index': playlist_index,
+            'video_dir_name': video_dir.name,
+            'sanitized_title': sanitize_filename(video.title),
+            'date': date_str,
+            'video_id': video.video_id,
+        }
+
+        # Replace placeholders in pattern using .format()
+        try:
+            symlink_name = pattern.format(**placeholders)
+        except KeyError as e:
+            raise ValueError(
+                f"Unknown placeholder {e} in playlist_symlink_pattern: {pattern}. "
+                f"Valid placeholders: {', '.join(sorted(placeholders.keys()))}"
+            ) from e
+
+        return symlink_name
+
     def _discover_playlists(self, channel_url: str, include_pattern: str,
                            exclude_pattern: str | None, include_podcasts: str) -> list[str]:
         """Discover and filter playlists from a channel.
@@ -766,10 +811,6 @@ class Archiver:
             logger.info("Playlist content unchanged, skipping video processing")
             return stats
 
-        # Get prefix width and separator for ordered symlinks
-        prefix_width = self.config.organization.playlist_prefix_width
-        separator = self.config.organization.playlist_prefix_separator
-
         # Process each video and create ordered symlinks (fail-fast)
         for i, video_meta in enumerate(videos_metadata, 1):
             video = self.youtube.metadata_to_video(video_meta)
@@ -792,10 +833,8 @@ class Archiver:
             # Create ordered symlink in playlist directory (even if already processed)
             video_dir = self._get_video_path(video)
             if video_dir.exists():
-                # Create symlink with zero-padded numeric prefix
-                # Format: {NNNN}_{video_dir_name} -> ../../videos/{year}/{month}/{video_dir_name}
-                prefix = f"{i:0{prefix_width}d}{separator}"
-                symlink_name = f"{prefix}{video_dir.name}"
+                # Generate symlink name from pattern
+                symlink_name = self._get_playlist_symlink_name(video, video_dir, i)
                 symlink_path = playlist_dir / symlink_name
 
                 # Create relative symlink (for repository portability)
