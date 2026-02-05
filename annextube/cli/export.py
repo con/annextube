@@ -68,17 +68,17 @@ def export(ctx: click.Context, what: str, output_dir: Path, output: Path):
 
         if what == "videos":
             output_path = export_service.generate_videos_tsv(output)
-            click.echo(f"✓ Generated {output_path}")
+            click.echo(f"[ok] Generated {output_path}")
 
         elif what == "playlists":
             output_path = export_service.generate_playlists_tsv(output)
-            click.echo(f"✓ Generated {output_path}")
+            click.echo(f"[ok] Generated {output_path}")
 
         elif what == "authors":
             from annextube.services.authors import AuthorsService
             authors_service = AuthorsService(output_dir)
             output_path = authors_service.generate_authors_tsv()
-            click.echo(f"✓ Generated {output_path}")
+            click.echo(f"[ok] Generated {output_path}")
 
         elif what == "all":
             if output:
@@ -86,12 +86,12 @@ def export(ctx: click.Context, what: str, output_dir: Path, output: Path):
                 raise click.Abort()
 
             videos_path, playlists_path, authors_path = export_service.generate_all()
-            click.echo(f"✓ Generated {videos_path}")
-            click.echo(f"✓ Generated {playlists_path}")
-            click.echo(f"✓ Generated {authors_path}")
+            click.echo(f"[ok] Generated {videos_path}")
+            click.echo(f"[ok] Generated {playlists_path}")
+            click.echo(f"[ok] Generated {authors_path}")
 
         click.echo()
-        click.echo("✓ Export complete!")
+        click.echo("[ok] Export complete!")
 
     except Exception as e:
         logger.error(f"Export failed: {e}")

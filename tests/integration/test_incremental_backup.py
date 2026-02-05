@@ -14,8 +14,8 @@ def test_incremental_backup_no_reprocessing():
     This test verifies that the incremental update mode correctly identifies
     and skips already-downloaded videos, ensuring efficiency.
     """
-    # Use a small, stable test channel (Lex Fridman has many videos)
-    test_channel = "https://www.youtube.com/@lexfridman"
+    # Use the dedicated AnnexTube Test Channel (10 known videos)
+    test_channel = "https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA"
     limit = 3  # Just 3 videos for fast testing
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -87,7 +87,8 @@ def test_incremental_backup_detects_new_videos():
     This test uses a larger limit on the second run to simulate new videos
     being available.
     """
-    test_channel = "https://www.youtube.com/@lexfridman"
+    # Use the dedicated AnnexTube Test Channel (10 known videos)
+    test_channel = "https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA"
 
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)

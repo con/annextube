@@ -821,7 +821,7 @@ class YouTubeService:
                     new_name = output_dir / f"{base_filename}.{lang_code}.vtt"
                     caption_file.rename(new_name)
                     renamed_files.append(new_name)
-                    logger.debug(f"Renamed {caption_file.name} → {new_name.name}")
+                    logger.debug(f"Renamed {caption_file.name} -> {new_name.name}")
                 caption_files = renamed_files
 
             # Deduplicate: remove LANG-orig if identical to LANG

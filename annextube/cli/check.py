@@ -40,7 +40,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
     # Check if git-annex repo
     git_annex = GitAnnexService(output_dir)
     if not git_annex.is_annex_repo():
-        click.echo(f"✗ Error: {output_dir} is not a git-annex repository", err=True)
+        click.echo(f"[FAIL] Error: {output_dir} is not a git-annex repository", err=True)
         raise click.Abort()
 
     click.echo(f"Checking annextube archive: {output_dir}")
@@ -59,13 +59,13 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
             )
             if result.stdout.strip():
                 issues.append("Git working tree has uncommitted changes")
-                click.echo("\r✗ Git status: DIRTY")
+                click.echo("\r[FAIL] Git status: DIRTY")
                 click.echo(f"  Uncommitted changes:\n{result.stdout}")
             else:
-                click.echo("\r✓ Git status: CLEAN")
+                click.echo("\r[ok] Git status: CLEAN")
         except Exception as e:
             issues.append(f"Failed to check git status: {e}")
-            click.echo(f"\r✗ Git status check failed: {e}")
+            click.echo(f"\r[FAIL] Git status check failed: {e}")
 
     # 2. Config validation
     if not skip_config:
@@ -73,18 +73,18 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
         config_path = output_dir / ".annextube" / "config.toml"
         if not config_path.exists():
             issues.append(f"Configuration file missing: {config_path}")
-            click.echo(f"\r✗ Configuration: MISSING ({config_path})")
+            click.echo(f"\r[FAIL] Configuration: MISSING ({config_path})")
         else:
             try:
                 config = load_config(repo_path=output_dir)
                 if not config.sources:
                     warnings.append("No sources configured")
-                    click.echo("\r⚠ Configuration: No sources configured")
+                    click.echo("\r[!] Configuration: No sources configured")
                 else:
-                    click.echo(f"\r✓ Configuration: {len(config.sources)} source(s)")
+                    click.echo(f"\r[ok] Configuration: {len(config.sources)} source(s)")
             except Exception as e:
                 issues.append(f"Failed to load config: {e}")
-                click.echo(f"\r✗ Configuration: INVALID ({e})")
+                click.echo(f"\r[FAIL] Configuration: INVALID ({e})")
 
     # 3. TSV consistency checks
     if not skip_tsv:
@@ -100,12 +100,12 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 actual_count = len(actual_dirs)
                 if tsv_count != actual_count:
                     issues.append(f"videos.tsv mismatch: {tsv_count} rows vs {actual_count} directories")
-                    click.echo(f"\r✗ TSV consistency: videos.tsv has {tsv_count} rows but {actual_count} video directories exist")
+                    click.echo(f"\r[FAIL] TSV consistency: videos.tsv has {tsv_count} rows but {actual_count} video directories exist")
                 else:
-                    click.echo(f"\r✓ TSV consistency: {tsv_count} videos")
+                    click.echo(f"\r[ok] TSV consistency: {tsv_count} videos")
             else:
                 warnings.append("videos.tsv not found")
-                click.echo("\r⚠ TSV: videos.tsv not found")
+                click.echo("\r[!] TSV: videos.tsv not found")
 
             # Check playlists.tsv if config expects playlists
             playlists_tsv = output_dir / "playlists" / "playlists.tsv"
@@ -118,13 +118,13 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 actual_count = len(actual_dirs)
                 if tsv_count != actual_count:
                     issues.append(f"playlists.tsv mismatch: {tsv_count} rows vs {actual_count} directories")
-                    click.echo(f"  ✗ playlists.tsv has {tsv_count} rows but {actual_count} playlist directories exist")
+                    click.echo(f"  [FAIL] playlists.tsv has {tsv_count} rows but {actual_count} playlist directories exist")
                 else:
-                    click.echo(f"  ✓ playlists.tsv: {tsv_count} playlists")
+                    click.echo(f"  [ok] playlists.tsv: {tsv_count} playlists")
 
         except Exception as e:
             issues.append(f"TSV check failed: {e}")
-            click.echo(f"\r✗ TSV check failed: {e}")
+            click.echo(f"\r[FAIL] TSV check failed: {e}")
 
     # 4. Component expectations
     click.echo("[ ] Checking component expectations...", nl=False)
@@ -138,42 +138,42 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 vtt_count = len(list(output_dir.rglob("*.vtt")))
                 if vtt_count == 0:
                     warnings.append("Captions enabled but no .vtt files found")
-                    click.echo("\r⚠ Components: Captions enabled but no .vtt files found")
+                    click.echo("\r[!] Components: Captions enabled but no .vtt files found")
                 else:
-                    click.echo(f"\r✓ Components: {vtt_count} caption files")
+                    click.echo(f"\r[ok] Components: {vtt_count} caption files")
 
             # Check comments
             if components.comments_depth is None or (components.comments_depth and components.comments_depth > 0):
                 comment_files = list(output_dir.rglob("comments.json"))
                 if len(comment_files) == 0:
                     warnings.append("Comments enabled but no comments.json files found")
-                    click.echo("  ⚠ Comments enabled but no comments.json found")
+                    click.echo("  [!] Comments enabled but no comments.json found")
                 else:
-                    click.echo(f"  ✓ {len(comment_files)} comment files")
+                    click.echo(f"  [ok] {len(comment_files)} comment files")
 
             # Check thumbnails
             if components.thumbnails:
                 thumb_count = len(list(output_dir.rglob("thumbnail.jpg")))
                 if thumb_count == 0:
                     warnings.append("Thumbnails enabled but no thumbnail.jpg files found")
-                    click.echo("  ⚠ Thumbnails enabled but no thumbnail.jpg found")
+                    click.echo("  [!] Thumbnails enabled but no thumbnail.jpg found")
                 else:
-                    click.echo(f"  ✓ {thumb_count} thumbnails")
+                    click.echo(f"  [ok] {thumb_count} thumbnails")
 
             # Check playlists
             if any(s.include_playlists != "none" for s in config.sources if hasattr(s, 'include_playlists')):
                 playlists_dir = output_dir / "playlists"
                 if not playlists_dir.exists() or not list(playlists_dir.iterdir()):
                     warnings.append("Playlists enabled but no playlists directory found")
-                    click.echo("  ⚠ Playlists enabled but no playlists found")
+                    click.echo("  [!] Playlists enabled but no playlists found")
                 else:
                     playlist_count = len([d for d in playlists_dir.iterdir() if d.is_dir()])
-                    click.echo(f"  ✓ {playlist_count} playlists")
+                    click.echo(f"  [ok] {playlist_count} playlists")
         else:
-            click.echo("\r⚠ Components: Config not available, skipping")
+            click.echo("\r[!] Components: Config not available, skipping")
     except Exception as e:
         warnings.append(f"Component check failed: {e}")
-        click.echo(f"\r⚠ Component check failed: {e}")
+        click.echo(f"\r[!] Component check failed: {e}")
 
     # 5. Large files in git check
     if not skip_large_files:
@@ -197,16 +197,16 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                         large_files.append(parts[3])
             if large_files:
                 issues.append(f"Found {len(large_files)} large files committed directly to git (should be in annex)")
-                click.echo(f"\r✗ Large files: {len(large_files)} files in git (should be in annex)")
+                click.echo(f"\r[FAIL] Large files: {len(large_files)} files in git (should be in annex)")
                 for f in large_files[:5]:  # Show first 5
                     click.echo(f"    {f}")
                 if len(large_files) > 5:
                     click.echo(f"    ... and {len(large_files) - 5} more")
             else:
-                click.echo("\r✓ Large files: All large files in annex")
+                click.echo("\r[ok] Large files: All large files in annex")
         except Exception as e:
             warnings.append(f"Large files check failed: {e}")
-            click.echo(f"\r⚠ Large files check failed: {e}")
+            click.echo(f"\r[!] Large files check failed: {e}")
 
     # 6. git-annex fsck
     if not skip_fsck:
@@ -220,29 +220,29 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 timeout=60
             )
             if result.returncode == 0:
-                click.echo("\r✓ git-annex fsck: PASSED")
+                click.echo("\r[ok] git-annex fsck: PASSED")
             else:
                 issues.append("git-annex fsck found issues")
-                click.echo(f"\r✗ git-annex fsck: FAILED\n{result.stderr}")
+                click.echo(f"\r[FAIL] git-annex fsck: FAILED\n{result.stderr}")
         except subprocess.TimeoutExpired:
             warnings.append("git-annex fsck timed out (>60s)")
-            click.echo("\r⚠ git-annex fsck: TIMEOUT (skipped)")
+            click.echo("\r[!] git-annex fsck: TIMEOUT (skipped)")
         except Exception as e:
             warnings.append(f"git-annex fsck failed: {e}")
-            click.echo(f"\r⚠ git-annex fsck failed: {e}")
+            click.echo(f"\r[!] git-annex fsck failed: {e}")
 
     # Summary
     click.echo()
     click.echo("=" * 60)
     if issues:
-        click.echo(f"✗ Check FAILED with {len(issues)} issue(s):")
+        click.echo(f"[FAIL] Check FAILED with {len(issues)} issue(s):")
         for issue in issues:
             click.echo(f"  - {issue}")
     else:
-        click.echo("✓ All checks PASSED")
+        click.echo("[ok] All checks PASSED")
 
     if warnings:
-        click.echo(f"\n⚠ {len(warnings)} warning(s):")
+        click.echo(f"\n[!] {len(warnings)} warning(s):")
         for warning in warnings:
             click.echo(f"  - {warning}")
 

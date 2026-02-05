@@ -509,10 +509,10 @@ class QuotaEstimator:
         ])
 
         if total_cost <= cls.FREE_TIER_DAILY_QUOTA:
-            report_lines.append(f"✓ Fits within free tier ({total_cost / cls.FREE_TIER_DAILY_QUOTA * 100:.1f}% of daily quota)")
+            report_lines.append(f"[ok] Fits within free tier ({total_cost / cls.FREE_TIER_DAILY_QUOTA * 100:.1f}% of daily quota)")
         else:
             report_lines.extend([
-                f"✗ Exceeds free tier by {overage:,} units",
+                f"[!] Exceeds free tier by {overage:,} units",
                 f"  Requires {days_needed} day(s) at free tier rate",
             ])
 

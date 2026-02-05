@@ -367,7 +367,7 @@ def test_api_error_handling_graceful_fallback() -> None:
 @pytest.mark.ai_generated
 @pytest.mark.network
 def test_real_api_creative_commons_video() -> None:
-    """Test with real YouTube API - Big Buck Bunny (known CC video).
+    """Test with real YouTube API - known Creative Commons video from test channel.
 
     This test requires YOUTUBE_API_KEY environment variable and network access.
     Marked with @pytest.mark.network so it can be skipped in CI if needed.
@@ -376,8 +376,8 @@ def test_real_api_creative_commons_video() -> None:
     if not api_key:
         pytest.skip("YOUTUBE_API_KEY not set - skipping real API test")
 
-    # Big Buck Bunny on Blender's channel (known Creative Commons video)
-    video_id = "YE7VzlLtp-4"
+    # AnnexTube Test Channel - Creative Commons 1 (known CC video)
+    video_id = "GhGQV_enM8M"
 
     client = YouTubeAPIMetadataClient(api_key=api_key)
     result = client.enhance_video_metadata(video_id)
@@ -397,7 +397,7 @@ def test_real_api_creative_commons_video() -> None:
 @pytest.mark.ai_generated
 @pytest.mark.network
 def test_real_api_standard_video() -> None:
-    """Test with real YouTube API - standard license video.
+    """Test with real YouTube API - standard license video from test channel.
 
     This test requires YOUTUBE_API_KEY environment variable and network access.
     Marked with @pytest.mark.network so it can be skipped in CI if needed.
@@ -406,8 +406,8 @@ def test_real_api_standard_video() -> None:
     if not api_key:
         pytest.skip("YOUTUBE_API_KEY not set - skipping real API test")
 
-    # Khan Academy video (likely standard YouTube license)
-    video_id = "ahg3qbmM0Xw"
+    # AnnexTube Test Channel - Standard License 1 (known standard license video)
+    video_id = "ma84N_6Mybs"
 
     client = YouTubeAPIMetadataClient(api_key=api_key)
     result = client.enhance_video_metadata(video_id)
@@ -415,8 +415,8 @@ def test_real_api_standard_video() -> None:
     assert video_id in result
     metadata = result[video_id]
 
-    # Should have a license (youtube or creativeCommon)
-    assert metadata["license"] in ["youtube", "creativeCommon"]
+    # Should detect standard YouTube license
+    assert metadata["license"] == "youtube"
 
     # Should have embeddable status
     assert isinstance(metadata.get("embeddable"), bool)

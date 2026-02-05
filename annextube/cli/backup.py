@@ -110,11 +110,11 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             click.echo("Regenerating TSV metadata files from existing JSON...")
             exporter = ExportService(output_dir)
             videos_tsv, playlists_tsv, authors_tsv = exporter.generate_all()
-            click.echo(f"✓ Generated: {videos_tsv}")
-            click.echo(f"✓ Generated: {playlists_tsv}")
-            click.echo(f"✓ Generated: {authors_tsv}")
+            click.echo(f"[ok] Generated: {videos_tsv}")
+            click.echo(f"[ok] Generated: {playlists_tsv}")
+            click.echo(f"[ok] Generated: {authors_tsv}")
             click.echo()
-            click.echo("✓ TSV metadata regeneration complete!")
+            click.echo("[ok] TSV metadata regeneration complete!")
             return
 
         # Parse date range (for all-incremental mode)
@@ -211,7 +211,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 click.echo(f"  Errors: {len(total_stats['errors'])}")
 
         click.echo()
-        click.echo("✓ Backup complete!")
+        click.echo("[ok] Backup complete!")
 
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
@@ -238,7 +238,7 @@ def _print_stats(stats: dict, prefix: str = ""):
     click.echo(f"{prefix}  Captions downloaded: {stats.get('captions_downloaded', 0)}")
 
     if stats["errors"]:
-        click.echo(f"{prefix}  ⚠ Errors: {len(stats['errors'])}")
+        click.echo(f"{prefix}  [!] Errors: {len(stats['errors'])}")
 
 
 def _is_playlist_url(url: str) -> bool:

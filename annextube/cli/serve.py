@@ -61,7 +61,7 @@ class ArchiveWatcher:
             export = ExportService(self.repo_path)
             videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
 
-            logger.info(f"✓ Regenerated: {videos_tsv.name}, {playlists_tsv.name}, {authors_tsv.name}")
+            logger.info(f"[ok] Regenerated: {videos_tsv.name}, {playlists_tsv.name}, {authors_tsv.name}")
 
             # TODO: In future, could also regenerate web UI if needed
             # For now, TSVs are enough since web UI reads them dynamically
@@ -192,9 +192,9 @@ def serve(
                 click.echo("Regenerating TSV files...")
                 export = ExportService(output_dir)
                 videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
-                click.echo(f"  ✓ {videos_tsv.name}")
-                click.echo(f"  ✓ {playlists_tsv.name}")
-                click.echo(f"  ✓ {authors_tsv.name}")
+                click.echo(f"  [ok] {videos_tsv.name}")
+                click.echo(f"  [ok] {playlists_tsv.name}")
+                click.echo(f"  [ok] {authors_tsv.name}")
 
             # Regenerate web UI
             if regenerate in ['web', 'all']:
@@ -213,7 +213,7 @@ def serve(
                 if web_dir.exists():
                     shutil.rmtree(web_dir)
                 shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
-                click.echo("  ✓ web/")
+                click.echo("  [ok] web/")
 
         except Exception as e:
             click.echo(f"Error regenerating: {e}", err=True)
@@ -226,7 +226,7 @@ def serve(
         watcher = ArchiveWatcher(output_dir, web_dir, watch_interval)
         watcher_thread = Thread(target=watcher.watch, daemon=True)
         watcher_thread.start()
-        click.echo(f"✓ Watching for changes (interval: {watch_interval}s)")
+        click.echo(f"[ok] Watching for changes (interval: {watch_interval}s)")
 
     # Change to archive directory
     os.chdir(output_dir)
@@ -237,14 +237,14 @@ def serve(
         socketserver.TCPServer.allow_reuse_address = True
         with socketserver.TCPServer((host, port), RangeHTTPRequestHandler) as httpd:
             click.echo()
-            click.echo(f"🚀 Serving annextube archive at http://{host}:{port}/")
-            click.echo(f"📁 Directory: {output_dir}")
-            click.echo(f"🌐 Web UI: http://{host}:{port}/web/")
+            click.echo(f"Serving annextube archive at http://{host}:{port}/")
+            click.echo(f"Directory: {output_dir}")
+            click.echo(f"Web UI: http://{host}:{port}/web/")
             click.echo()
             click.echo("Features:")
-            click.echo("  ✓ HTTP Range requests (video seeking enabled)")
+            click.echo("  [ok] HTTP Range requests (video seeking enabled)")
             if watch:
-                click.echo(f"  ✓ Auto-regenerate TSVs on changes ({watch_interval}s interval)")
+                click.echo(f"  [ok] Auto-regenerate TSVs on changes ({watch_interval}s interval)")
             click.echo()
             click.echo("Press Ctrl+C to stop")
             click.echo()

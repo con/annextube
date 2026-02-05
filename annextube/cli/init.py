@@ -76,15 +76,15 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         git_annex.add_and_commit("Initial annextube repository setup")
 
         # Success message
-        click.echo("✓ Initialized YouTube archive repository in current directory")
-        click.echo("✓ Git-annex backend: URL (for video URLs)")
-        click.echo("✓ Tracking configuration:")
-        click.echo("  - *.json, *.tsv, *.md, *.vtt → git")
-        click.echo("  - *.mp4, *.webm, *.jpg, *.png → git-annex")
+        click.echo("Initialized YouTube archive repository in current directory")
+        click.echo("Git-annex backend: URL (for video URLs)")
+        click.echo("Tracking configuration:")
+        click.echo("  - *.json, *.tsv, *.md, *.vtt -> git")
+        click.echo("  - *.mp4, *.webm, *.jpg, *.png -> git-annex")
         click.echo()
-        click.echo(f"✓ Configuration created: {config_path}")
+        click.echo(f"Configuration created: {config_path}")
         if urls:
-            click.echo(f"✓ Added {len(urls)} source(s):")
+            click.echo(f"Added {len(urls)} source(s):")
             for url in urls:
                 click.echo(f"  - {url}")
         else:

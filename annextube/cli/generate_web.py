@@ -78,9 +78,9 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
         click.echo("Updating metadata files...")
         export_service = ExportService(output_dir)
         videos_tsv, playlists_tsv, authors_tsv = export_service.generate_all()
-        click.echo(f"  ✓ {videos_tsv.name}")
-        click.echo(f"  ✓ {playlists_tsv.name}")
-        click.echo(f"  ✓ {authors_tsv.name}")
+        click.echo(f"  [ok] {videos_tsv.name}")
+        click.echo(f"  [ok] {playlists_tsv.name}")
+        click.echo(f"  [ok] {authors_tsv.name}")
 
         # Check if frontend build exists
         if not FRONTEND_BUILD_DIR.exists():
@@ -98,7 +98,7 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
         shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
 
         click.echo()
-        click.echo("✓ Web browser generated successfully!")
+        click.echo("[ok] Web browser generated successfully!")
         click.echo()
         click.echo("To view the archive:")
         click.echo(f"  1. cd {output_dir}")

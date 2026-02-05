@@ -70,7 +70,7 @@ def test_format_cost_report_videos_only() -> None:
     assert "YouTube API Quota Estimation" in report
     assert "1,000 × 10 units = 10,000 units" in report
     assert "Daily free quota: 10,000 units/day" in report
-    assert "✓ Fits within free tier" in report
+    assert "[ok] Fits within free tier" in report
     assert "100.0% of daily quota" in report
 
     # Should not include pricing info when within free tier
@@ -85,7 +85,7 @@ def test_format_cost_report_exceeds_free_tier() -> None:
     report = QuotaEstimator.format_cost_report(2_000)
 
     assert "2,000 × 10 units = 20,000 units" in report
-    assert "✗ Exceeds free tier by 10,000 units" in report
+    assert "[!] Exceeds free tier by 10,000 units" in report
     assert "Requires 2 day(s) at free tier rate" in report
 
     # Should include pricing info
@@ -105,7 +105,7 @@ def test_format_cost_report_with_comments() -> None:
     assert "500 × 10 units = 5,000 units" in report
     assert "10,000 ÷ 100 = 100 units" in report
     assert "Total:            5,100 units" in report
-    assert "✓ Fits within free tier (51.0% of daily quota)" in report
+    assert "[ok] Fits within free tier (51.0% of daily quota)" in report
 
 
 @pytest.mark.ai_generated
@@ -115,7 +115,7 @@ def test_format_cost_report_no_pricing() -> None:
     report = QuotaEstimator.format_cost_report(2_000, include_pricing=False)
 
     assert "2,000 × 10 units = 20,000 units" in report
-    assert "✗ Exceeds free tier by 10,000 units" in report
+    assert "[!] Exceeds free tier by 10,000 units" in report
 
     # Should NOT include pricing section
     assert "Paid Quota Pricing" not in report
@@ -129,7 +129,7 @@ def test_format_cost_report_large_overage() -> None:
     report = QuotaEstimator.format_cost_report(10_000)
 
     assert "10,000 × 10 units = 100,000 units" in report
-    assert "✗ Exceeds free tier by 90,000 units" in report
+    assert "[!] Exceeds free tier by 90,000 units" in report
     assert "Requires 10 day(s) at free tier rate" in report
     assert "Estimated cost:   $90.00 USD" in report
 

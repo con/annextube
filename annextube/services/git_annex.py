@@ -112,9 +112,9 @@ class GitAnnexService:
     def configure_gitattributes(self) -> None:
         """Configure .gitattributes for file tracking rules.
 
-        Default: Binary files and files >10k → git-annex
-        Large text files (.vtt captions, comments.json) → git-annex
-        Small metadata files (.tsv, .md, README) → git
+        Default: Binary files and files >10k -> git-annex
+        Large text files (.vtt captions, comments.json) -> git-annex
+        Small metadata files (.tsv, .md, README) -> git
         """
         gitattributes_path = self.repo_path / ".gitattributes"
 
@@ -124,7 +124,7 @@ class GitAnnexService:
             "# Default: Binary files and files >10k go to git-annex",
             "* annex.largefiles=(((mimeencoding=binary)and(largerthan=0))or(largerthan=10k))",
             "",
-            "# Small metadata files → git (override default)",
+            "# Small metadata files -> git (override default)",
             "*.tsv annex.largefiles=nothing",
             "*.md annex.largefiles=nothing",
             "README* annex.largefiles=nothing",
@@ -132,14 +132,14 @@ class GitAnnexService:
             ".gitignore annex.largefiles=nothing",
             ".gitattributes annex.largefiles=nothing",
             "",
-            "# Sensitive data files → git-annex (contains personal information)",
+            "# Sensitive data files -> git-annex (contains personal information)",
             "authors.tsv annex.largefiles=anything",
             "comments.json annex.largefiles=anything",
             "",
-            "# Large text files → git-annex (VTT captions)",
+            "# Large text files -> git-annex (VTT captions)",
             "*.vtt annex.largefiles=anything",
             "",
-            "# Media files → git-annex (covered by default, explicit for clarity)",
+            "# Media files -> git-annex (covered by default, explicit for clarity)",
             "*.mp4 annex.largefiles=anything",
             "*.webm annex.largefiles=anything",
             "*.mkv annex.largefiles=anything",

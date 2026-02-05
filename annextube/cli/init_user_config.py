@@ -22,7 +22,7 @@ def init_user_config():
     """
     try:
         config_path = save_user_config_template()
-        click.echo(f"✓ Created user config template: {config_path}")
+        click.echo(f"[ok] Created user config template: {config_path}")
         click.echo()
         click.echo("Edit this file to configure:")
         click.echo("  - YouTube cookies (for private/age-restricted content)")
