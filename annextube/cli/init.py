@@ -25,9 +25,10 @@ logger = get_logger(__name__)
 @click.option("--thumbnails/--no-thumbnails", default=True, help="Enable thumbnails (default: enabled)")
 @click.option("--limit", type=int, default=None, help="Limit to N most recent videos")
 @click.option("--include-playlists", default="all", help="Playlist inclusion: 'all' (default), 'none', or regex pattern")
+@click.option("--include-podcasts", default="all", help="Podcast inclusion: 'all' (default), 'none', or regex pattern")
 @click.option("--video-path-pattern", default="{year}/{month}/{date}_{sanitized_title}", help="Path pattern for video directories (default: {year}/{month}/{date}_{sanitized_title})")
 @click.pass_context
-def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, video_path_pattern: str):
+def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
@@ -69,6 +70,7 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
             enable_thumbnails=thumbnails,
             limit=limit,
             include_playlists=include_playlists,
+            include_podcasts=include_podcasts,
             video_path_pattern=video_path_pattern
         )
 
@@ -104,6 +106,8 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
             click.echo(f"  - Limit: {limit} most recent videos")
         if include_playlists != "none":
             click.echo(f"  - Playlists: {include_playlists}")
+        if include_podcasts != "none":
+            click.echo(f"  - Podcasts: {include_podcasts}")
         click.echo()
         click.echo("Next steps:")
         if not urls:

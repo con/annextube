@@ -376,7 +376,7 @@ def load_config(config_path: Path | None = None, repo_path: Path | None = None) 
 def generate_config_template(urls: list[str] | None = None, enable_videos: bool = True,
                             comments_depth: int | None = None, enable_captions: bool = True,
                             enable_thumbnails: bool = True, limit: int | None = None,
-                            include_playlists: str = "none",
+                            include_playlists: str = "none", include_podcasts: str = "none",
                             video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}") -> str:
     """Generate a template configuration file in TOML format.
 
@@ -388,6 +388,7 @@ def generate_config_template(urls: list[str] | None = None, enable_videos: bool 
         enable_thumbnails: Enable thumbnails (default: True)
         limit: Limit to N most recent videos (default: None = no limit)
         include_playlists: Playlist inclusion ("none", "all", or regex pattern, default: "none")
+        include_podcasts: Podcast inclusion ("none", "all", or regex pattern, default: "none")
         video_path_pattern: Path pattern for video directories (default: "{year}/{month}/{date}_{sanitized_title}")
 
     Returns:
@@ -443,11 +444,12 @@ playlist_prefix_separator = "_"  # Separator between index and path (underscore,
             # Detect if playlist or channel
             url_type = "playlist" if ("playlist?" in url or "list=" in url) else "channel"
             playlist_line = f'\ninclude_playlists = "{include_playlists}"' if url_type == "channel" and include_playlists != "none" else ""
+            podcast_line = f'\ninclude_podcasts = "{include_podcasts}"' if url_type == "channel" and include_podcasts != "none" else ""
             sources_section += f'''
 [[sources]]
 url = "{url}"
 type = "{url_type}"
-enabled = true{playlist_line}
+enabled = true{playlist_line}{podcast_line}
 '''
         sources_section += '''
 # Add more sources by adding [[sources]] sections above
@@ -545,6 +547,7 @@ def save_config_template(config_dir: Path, urls: list[str] | None = None,
                         enable_videos: bool = True, comments_depth: int | None = None,
                         enable_captions: bool = True, enable_thumbnails: bool = True,
                         limit: int | None = None, include_playlists: str = "none",
+                        include_podcasts: str = "none",
                         video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}") -> Path:
     """Save configuration template to directory.
 
@@ -557,6 +560,7 @@ def save_config_template(config_dir: Path, urls: list[str] | None = None,
         enable_thumbnails: Enable thumbnails (default: True)
         limit: Limit to N most recent videos (default: None = no limit)
         include_playlists: Playlist inclusion ("none", "all", or regex pattern, default: "none")
+        include_podcasts: Podcast inclusion ("none", "all", or regex pattern, default: "none")
         video_path_pattern: Path pattern for video directories (default: "{year}/{month}/{date}_{sanitized_title}")
 
     Returns:
@@ -567,7 +571,8 @@ def save_config_template(config_dir: Path, urls: list[str] | None = None,
 
     with open(config_path, "w") as f:
         f.write(generate_config_template(urls, enable_videos, comments_depth, enable_captions,
-                                        enable_thumbnails, limit, include_playlists, video_path_pattern))
+                                        enable_thumbnails, limit, include_playlists, include_podcasts,
+                                        video_path_pattern))
 
     return config_path
 
