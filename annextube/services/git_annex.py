@@ -190,7 +190,15 @@ class GitAnnexService:
             For URL tracking (--fast), use no_raw=False to store raw YouTube URLs.
             For actual downloads (get_file), yt-dlp will still be used to extract media.
         """
-        cmd = ["git", "annex", "addurl", url, "--file", str(file_path)]
+        # Ensure file_path is relative to repo_path to avoid nested directories
+        # when repo_path itself might be relative to CWD
+        try:
+            file_path_relative = file_path.relative_to(self.repo_path)
+        except ValueError:
+            # file_path is already relative or doesn't contain repo_path
+            file_path_relative = file_path
+
+        cmd = ["git", "annex", "addurl", url, "--file", str(file_path_relative)]
 
         if relaxed:
             cmd.append("--relaxed")
