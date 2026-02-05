@@ -343,8 +343,7 @@ class YouTubeService:
             }
         )
 
-        logger.debug(f"yt-dlp.YoutubeDL({ydl_opts})")
-        logger.debug(f"Calling: ydl.extract_info('{channel_url}', download=False)")
+        logger.debug(f"Calling yt-dlp: extract_info('{channel_url}', download=False) with opts={ydl_opts}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 # Extract channel info (this gets the uploads playlist with full metadata)
@@ -440,7 +439,7 @@ class YouTubeService:
             try:
                 # Extract playlist info (gets full metadata for all videos)
                 logger.info("Fetching playlist metadata (this may take several minutes for large playlists)...")
-                logger.debug(f"Calling: ydl.extract_info('{playlist_url}', download=False)")
+                logger.debug(f"Calling yt-dlp: extract_info('{playlist_url}', download=False)")
                 info = ydl.extract_info(playlist_url, download=False)
 
                 if not info:
@@ -653,8 +652,7 @@ class YouTubeService:
 
         ydl_opts = self._get_ydl_opts(download=False)
 
-        logger.debug(f"yt-dlp.YoutubeDL({ydl_opts})")
-        logger.debug(f"Calling: ydl.extract_info('{video_url}', download=False)")
+        logger.debug(f"Calling yt-dlp: extract_info('{video_url}', download=False) with opts={ydl_opts}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(video_url, download=False)
