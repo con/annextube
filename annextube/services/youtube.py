@@ -243,7 +243,7 @@ class YouTubeService:
                 "ignoreerrors": True,
             })
 
-            logger.debug("First pass: fetching video IDs only (extract_flat)")
+            logger.info("First pass: fetching video list (this may take a minute for large playlists)...")
             with yt_dlp.YoutubeDL(flat_opts) as ydl_flat:
                 try:
                     info = ydl_flat.extract_info(channel_url, download=False)
@@ -253,10 +253,14 @@ class YouTubeService:
 
                     # Filter to find new video IDs
                     all_entries = list(info.get("entries", []))
+                    logger.info(f"Scanning {len(all_entries)} videos for new content...")
                     new_video_ids = []
                     consecutive_existing = 0
 
-                    for entry in all_entries:
+                    for i, entry in enumerate(all_entries, 1):
+                        # Progress indicator every 100 videos
+                        if i % 100 == 0:
+                            logger.info(f"Scanned {i}/{len(all_entries)} videos, found {len(new_video_ids)} new so far")
                         if not entry or not entry.get("id"):
                             continue
 
@@ -292,9 +296,12 @@ class YouTubeService:
                 })
 
                 videos = []
+                total_new = len(new_video_ids)
                 with yt_dlp.YoutubeDL(full_opts) as ydl_full:
-                    for video_id in new_video_ids:
+                    for idx, video_id in enumerate(new_video_ids, 1):
                         try:
+                            # Progress indicator for each video
+                            logger.info(f"Fetching metadata [{idx}/{total_new}]: {video_id}")
                             video_url = f"https://www.youtube.com/watch?v={video_id}"
                             video_info = ydl_full.extract_info(video_url, download=False)
                             if video_info:
@@ -302,10 +309,11 @@ class YouTubeService:
                         except Exception as e:
                             logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
 
-                logger.info(f"Successfully fetched metadata for {len(videos)} new video(s)")
+                logger.info(f"Successfully fetched metadata for {len(videos)}/{total_new} new video(s)")
                 return videos
 
         # Regular extraction (initial backup or fallback)
+        logger.info("Fetching videos (this may take several minutes for large channels)...")
         ydl_opts.update(
             {
                 "playlistend": limit if limit else None,
@@ -341,8 +349,12 @@ class YouTubeService:
                 videos = []
                 consecutive_existing = 0
                 max_consecutive_existing = 10  # Stop after 10 consecutive existing videos
+                total_entries = len(entries)
 
-                for entry in entries:
+                for idx, entry in enumerate(entries, 1):
+                    # Progress indicator every 100 videos
+                    if idx % 100 == 0:
+                        logger.info(f"Processing {idx}/{total_entries} videos, found {len(videos)} new so far...")
                     if entry is None:
                         continue
 
@@ -404,6 +416,7 @@ class YouTubeService:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 # Extract playlist info (gets full metadata for all videos)
+                logger.info("Fetching playlist metadata (this may take several minutes for large playlists)...")
                 info = ydl.extract_info(playlist_url, download=False)
 
                 if not info:
@@ -425,7 +438,12 @@ class YouTubeService:
 
                 # Filter out None entries and extract metadata
                 videos = []
-                for entry in entries:
+                total_entries = len(entries)
+                for idx, entry in enumerate(entries, 1):
+                    # Progress indicator every 100 videos
+                    if idx % 100 == 0:
+                        logger.info(f"Processing {idx}/{total_entries} videos...")
+
                     if entry is None:
                         continue
 
@@ -436,7 +454,7 @@ class YouTubeService:
 
                     videos.append(entry)
 
-                logger.info(f"Successfully fetched metadata for {len(videos)} video(s)")
+                logger.info(f"Successfully processed {len(videos)}/{total_entries} video(s)")
                 return videos
 
             except Exception as e:
