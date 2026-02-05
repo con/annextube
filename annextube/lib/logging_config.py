@@ -8,8 +8,14 @@ import logging
 import sys
 from pathlib import Path
 
+# Define custom log level HEAVY_DEBUG (5) - between DEBUG (10) and NOTSET (0)
+# Use this for extremely verbose output including yt-dlp debug logs
+HEAVY_DEBUG = 5
+logging.addLevelName(HEAVY_DEBUG, "HEAVY_DEBUG")
+
 # Log levels mapping
 LOG_LEVELS = {
+    "heavy-debug": HEAVY_DEBUG,
     "debug": logging.DEBUG,
     "info": logging.INFO,
     "warning": logging.WARNING,
