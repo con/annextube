@@ -102,3 +102,6 @@ docs/.hugo_build.lock
 .conda/
 .claude/settings.local.json
 annextube/_version.py
+.deno
+.local
+.worktrees
