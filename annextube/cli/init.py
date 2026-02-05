@@ -24,7 +24,7 @@ logger = get_logger(__name__)
 @click.option("--captions/--no-captions", default=True, help="Enable captions (default: enabled)")
 @click.option("--thumbnails/--no-thumbnails", default=True, help="Enable thumbnails (default: enabled)")
 @click.option("--limit", type=int, default=None, help="Limit to N most recent videos")
-@click.option("--include-playlists", default="none", help="Playlist inclusion: 'none', 'all', or regex pattern")
+@click.option("--include-playlists", default="all", help="Playlist inclusion: 'all' (default), 'none', or regex pattern")
 @click.option("--video-path-pattern", default="{year}/{month}/{date}_{sanitized_title}", help="Path pattern for video directories (default: {year}/{month}/{date}_{sanitized_title})")
 @click.pass_context
 def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, video_path_pattern: str):
