@@ -1,6 +1,6 @@
 [project]
 name = "annextube"
-version = "0.2.0"
+dynamic = ["version"]
 description = "YouTube archive system using git-annex for efficient storage and incremental updates"
 authors = [{name = "Yaroslav Halchenko", email = "debian@onerussian.com"}]
 readme = "README.md"
@@ -61,11 +61,15 @@ Repository = "https://github.com/con/annextube"
 "Bug Tracker" = "https://github.com/con/annextube/issues"
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "setuptools-scm>=8.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["annextube", "annextube.models", "annextube.services", "annextube.cli", "annextube.lib"]
+
+[tool.setuptools_scm]
+# Automatically determine version from git tags
+version_file = "annextube/_version.py"
 
 [tool.pytest.ini_options]
 minversion = "7.0"

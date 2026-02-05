@@ -100,3 +100,4 @@ docs/.hugo_build.lock
 .anaconda/
 .conda/
 .claude/settings.local.json
+annextube/_version.py
