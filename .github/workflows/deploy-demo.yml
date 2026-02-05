@@ -8,37 +8,55 @@ on:
       - '.github/workflows/deploy-demo.yml'
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
+  contents: write
 
 jobs:
   deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
         with:
-          # Upload the web directory from demo
-          path: 'demo/web'
+          fetch-depth: 0  # Full history needed for gh-pages branch
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Build site
+        run: |
+          # Create build directory
+          mkdir -p .gh-pages
+
+          # Copy web app to root
+          cp -r demo/web/* .gh-pages/
+
+          # Copy data directories alongside web app
+          cp -r demo/videos .gh-pages/
+          cp -r demo/playlists .gh-pages/
+          cp demo/authors.tsv .gh-pages/
+          cp demo/README.md .gh-pages/
+
+          # Add file tree for inspection
+          tree -H '.' -L 3 --charset utf-8 -T "annextube Demo Files" \
+            -I '*.git' .gh-pages/ > .gh-pages/files.html || \
+            find .gh-pages/ -type f ! -path '*/.git/*' > .gh-pages/files.txt
 
       - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+        run: |
+          # Switch to gh-pages branch (create if needed)
+          git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
+
+          # Remove all files except .gh-pages and .git
+          git rm -rf . || true
+
+          # Copy built site
+          cp -r .gh-pages/* .
+          rm -rf .gh-pages
+
+          # Commit and push
+          git add -A
+          git commit -m "Deploy demo from ${{ github.sha }}" || echo "No changes to commit"
+          git push origin gh-pages --force
