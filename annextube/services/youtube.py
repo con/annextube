@@ -923,11 +923,13 @@ class YouTubeService:
 
         # Load existing comments for incremental update
         existing_comments = {}
+        existing_comment_ids = set()
         if output_path.exists():
             try:
                 with open(output_path, encoding='utf-8') as f:
                     existing_list = json.load(f)
                     existing_comments = {c['comment_id']: c for c in existing_list if c.get('comment_id')}
+                    existing_comment_ids = set(existing_comments.keys())
                     logger.info(f"Loaded {len(existing_comments)} existing comments for incremental update")
             except Exception as e:
                 logger.warning(f"Failed to load existing comments: {e}")
@@ -947,7 +949,8 @@ class YouTubeService:
             comments = api_service.fetch_comments(
                 video_id=video_id,
                 max_comments=max_depth,
-                max_replies_per_thread=max_replies_per_thread
+                max_replies_per_thread=max_replies_per_thread,
+                existing_comment_ids=existing_comment_ids if existing_comment_ids else None
             )
 
             if comments:

@@ -44,15 +44,22 @@ class YouTubeAPICommentsService:
         self,
         video_id: str,
         max_comments: int | None = None,
-        max_replies_per_thread: int = 100
+        max_replies_per_thread: int = 100,
+        existing_comment_ids: set[str] | None = None
     ) -> list[dict]:
         """
         Fetch comments with replies for a video.
+
+        Supports incremental fetching with early stopping: when existing_comment_ids
+        is provided, pagination stops as soon as we encounter a comment we already
+        have. This is very efficient for incremental updates since comments are
+        ordered by time (newest first).
 
         Args:
             video_id: YouTube video ID
             max_comments: Maximum number of top-level comments to fetch (None = all)
             max_replies_per_thread: Maximum replies to fetch per comment thread
+            existing_comment_ids: Set of comment IDs we already have (for early stopping)
 
         Returns:
             List of comment dictionaries in annextube format:
@@ -73,6 +80,8 @@ class YouTubeAPICommentsService:
         all_comments = []
         next_page_token = None
         fetched_threads = 0
+        existing_ids = existing_comment_ids or set()
+        stopped_early = False
 
         try:
             while True:
@@ -93,6 +102,15 @@ class YouTubeAPICommentsService:
                     top_snippet = item['snippet']['topLevelComment']['snippet']
                     top_comment_id = item['snippet']['topLevelComment']['id']
 
+                    # EARLY STOPPING: Hit a comment we already have
+                    if top_comment_id in existing_ids:
+                        logger.info(
+                            f"Early stopping: encountered existing comment {top_comment_id} "
+                            f"after fetching {len(all_comments)} new comments"
+                        )
+                        stopped_early = True
+                        break
+
                     # Add top-level comment
                     all_comments.append({
                         'comment_id': top_comment_id,
@@ -111,8 +129,14 @@ class YouTubeAPICommentsService:
                         # Limit replies per thread
                         for reply in replies[:max_replies_per_thread]:
                             reply_snippet = reply['snippet']
+                            reply_id = reply['id']
+
+                            # Skip reply if we already have it
+                            if reply_id in existing_ids:
+                                continue
+
                             all_comments.append({
-                                'comment_id': reply['id'],
+                                'comment_id': reply_id,
                                 'author': reply_snippet.get('authorDisplayName', ''),
                                 'author_id': reply_snippet.get('authorChannelId', {}).get('value', ''),
                                 'text': reply_snippet.get('textDisplay', ''),
@@ -121,6 +145,10 @@ class YouTubeAPICommentsService:
                                 'is_favorited': False,
                                 'parent': reply_snippet.get('parentId', top_comment_id)
                             })
+
+                # Break if we hit existing comment (early stopping)
+                if stopped_early:
+                    break
 
                 fetched_threads += len(response.get('items', []))
 
@@ -134,6 +162,8 @@ class YouTubeAPICommentsService:
                 # Rate limiting - be nice to the API
                 time.sleep(0.1)
 
+            if stopped_early:
+                logger.info(f"Incremental fetch complete: {len(all_comments)} new comments")
             return all_comments
 
         except HttpError as e:
@@ -288,6 +318,54 @@ class YouTubeAPIMetadataClient:
         except Exception as e:
             logger.error(f"Failed to fetch YouTube API metadata: {e}", exc_info=True)
             return {}
+
+    def get_video_statistics(
+        self,
+        video_ids: list[str] | str,
+    ) -> dict[str, dict[str, int]]:
+        """Fetch only statistics for one or more videos (efficient for incremental updates).
+
+        This method fetches only the statistics part (2 quota units per request),
+        making it very efficient for checking if social data has changed.
+
+        Args:
+            video_ids: Single video ID or list of video IDs (max 50 per request)
+
+        Returns:
+            Dictionary mapping video_id -> statistics dict with keys:
+            - viewCount: int
+            - likeCount: int
+            - commentCount: int
+            Returns empty dict if API call fails
+
+        Example:
+            >>> client.get_video_statistics(["video1", "video2"])
+            {
+                "video1": {"viewCount": 1000, "likeCount": 50, "commentCount": 10},
+                "video2": {"viewCount": 2000, "likeCount": 100, "commentCount": 20}
+            }
+        """
+        # Fetch only statistics part (2 quota units total for up to 50 videos)
+        api_data = self.get_video_details(video_ids, parts=["statistics"])
+
+        # Extract statistics from response
+        result = {}
+        for video_id, data in api_data.items():
+            if "statistics" in data:
+                stats = data["statistics"]
+                result[video_id] = {
+                    "viewCount": int(stats.get("viewCount", 0)),
+                    "likeCount": int(stats.get("likeCount", 0)),
+                    "commentCount": int(stats.get("commentCount", 0)),
+                }
+                logger.debug(
+                    f"Statistics for {video_id}: "
+                    f"views={result[video_id]['viewCount']}, "
+                    f"likes={result[video_id]['likeCount']}, "
+                    f"comments={result[video_id]['commentCount']}"
+                )
+
+        return result
 
     def extract_enhanced_metadata(self, api_data: dict) -> dict:
         """Extract enhanced metadata fields from API response.

@@ -843,8 +843,98 @@ class Archiver:
                 logger.debug(f"Skipping already-processed video: {video.video_id}")
                 # For all-incremental, still check if we need to update social data
                 if self.update_mode == "all-incremental":
-                    # TODO: Implement social data updates for recent videos
-                    pass
+                    # Check if video is within update window (default: 7 days)
+                    # date_from/date_to filter on video publication date, not comment timestamps
+                    if self.date_from and video.published_at < self.date_from:
+                        logger.debug(f"Video outside update window: {video.published_at} < {self.date_from}")
+                        return 0
+                    if self.date_to and video.published_at > self.date_to:
+                        logger.debug(f"Video outside update window: {video.published_at} > {self.date_to}")
+                        return 0
+
+                    # Load existing metadata to compare statistics
+                    video_dir = self._rename_video_if_needed(video, expected_path)
+                    metadata_path = video_dir / "metadata.json"
+
+                    try:
+                        with open(metadata_path, encoding='utf-8') as f:
+                            old_metadata = json.load(f)
+                        old_comment_count = old_metadata.get('comment_count', 0)
+                        old_view_count = old_metadata.get('view_count', 0)
+                        old_like_count = old_metadata.get('like_count', 0)
+                    except Exception as e:
+                        logger.warning(f"Failed to load existing metadata for {video.video_id}: {e}")
+                        return 0
+
+                    # Fetch current statistics from YouTube API (cheap: 2 quota units)
+                    try:
+                        from annextube.services.youtube_api import YouTubeAPIMetadataClient
+                        api_client = YouTubeAPIMetadataClient()
+                        stats = api_client.get_video_statistics(video.video_id)
+
+                        if video.video_id in stats:
+                            current_stats = stats[video.video_id]
+                            new_comment_count = current_stats.get('commentCount', 0)
+                            new_view_count = current_stats.get('viewCount', 0)
+                            new_like_count = current_stats.get('likeCount', 0)
+
+                            # Check if any statistics changed
+                            stats_changed = (
+                                new_comment_count != old_comment_count or
+                                new_view_count != old_view_count or
+                                new_like_count != old_like_count
+                            )
+
+                            if not stats_changed:
+                                logger.debug(
+                                    f"No social data changes for {video.video_id}: "
+                                    f"comments={old_comment_count}, views={old_view_count}, likes={old_like_count}"
+                                )
+                                return 0
+
+                            # Statistics changed - update video object with new values
+                            logger.info(
+                                f"Social data changed for {video.video_id}: "
+                                f"comments {old_comment_count}->{new_comment_count}, "
+                                f"views {old_view_count}->{new_view_count}, "
+                                f"likes {old_like_count}->{new_like_count}"
+                            )
+                            video.comment_count = new_comment_count
+                            video.view_count = new_view_count
+                            video.like_count = new_like_count
+
+                            # Update metadata.json with new statistics
+                            with AtomicFileWriter(metadata_path) as f:
+                                json.dump(video.to_dict(), f, indent=2)
+                            logger.debug(f"Updated metadata with new statistics: {metadata_path}")
+
+                            # If comment count increased, fetch new comments (with early stopping)
+                            if new_comment_count > old_comment_count and self._get_component_value('comments_depth') != 0:
+                                logger.info(
+                                    f"Comment count increased ({old_comment_count} -> {new_comment_count}), "
+                                    "fetching new comments with early stopping"
+                                )
+                                comments_path = video_dir / "comments.json"
+                                self.youtube.download_comments(
+                                    video.video_id,
+                                    comments_path,
+                                    max_depth=self._get_component_value('comments_depth')
+                                )
+
+                            # Return non-zero to indicate we updated something
+                            return 1
+                        else:
+                            logger.warning(f"YouTube API did not return statistics for {video.video_id}")
+                            return 0
+
+                    except ValueError as e:
+                        # API key not configured - can't check statistics
+                        logger.debug(f"YouTube API not available for social updates: {e}")
+                        return 0
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch statistics for {video.video_id}: {e}")
+                        return 0
+
                 return 0
 
         # Continue with path calculation

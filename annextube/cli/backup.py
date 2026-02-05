@@ -28,8 +28,8 @@ logger = get_logger(__name__)
 @click.option(
     "--update",
     type=click.Choice([
-        "videos-incremental",  # New videos only (default)
-        "all-incremental",      # New videos + social for recent
+        "videos-incremental",  # New videos only
+        "all-incremental",      # New videos + social for recent (default)
         "all-force",            # Re-process everything
         "social",               # Comments + captions only (shortcut)
         "playlists",            # Playlists only
@@ -37,8 +37,8 @@ logger = get_logger(__name__)
         "captions",             # Captions only
         "tsv_metadata"          # Regenerate TSVs only (no downloads)
     ], case_sensitive=False),
-    default="videos-incremental",
-    help="Update mode: videos-incremental (new videos only, default), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
+    default="all-incremental",
+    help="Update mode: all-incremental (new videos + social for recent, default), videos-incremental (new videos only), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
 )
 @click.option(
     "--from-date",
@@ -101,7 +101,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
 
         # Default update mode if not specified
         if not update:
-            update = "videos-incremental"
+            update = "all-incremental"
 
         click.echo(f"Update mode: {update}")
 
