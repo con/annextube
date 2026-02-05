@@ -180,7 +180,11 @@ class YouTubeService:
         # Regular DEBUG level (10) shows only annextube debug logs
         import logging as stdlib_logging
         from annextube.lib.logging_config import HEAVY_DEBUG
-        enable_ytdlp_verbose = logger.level <= HEAVY_DEBUG
+
+        # Check effective level (handles inheritance from parent loggers)
+        effective_level = logger.getEffectiveLevel()
+        enable_ytdlp_verbose = effective_level <= HEAVY_DEBUG
+        logger.debug(f"yt-dlp verbose mode: {enable_ytdlp_verbose} (effective_level={effective_level}, HEAVY_DEBUG={HEAVY_DEBUG})")
 
         # Configure yt-dlp to use Python logging (so it goes through our formatter with datetime + logger name)
         # Use standard "yt_dlp" logger name (not annextube.yt_dlp) for interoperability
