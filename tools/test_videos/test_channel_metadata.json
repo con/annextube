@@ -1,80 +1,82 @@
 {
   "channel_name": "AnnexTube Test Channel",
+  "channel_id": "UCHpuDwi3IorJ_Uez2e7pqHA",
+  "channel_url": "https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA",
   "upload_date": "2026-02-04",
   "videos": {
     "test-video-standard-01.mp4": {
-      "video_id": "O6I0Ydj-0D4",
+      "video_id": "ma84N_6Mybs",
       "title": "Test Video - Standard License 1",
       "license": "youtube",
       "duration": 1,
-      "url": "https://www.youtube.com/watch?v=O6I0Ydj-0D4"
+      "url": "https://www.youtube.com/watch?v=ma84N_6Mybs"
     },
     "test-video-standard-02.mp4": {
-      "video_id": "orXwVlGtFu0",
+      "video_id": "hWIfEDjYFVY",
       "title": "Test Video - Standard License 2",
       "license": "youtube",
       "duration": 2,
-      "url": "https://www.youtube.com/watch?v=orXwVlGtFu0"
+      "url": "https://www.youtube.com/watch?v=hWIfEDjYFVY"
     },
     "test-video-standard-03.mp4": {
-      "video_id": "GvYLYqrm3tw",
+      "video_id": "Yr5-9l0euPg",
       "title": "Test Video - Standard License 3",
       "license": "youtube",
       "duration": 3,
-      "url": "https://www.youtube.com/watch?v=GvYLYqrm3tw"
+      "url": "https://www.youtube.com/watch?v=Yr5-9l0euPg"
     },
     "test-video-cc-01.mp4": {
-      "video_id": "6ul_fmNdPJg",
+      "video_id": "GhGQV_enM8M",
       "title": "Test Video - Creative Commons 1",
       "license": "creativeCommon",
       "duration": 1,
-      "url": "https://www.youtube.com/watch?v=6ul_fmNdPJg"
+      "url": "https://www.youtube.com/watch?v=GhGQV_enM8M"
     },
     "test-video-cc-02.mp4": {
-      "video_id": "sKFIp47FSBA",
+      "video_id": "BZeKDYqsuj0",
       "title": "Test Video - Creative Commons 2",
       "license": "creativeCommon",
       "duration": 2,
-      "url": "https://www.youtube.com/watch?v=sKFIp47FSBA"
+      "url": "https://www.youtube.com/watch?v=BZeKDYqsuj0"
     },
     "test-video-cc-03.mp4": {
-      "video_id": "TkUgvSTeM-c",
+      "video_id": "2zCuyKp6-Ws",
       "title": "Test Video - Creative Commons 3",
       "license": "creativeCommon",
       "duration": 3,
-      "url": "https://www.youtube.com/watch?v=TkUgvSTeM-c"
+      "url": "https://www.youtube.com/watch?v=2zCuyKp6-Ws"
     },
     "test-video-captions-en.mp4": {
-      "video_id": "3oQKZohAmfg",
+      "video_id": "rN7TFeaTsKY",
       "title": "Test Video - English Captions",
       "license": "youtube",
       "duration": 5,
       "captions": ["en"],
-      "url": "https://www.youtube.com/watch?v=3oQKZohAmfg"
+      "url": "https://www.youtube.com/watch?v=rN7TFeaTsKY"
     },
     "test-video-captions-multi.mp4": {
-      "video_id": "NPjAoQzulu8",
+      "video_id": "s4J8b9qNJ6U",
       "title": "Test Video - Multilingual Captions",
       "license": "creativeCommon",
       "duration": 5,
       "captions": ["en", "es", "de"],
-      "url": "https://www.youtube.com/watch?v=NPjAoQzulu8"
+      "url": "https://www.youtube.com/watch?v=s4J8b9qNJ6U"
     },
     "test-video-location-nyc.mp4": {
-      "video_id": "RE3Fw9TbHls",
+      "video_id": "CPfZiBffVQs",
       "title": "Test Video - NYC Location",
       "license": "youtube",
       "duration": 3,
       "location": "New York City, NY",
-      "url": "https://www.youtube.com/watch?v=RE3Fw9TbHls"
+      "url": "https://www.youtube.com/watch?v=CPfZiBffVQs"
     },
     "test-video-location-london.mp4": {
-      "video_id": "3pp_b-Tnvos",
+      "video_id": "KB8yRMmZkkM",
       "title": "Test Video - London Location",
       "license": "creativeCommon",
       "duration": 3,
       "location": "London, UK",
-      "url": "https://www.youtube.com/watch?v=3pp_b-Tnvos"
+      "url": "https://www.youtube.com/watch?v=KB8yRMmZkkM"
     }
   },
   "stats": {
@@ -89,5 +91,5 @@
     "test-video-with-comments-01.mp4",
     "test-video-with-comments-02.mp4"
   ],
-  "notes": "Initial upload hit daily limit (10 videos). Remaining 2 videos can be uploaded after 24 hours or after phone verification."
+  "notes": "Uploaded to dedicated test channel. 2 videos pending (upload limit). Can add after 24h or phone verification."
 }
