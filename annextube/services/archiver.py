@@ -620,25 +620,29 @@ class Archiver:
             logger.warning("No videos found")
             return stats
 
-        logger.info(f"Found {len(videos_metadata)} videos to process")
+        # Skip video processing entirely in playlists mode - we only need video IDs for playlist linkage
+        if self.update_mode != "playlists":
+            logger.info(f"Found {len(videos_metadata)} videos to process")
 
-        # Process each video (fail-fast: errors will propagate)
-        for i, video_meta in enumerate(videos_metadata, 1):
-            logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-            video = self.youtube.metadata_to_video(video_meta)
-            caption_count = self._process_video(video)
+            # Process each video (fail-fast: errors will propagate)
+            for i, video_meta in enumerate(videos_metadata, 1):
+                logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
+                video = self.youtube.metadata_to_video(video_meta)
+                caption_count = self._process_video(video)
 
-            stats["videos_processed"] += 1
-            stats["videos_tracked"] += 1
-            stats["metadata_saved"] += 1
-            stats["captions_downloaded"] += caption_count
+                stats["videos_processed"] += 1
+                stats["videos_tracked"] += 1
+                stats["metadata_saved"] += 1
+                stats["captions_downloaded"] += caption_count
 
-        # Commit changes
-        self.git_annex.add_and_commit(
-            f"Backup channel: {channel_url} ({stats['videos_processed']} videos)"
-        )
+            # Commit changes
+            self.git_annex.add_and_commit(
+                f"Backup channel: {channel_url} ({stats['videos_processed']} videos)"
+            )
 
-        logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
+            logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
+        else:
+            logger.info(f"Playlists mode: skipping video processing ({len(videos_metadata)} existing videos available for playlist linkage)")
 
         # Auto-discover and backup playlists if configured AND mode allows playlist processing
         # Component-specific modes (comments, captions, social) should not process playlists
