@@ -57,11 +57,11 @@ TEST_CHANNEL_VIDEOS = TEST_VIDEOS_STANDARD_LICENSE + TEST_VIDEOS_CREATIVE_COMMON
 
 # Playlists (with overlapping videos for comprehensive testing)
 TEST_CHANNEL_PLAYLISTS = {
-    "All Standard License Videos": "PLQg3etb9oyYhhy3IQm5LvcNjwkPW4DtR8",
-    "All Creative Commons Videos": "PLQg3etb9oyYjjU6fJt7Ee7EuFe03lQuu1",
-    "Mixed License Videos": "PLQg3etb9oyYhsUb0zElkzit7TvbtnOTo4",  # All 10 videos
-    "Videos with Captions": "PLQg3etb9oyYhJbl_ea_7XNne5y6h_HTuP",
-    "Videos with Location Metadata": "PLQg3etb9oyYji9J2W5c6GhXnO-Aomcrfw",
+    "All Standard License Videos": "PLQg3etb9oyYgj0OpGuC7CX6f4MeYm9ofO",  # 5 videos
+    "All Creative Commons Videos": "PLQg3etb9oyYibGgyxpj2qyllYRgfNIWcl",  # 5 videos
+    "Mixed License Videos": "PLQg3etb9oyYiTXLE5NHTWVuxtD7nMCoLm",  # All 10 videos
+    "Videos with Captions": "PLQg3etb9oyYg7EjBqjlvbFZxYA20pOQC0",  # 2 videos
+    "Videos with Location Metadata": "PLQg3etb9oyYi4HoXWFLb-DZBpAsPqK0HV",  # 2 videos
 }
 
 # Playlist URLs

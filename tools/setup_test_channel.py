@@ -730,7 +730,9 @@ def main():
                 if playlist_def["video_filter"](video_def):
                     filename = video_def["filename"]
                     if filename in setup.uploaded_videos:
-                        video_id = setup.uploaded_videos[filename]
+                        video_info = setup.uploaded_videos[filename]
+                        # Handle both dict (loaded from JSON) and string (just uploaded)
+                        video_id = video_info["video_id"] if isinstance(video_info, dict) else video_info
                         setup.add_to_playlist(playlist_id, video_id)
                         print(f"    Added {video_def['title']}")
 
@@ -751,7 +753,9 @@ def main():
         for video_def in TEST_VIDEOS:
             if video_def.get("add_comments"):
                 filename = video_def["filename"]
-                video_id = setup.uploaded_videos.get(filename)
+                video_info = setup.uploaded_videos.get(filename)
+                # Handle both dict (loaded from JSON) and string (just uploaded)
+                video_id = video_info["video_id"] if isinstance(video_info, dict) else video_info if video_info else None
 
                 if not video_id:
                     print(f"  WARNING: Video not found: {filename}")
