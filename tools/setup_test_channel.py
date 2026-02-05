@@ -147,7 +147,7 @@ TEST_VIDEOS = [
         "description": "Test video with captions in multiple languages (EN, ES, DE). 5 seconds.",
         "tags": ["annextube", "test", "captions", "multilingual"],
         "duration": 5,
-        "color": "lightgray",
+        "color": "gray",
         "text_overlay": "Multilingual\\nCaptions",
         "license": "creativeCommon",
         "privacy": "public",
@@ -292,11 +292,23 @@ class TestChannelSetup:
                 creds.refresh(Request())
             else:
                 print("Starting OAuth authentication flow...")
-                print("A browser window will open. Please authorize the application.")
+                print()
                 flow = InstalledAppFlow.from_client_secrets_file(
                     str(client_secrets), SCOPES
                 )
-                creds = flow.run_local_server(port=0)
+                # Use out-of-band (OOB) redirect URI for CLI apps
+                flow.redirect_uri = 'urn:ietf:wg:oauth:2.0:oob'
+                # Generate authorization URL
+                auth_url, _ = flow.authorization_url(prompt='consent')
+                print("Please visit this URL to authorize:")
+                print(auth_url)
+                print()
+                print("After authorizing, Google will display an authorization code.")
+                print("Copy the code and paste it below.")
+                print()
+                code = input("Enter the authorization code: ").strip()
+                flow.fetch_token(code=code)
+                creds = flow.credentials
 
             # Save credentials
             token_file.write_text(creds.to_json())
