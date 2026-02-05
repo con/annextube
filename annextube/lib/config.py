@@ -77,7 +77,7 @@ class OrganizationConfig:
 
     video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}"  # Default: hierarchical by year/month
     channel_path_pattern: str = "{channel_id}"
-    playlist_path_pattern: str = "{playlist_id}"
+    playlist_path_pattern: str = "{playlist_title}"  # Use sanitized playlist title by default
     video_filename: str = "video.mkv"  # Filename for video file within video directory
     playlist_prefix_width: int = 4  # Zero-padded width for playlist symlink prefixes (e.g., 0001)
     playlist_prefix_separator: str = "_"  # Separator between index and path (underscore, not hyphen)
@@ -222,7 +222,7 @@ class Config:
                 "video_path_pattern", "{date}_{sanitized_title}"
             ),
             channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
-            playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_id}"),
+            playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_title}"),
             video_filename=organization_data.get("video_filename", "video.mkv"),
             playlist_prefix_width=organization_data.get("playlist_prefix_width", 4),
             playlist_prefix_separator=organization_data.get("playlist_prefix_separator", "_"),
@@ -418,7 +418,13 @@ video_path_pattern = "{video_path_pattern}"  # Path pattern for videos (video_id
 #   "{{{{video_id}}}}" - Just video ID (compact)
 
 channel_path_pattern = "{{channel_id}}"  # Path pattern for channels
-playlist_path_pattern = "{{playlist_id}}"  # Path pattern for playlists (uses sanitized name in practice)
+
+playlist_path_pattern = "{{playlist_title}}"  # Path pattern for playlists (sanitized title)
+# Available placeholders for playlists:
+#   {{playlist_id}} - YouTube playlist ID
+#   {{playlist_title}} - Playlist title (filesystem-safe)
+#   {{channel_id}} - Channel ID
+#   {{channel_name}} - Channel name (sanitized)
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
 
