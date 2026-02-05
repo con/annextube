@@ -32,9 +32,28 @@ annextube generate-web
 open web/index.html
 ```
 
+## Container Deployment
+
+Pre-built container with all dependencies (git-annex, yt-dlp, ffmpeg, deno):
+
+```bash
+# Build container
+podman build -t annextube:latest -f Containerfile .
+
+# Run
+podman run -it --rm -v $PWD:/archive -e YOUTUBE_API_KEY="key" annextube:latest backup
+
+# For Singularity/Apptainer (HPC clusters)
+apptainer build annextube.sif Containerfile
+apptainer run --bind $PWD:/archive annextube.sif backup
+```
+
+See [docs/how-to/container-deployment.md](docs/content/how-to/container-deployment.md) for full guide.
+
 ## Documentation
 
 - **Installation**: See [docs/tutorial/01-installation.md](docs/content/tutorial/01-installation.md)
+- **Container Deployment**: See [docs/how-to/container-deployment.md](docs/content/how-to/container-deployment.md)
 - **Quick Start**: See [specs/001-youtube-backup/quickstart.md](specs/001-youtube-backup/quickstart.md)
 - **API Reference**: See [docs/reference/](docs/content/reference/)
 

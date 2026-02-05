@@ -1,0 +1,52 @@
+# Reduce build context size for containers
+
+# Virtual environments
+.venv/
+venv*/
+.tox/
+
+# Cache directories
+.cache/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Test artifacts
+.coverage
+htmlcov/
+.hypothesis/
+test-archives/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Frontend (not needed for backend container)
+frontend/node_modules/
+frontend/dist/
+frontend/.svelte-kit/
+
+# Development files
+.git/
+.github/
+.gitlab/
+.vscode/
+.idea/
+
+# Documentation build artifacts
+docs/_build/
+docs/.buildinfo
+
+# Temporary files
+*.log
+*.tmp
+*.swp
+*~
+
+# Local testing
+test-*
+local-*
+scratch/

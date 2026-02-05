@@ -1,0 +1,57 @@
+# Docker Compose example for annextube
+#
+# Usage:
+#   docker-compose run --rm annextube init
+#   docker-compose run --rm annextube backup
+#   docker-compose run --rm annextube generate-web
+#
+# Or for podman-compose:
+#   podman-compose run --rm annextube backup
+
+services:
+  annextube:
+    build:
+      context: .
+      dockerfile: Containerfile
+    image: annextube:latest
+
+    # Mount archive directory
+    volumes:
+      - ./archive:/archive
+      # Optional: mount user config
+      # - ${HOME}/.config/annextube:/root/.config/annextube:ro
+      # Optional: mount cookies
+      # - ${HOME}/.config/annextube/cookies.txt:/cookies.txt:ro
+
+    # Environment variables
+    environment:
+      - YOUTUBE_API_KEY=${YOUTUBE_API_KEY}
+      # Optional: uncomment to enable debug logging
+      # - ANNEXTUBE_LOG_LEVEL=DEBUG
+
+    # Working directory
+    working_dir: /archive
+
+    # Default command (can be overridden)
+    command: ["--help"]
+
+    # Optional: resource limits
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2.0'
+    #       memory: 4G
+
+  # Example: automated backup service
+  backup:
+    extends: annextube
+    command: ["backup"]
+
+    # Run periodically (requires additional orchestration)
+    # For cron-like scheduling, use:
+    # - Kubernetes CronJob
+    # - Systemd timer
+    # - External cron calling docker-compose
+
+    # Optional: restart policy for long-running containers
+    # restart: unless-stopped
