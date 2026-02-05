@@ -79,6 +79,7 @@ yarn-error.log*
 *.min.js
 *.min.css
 web/
+!demo/web/
 frontend/dist/
 frontend/build/
 
