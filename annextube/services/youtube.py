@@ -171,6 +171,7 @@ class YouTubeService:
         Returns:
             yt-dlp options dictionary
         """
+        logger.debug(f"Building yt-dlp options (download={download})")
         opts: dict[str, Any] = {
             "quiet": True,
             "no_warnings": True,
@@ -183,13 +184,16 @@ class YouTubeService:
 
         # Add cookie configuration (from user config)
         if self.cookies_file:
-            opts["cookiefile"] = str(Path(self.cookies_file).expanduser().resolve())
+            cookie_path = Path(self.cookies_file).expanduser().resolve()
+            opts["cookiefile"] = str(cookie_path)
+            logger.debug(f"yt-dlp: Using cookie file: {cookie_path} (exists={cookie_path.exists()})")
         elif self.cookies_from_browser:
             # Parse browser:profile format
             parts = self.cookies_from_browser.split(":", 1)
             browser = parts[0]
             profile = parts[1] if len(parts) > 1 else None
             opts["cookiesfrombrowser"] = (browser, profile, None, None)
+            logger.debug(f"yt-dlp: Using cookies from browser: {browser}" + (f" (profile: {profile})" if profile else ""))
 
         # Add network settings (from user config)
         if self.proxy:
@@ -207,12 +211,15 @@ class YouTubeService:
         # Add extractor arguments (e.g., Android client workaround)
         if self.extractor_args:
             opts["extractor_args"] = self.extractor_args
+            logger.debug(f"yt-dlp: Using extractor args: {self.extractor_args}")
 
         # Add remote components (e.g., ejs:github for JS challenge solver with deno)
         if self.remote_components:
             # remote_components should be a list in Python API
             opts["remote_components"] = [self.remote_components]
+            logger.debug(f"yt-dlp: Using remote components: {self.remote_components}")
 
+        logger.debug(f"yt-dlp options configured: {list(opts.keys())}")
         return opts
 
     def get_channel_videos(
@@ -335,9 +342,11 @@ class YouTubeService:
             }
         )
 
+        logger.debug(f"Starting yt-dlp.YoutubeDL.extract_info for channel: {channel_url}")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 # Extract channel info (this gets the uploads playlist with full metadata)
+                logger.debug(f"Calling yt-dlp extract_info: {channel_url} (download=False)")
                 info = ydl.extract_info(channel_url, download=False)
 
                 if not info:
@@ -430,6 +439,7 @@ class YouTubeService:
             try:
                 # Extract playlist info (gets full metadata for all videos)
                 logger.info("Fetching playlist metadata (this may take several minutes for large playlists)...")
+                logger.debug(f"Calling yt-dlp extract_info: {playlist_url} (download=False)")
                 info = ydl.extract_info(playlist_url, download=False)
 
                 if not info:
@@ -642,9 +652,11 @@ class YouTubeService:
 
         ydl_opts = self._get_ydl_opts(download=False)
 
+        logger.debug(f"Calling yt-dlp extract_info: {video_url} (download=False)")
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 info = ydl.extract_info(video_url, download=False)
+                logger.debug(f"yt-dlp extract_info completed for {video_url}")
                 return cast(dict[str, Any] | None, info)
             except yt_dlp.utils.DownloadError as e:
                 error_msg = str(e).lower()

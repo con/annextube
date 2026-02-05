@@ -29,9 +29,11 @@ class GitAnnexService:
         logger.info(f"Initializing git repository at {self.repo_path}")
 
         # Initialize git repo
+        logger.debug(f"Running: git init (cwd={self.repo_path})")
         subprocess.run(["git", "init"], cwd=self.repo_path, check=True)
 
         # Initialize git-annex with URL backend
+        logger.debug(f"Running: git annex init '{description}' (cwd={self.repo_path})")
         subprocess.run(
             ["git", "annex", "init", description],
             cwd=self.repo_path,
@@ -209,6 +211,7 @@ class GitAnnexService:
             cmd.append("--no-raw")
 
         logger.debug(f"Adding URL to git-annex: {url} -> {file_path}")
+        logger.debug(f"Running: {' '.join(cmd)} (cwd={self.repo_path})")
 
         subprocess.run(cmd, cwd=self.repo_path, check=True, capture_output=True)
 
@@ -219,6 +222,7 @@ class GitAnnexService:
             file_path: Path to file to download
         """
         logger.info(f"Downloading content: {file_path}")
+        logger.debug(f"Running: git annex get {file_path} (cwd={self.repo_path})")
         subprocess.run(
             ["git", "annex", "get", str(file_path)],
             cwd=self.repo_path,
