@@ -394,8 +394,8 @@ def test_video_path_with_invalid_placeholder_raises_error(tmp_path: Path) -> Non
 
 
 @pytest.mark.ai_generated
-def test_playlist_symlink_format(tmp_path: Path) -> None:
-    """Test that playlist symlinks use {index:04d}_{video_dir_name} format."""
+def test_playlist_video_pattern_default(tmp_path: Path) -> None:
+    """Test that playlist videos use default {video_index:04d}_{video_path_basename} pattern."""
     from annextube.lib.config import ComponentsConfig, Config
 
     config = Config(
@@ -407,11 +407,59 @@ def test_playlist_symlink_format(tmp_path: Path) -> None:
 
     video_dir = tmp_path / "videos" / "2026-01-28_Test-Video-Title"
 
-    # Test various indices
+    # Test various indices with default pattern
     assert archiver._get_playlist_symlink_name(video_dir, 1) == "0001_2026-01-28_Test-Video-Title"
     assert archiver._get_playlist_symlink_name(video_dir, 42) == "0042_2026-01-28_Test-Video-Title"
     assert archiver._get_playlist_symlink_name(video_dir, 999) == "0999_2026-01-28_Test-Video-Title"
     assert archiver._get_playlist_symlink_name(video_dir, 1234) == "1234_2026-01-28_Test-Video-Title"
+
+
+@pytest.mark.ai_generated
+def test_playlist_video_pattern_custom(tmp_path: Path) -> None:
+    """Test that playlist videos can use custom playlist_video_pattern."""
+    from annextube.lib.config import ComponentsConfig, Config
+
+    # Custom pattern with 3 digits and hyphen separator
+    config = Config(
+        components=ComponentsConfig(),
+        organization=OrganizationConfig(
+            playlist_video_pattern="{video_index:03d}-{video_path_basename}"
+        )
+    )
+
+    archiver = Archiver(tmp_path, config)
+
+    video_dir = tmp_path / "videos" / "2026-01-28_Test-Video-Title"
+
+    # Should use custom pattern
+    assert archiver._get_playlist_symlink_name(video_dir, 5) == "005-2026-01-28_Test-Video-Title"
+    assert archiver._get_playlist_symlink_name(video_dir, 123) == "123-2026-01-28_Test-Video-Title"
+
+
+@pytest.mark.ai_generated
+def test_playlist_video_pattern_invalid_placeholder(tmp_path: Path) -> None:
+    """Test that invalid placeholders in playlist_video_pattern raise ValueError."""
+    from annextube.lib.config import ComponentsConfig, Config
+
+    config = Config(
+        components=ComponentsConfig(),
+        organization=OrganizationConfig(
+            playlist_video_pattern="{invalid_field}_{video_path_basename}"
+        )
+    )
+
+    archiver = Archiver(tmp_path, config)
+
+    video_dir = tmp_path / "videos" / "test-video"
+
+    # Should raise ValueError with helpful message
+    with pytest.raises(ValueError) as exc_info:
+        archiver._get_playlist_symlink_name(video_dir, 1)
+
+    error_msg = str(exc_info.value)
+    assert "invalid_field" in error_msg
+    assert "playlist_video_pattern" in error_msg
+    assert "Valid placeholders:" in error_msg
 
 
 @pytest.mark.ai_generated

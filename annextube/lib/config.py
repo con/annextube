@@ -78,6 +78,7 @@ class OrganizationConfig:
     video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}"  # Default: hierarchical by year/month
     channel_path_pattern: str = "{channel_id}"
     playlist_path_pattern: str = "{playlist_title}"  # Use sanitized playlist title by default
+    playlist_video_pattern: str = "{video_index:04d}_{video_path_basename}"  # Pattern for video symlinks in playlists
     video_filename: str = "video.mkv"  # Filename for video file within video directory
 
 
@@ -221,6 +222,9 @@ class Config:
             ),
             channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
             playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_title}"),
+            playlist_video_pattern=organization_data.get(
+                "playlist_video_pattern", "{video_index:04d}_{video_path_basename}"
+            ),
             video_filename=organization_data.get("video_filename", "video.mkv"),
         )
 
@@ -421,7 +425,16 @@ playlist_path_pattern = "{{playlist_title}}"  # Path pattern for playlists (sani
 #   {{playlist_title}} - Playlist title (filesystem-safe)
 #   {{channel_id}} - Channel ID
 #   {{channel_name}} - Channel name (sanitized)
-# Note: Playlist symlinks use format: {{index:04d}}_{{video_dir_name}} (hardcoded)
+
+playlist_video_pattern = "{{video_index:04d}}_{{video_path_basename}}"  # Pattern for video symlinks in playlists
+# Available placeholders for playlist videos:
+#   {{video_index}} - Position in playlist (1-based integer)
+#   {{video_path_basename}} - Video directory name (from video_path_pattern)
+# Format specifiers supported (e.g., :04d for zero-padded 4 digits)
+# Examples:
+#   "{{video_index:04d}}_{{video_path_basename}}" - 0001_2026-01-15_video-title (default)
+#   "{{video_index:03d}}-{{video_path_basename}}" - 001-2026-01-15_video-title
+#   "{{video_index}}_{{video_path_basename}}" - 1_2026-01-15_video-title
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
 '''
