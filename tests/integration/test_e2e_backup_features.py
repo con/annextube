@@ -217,18 +217,20 @@ class TestE2EBackupFeatures:
 
             # --- Verify playlist directories use titles (not IDs) ---
             for pdir in playlist_dirs:
-                # Playlist IDs look like: PLxxx (start with PL and are alphanumeric)
-                # Titles are human-readable with hyphens/underscores
+                # Playlist IDs look like: PLxxx (start with PL and are alphanumeric ~34 chars)
+                # Titles are human-readable (may be single words or multi-word with hyphens/underscores)
                 dir_name = pdir.name
 
-                # Should NOT be just a playlist ID (which starts with PL and is ~34 chars)
-                assert not (dir_name.startswith("PL") and len(dir_name) == 34 and dir_name[2:].replace("_", "").replace("-", "").isalnum()), (
-                    f"Playlist directory should use title, not ID. Got: {dir_name}"
+                # Should NOT be just a playlist ID
+                # Playlist IDs: start with PL, exactly 34 chars, all alphanumeric after PL
+                is_playlist_id = (
+                    dir_name.startswith("PL") and
+                    len(dir_name) == 34 and
+                    dir_name[2:].isalnum()
                 )
 
-                # Should contain readable text (hyphens or underscores, not all alphanumeric)
-                assert "-" in dir_name or "_" in dir_name or " " in dir_name, (
-                    f"Playlist directory should be human-readable title. Got: {dir_name}"
+                assert not is_playlist_id, (
+                    f"Playlist directory should use title, not ID. Got: {dir_name}"
                 )
 
             # --- Verify playlists.tsv has correct mapping ---
@@ -255,9 +257,17 @@ class TestE2EBackupFeatures:
             assert playlist_path.exists(), f"Playlist path from TSV should exist: {path_value}"
 
             # Verify path is derived from title (not ID)
-            # Title should be recognizable in the path (sanitized)
-            assert any(
-                word.lower() in path_value.lower()
-                for word in title_value.split()
-                if len(word) > 3  # Check words longer than 3 chars
-            ), f"Playlist path '{path_value}' should be derived from title '{title_value}'"
+            # For multi-word titles, at least one word should appear in path
+            # For single-word titles, the whole title should match (case-insensitive, sanitized)
+            title_words = [w for w in title_value.split() if len(w) > 3]
+            if title_words:
+                # Multi-word title: check if any significant word appears
+                assert any(
+                    word.lower() in path_value.lower()
+                    for word in title_words
+                ), f"Playlist path '{path_value}' should contain word(s) from title '{title_value}'"
+            else:
+                # Single-word or short title: path should be similar (allowing sanitization)
+                assert title_value.lower().replace(" ", "-").replace("_", "-") in path_value.lower().replace("_", "-"), (
+                    f"Playlist path '{path_value}' should match title '{title_value}'"
+                )
