@@ -109,16 +109,22 @@ class UserConfig:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserConfig":
-        """Create UserConfig from dictionary (loaded from TOML)."""
+        """Create UserConfig from dictionary (loaded from TOML).
+
+        Supports both flat structure and [youtube] section for backward compatibility.
+        """
+        # Try [youtube] section first (current format), fall back to top-level (legacy)
+        youtube_section = data.get("youtube", {})
+
         return cls(
-            cookies_file=data.get("cookies_file"),
-            cookies_from_browser=data.get("cookies_from_browser"),
-            api_key=data.get("api_key"),
-            proxy=data.get("proxy"),
-            limit_rate=data.get("limit_rate"),
-            sleep_interval=data.get("sleep_interval"),
-            max_sleep_interval=data.get("max_sleep_interval"),
-            ytdlp_extra_opts=data.get("ytdlp_extra_opts", []),
+            cookies_file=youtube_section.get("cookies_file") or data.get("cookies_file"),
+            cookies_from_browser=youtube_section.get("cookies_from_browser") or data.get("cookies_from_browser"),
+            api_key=youtube_section.get("api_key") or data.get("api_key"),
+            proxy=youtube_section.get("proxy") or data.get("proxy"),
+            limit_rate=youtube_section.get("limit_rate") or data.get("limit_rate"),
+            sleep_interval=youtube_section.get("sleep_interval") or data.get("sleep_interval"),
+            max_sleep_interval=youtube_section.get("max_sleep_interval") or data.get("max_sleep_interval"),
+            ytdlp_extra_opts=youtube_section.get("ytdlp_extra_opts") or data.get("ytdlp_extra_opts", []),
         )
 
 
