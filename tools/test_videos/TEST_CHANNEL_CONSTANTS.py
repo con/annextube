@@ -55,6 +55,24 @@ TEST_VIDEOS_WITH_LOCATION = {
 # All Test Videos
 TEST_CHANNEL_VIDEOS = TEST_VIDEOS_STANDARD_LICENSE + TEST_VIDEOS_CREATIVE_COMMONS
 
+# Playlists (with overlapping videos for comprehensive testing)
+TEST_CHANNEL_PLAYLISTS = {
+    "All Standard License Videos": "PLQg3etb9oyYhhy3IQm5LvcNjwkPW4DtR8",
+    "All Creative Commons Videos": "PLQg3etb9oyYjjU6fJt7Ee7EuFe03lQuu1",
+    "Mixed License Videos": "PLQg3etb9oyYhsUb0zElkzit7TvbtnOTo4",  # All 10 videos
+    "Videos with Captions": "PLQg3etb9oyYhJbl_ea_7XNne5y6h_HTuP",
+    "Videos with Location Metadata": "PLQg3etb9oyYji9J2W5c6GhXnO-Aomcrfw",
+}
+
+# Playlist URLs
+TEST_PLAYLIST_URLS = {
+    "standard": f"https://www.youtube.com/playlist?list={TEST_CHANNEL_PLAYLISTS['All Standard License Videos']}",
+    "creative_commons": f"https://www.youtube.com/playlist?list={TEST_CHANNEL_PLAYLISTS['All Creative Commons Videos']}",
+    "mixed": f"https://www.youtube.com/playlist?list={TEST_CHANNEL_PLAYLISTS['Mixed License Videos']}",
+    "captions": f"https://www.youtube.com/playlist?list={TEST_CHANNEL_PLAYLISTS['Videos with Captions']}",
+    "location": f"https://www.youtube.com/playlist?list={TEST_CHANNEL_PLAYLISTS['Videos with Location Metadata']}",
+}
+
 # Video Details (for comprehensive testing)
 TEST_VIDEO_DETAILS = {
     # Standard License Videos
@@ -159,4 +177,36 @@ def test_backup_test_channel(tmp_git_annex_repo: Path) -> None:
 
     assert result["videos_processed"] == 10  # Reliable count!
     assert result["videos_failed"] == 0
+
+
+def test_backup_playlist_mixed_licenses(tmp_git_annex_repo: Path) -> None:
+    '''Test backing up playlist with both standard and CC licensed videos.'''
+    from .test_videos.TEST_CHANNEL_CONSTANTS import TEST_PLAYLIST_URLS
+
+    archiver = Archiver(tmp_git_annex_repo, config)
+
+    result = archiver.backup_playlist(TEST_PLAYLIST_URLS["mixed"])
+
+    # Mixed playlist contains all 10 videos
+    assert result["videos_processed"] == 10
+    # Should have both license types
+    videos = list(tmp_git_annex_repo.glob("*.mp4"))
+    assert len(videos) == 10
+
+
+def test_playlist_overlap_detection(tmp_git_annex_repo: Path) -> None:
+    '''Test handling of overlapping playlists (same videos in multiple playlists).'''
+    from .test_videos.TEST_CHANNEL_CONSTANTS import TEST_PLAYLIST_URLS
+
+    archiver = Archiver(tmp_git_annex_repo, config)
+
+    # Backup standard license playlist
+    result1 = archiver.backup_playlist(TEST_PLAYLIST_URLS["standard"])
+    assert result1["videos_processed"] == 4
+
+    # Backup mixed playlist (contains some of the same videos)
+    result2 = archiver.backup_playlist(TEST_PLAYLIST_URLS["mixed"])
+
+    # Should skip already-downloaded videos
+    assert result2["videos_skipped"] >= 4
 """

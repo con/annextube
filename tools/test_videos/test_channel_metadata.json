@@ -1,8 +1,4 @@
 {
-  "channel_name": "AnnexTube Test Channel",
-  "channel_id": "UCHpuDwi3IorJ_Uez2e7pqHA",
-  "channel_url": "https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA",
-  "upload_date": "2026-02-04",
   "videos": {
     "test-video-standard-01.mp4": {
       "video_id": "ma84N_6Mybs",
@@ -51,7 +47,9 @@
       "title": "Test Video - English Captions",
       "license": "youtube",
       "duration": 5,
-      "captions": ["en"],
+      "captions": [
+        "en"
+      ],
       "url": "https://www.youtube.com/watch?v=rN7TFeaTsKY"
     },
     "test-video-captions-multi.mp4": {
@@ -59,7 +57,11 @@
       "title": "Test Video - Multilingual Captions",
       "license": "creativeCommon",
       "duration": 5,
-      "captions": ["en", "es", "de"],
+      "captions": [
+        "en",
+        "es",
+        "de"
+      ],
       "url": "https://www.youtube.com/watch?v=s4J8b9qNJ6U"
     },
     "test-video-location-nyc.mp4": {
@@ -79,17 +81,11 @@
       "url": "https://www.youtube.com/watch?v=KB8yRMmZkkM"
     }
   },
-  "stats": {
-    "total_videos_uploaded": 10,
-    "videos_pending": 2,
-    "standard_license_count": 4,
-    "creative_commons_count": 6,
-    "videos_with_captions": 2,
-    "videos_with_location": 2
-  },
-  "pending_uploads": [
-    "test-video-with-comments-01.mp4",
-    "test-video-with-comments-02.mp4"
-  ],
-  "notes": "Uploaded to dedicated test channel. 2 videos pending (upload limit). Can add after 24h or phone verification."
+  "playlists": {
+    "All Standard License Videos": "PLQg3etb9oyYhhy3IQm5LvcNjwkPW4DtR8",
+    "All Creative Commons Videos": "PLQg3etb9oyYjjU6fJt7Ee7EuFe03lQuu1",
+    "Mixed License Videos": "PLQg3etb9oyYhsUb0zElkzit7TvbtnOTo4",
+    "Videos with Captions": "PLQg3etb9oyYhJbl_ea_7XNne5y6h_HTuP",
+    "Videos with Location Metadata": "PLQg3etb9oyYji9J2W5c6GhXnO-Aomcrfw"
+  }
 }
