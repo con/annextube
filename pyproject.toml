@@ -1,6 +1,6 @@
 [project]
 name = "annextube"
-version = "0.1.0"
+version = "0.2.0"
 description = "YouTube archive system using git-annex for efficient storage and incremental updates"
 authors = [{name = "Yaroslav Halchenko", email = "debian@onerussian.com"}]
 readme = "README.md"
