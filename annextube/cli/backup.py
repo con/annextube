@@ -74,7 +74,21 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Backup with limit
         annextube backup --limit 10
     """
-    logger.info("Starting backup operation")
+    # Log versions for debugging
+    try:
+        from annextube._version import version as annextube_version
+    except ImportError:
+        annextube_version = "unknown"
+
+    try:
+        import yt_dlp
+        ytdlp_version = yt_dlp.version.__version__
+    except Exception:
+        ytdlp_version = "unknown"
+
+    logger.info(f"Starting backup operation")
+    logger.debug(f"annextube version: {annextube_version}")
+    logger.debug(f"yt-dlp version: {ytdlp_version}")
 
     # Check if this is a git-annex repo
     git_annex = GitAnnexService(output_dir)
