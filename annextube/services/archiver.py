@@ -986,6 +986,23 @@ class Archiver:
                     logger.info(f"Downloading video content: {video_file}")
                     self.git_annex.get_file(video_file)
 
+                    # Verify downloaded file is actually a video, not HTML/text error page
+                    if not self._verify_video_file(video_file):
+                        error_msg = (
+                            f"Downloaded file is not a valid video (likely HTML error page): {video_file}\n\n"
+                            f"This usually means yt-dlp failed to download the video.\n"
+                            f"To clean up and retry:\n"
+                            f"  1. Drop the bad content: git annex drop '{video_file}'\n"
+                            f"  2. Re-run backup to retry download\n\n"
+                            f"Common causes:\n"
+                            f"  - Video requires authentication (use cookies)\n"
+                            f"  - Video is age-restricted or geo-blocked\n"
+                            f"  - YouTube changed their API (update yt-dlp: uv pip install --upgrade yt-dlp)\n"
+                            f"  - Video was deleted or made private\n"
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(f"Invalid video file: {video_file}")
+
             except Exception as e:
                 logger.warning(f"Failed to track video URL: {e}")
 
@@ -1051,6 +1068,75 @@ class Archiver:
         self._processed_video_ids.add(video.video_id)
 
         return caption_count
+
+    def _verify_video_file(self, video_file: Path) -> bool:
+        """Verify downloaded file is actually a video, not HTML/text error page.
+
+        Args:
+            video_file: Path to downloaded video file
+
+        Returns:
+            True if file appears to be a valid video, False otherwise
+        """
+        if not video_file.exists():
+            logger.warning(f"Video file does not exist: {video_file}")
+            return False
+
+        # Check file size - video files should be reasonably large
+        file_size = video_file.stat().st_size
+        if file_size < 1024:  # Less than 1 KB is suspiciously small
+            logger.warning(f"Video file suspiciously small ({file_size} bytes): {video_file}")
+            return False
+
+        # Check file type using magic bytes (first few bytes of file)
+        try:
+            with open(video_file, 'rb') as f:
+                header = f.read(512)
+
+            # Check for HTML/text signatures (common error pages)
+            html_signatures = [
+                b'<!DOCTYPE',
+                b'<html',
+                b'<HTML',
+                b'<?xml',
+            ]
+
+            for sig in html_signatures:
+                if header.startswith(sig) or sig in header[:200]:
+                    logger.error(f"File appears to be HTML/text, not video: {video_file}")
+                    logger.debug(f"File header: {header[:100]}")
+                    return False
+
+            # Check for common video container signatures
+            video_signatures = [
+                (b'\x1a\x45\xdf\xa3', 'Matroska/WebM'),  # MKV/WebM
+                (b'ftypmp4', 'MP4'),  # MP4 (starts with ftyp)
+                (b'ftypisom', 'MP4'),  # MP4 ISO base media
+                (b'ftypM4V', 'M4V'),  # M4V
+                (b'\x00\x00\x00\x18ftypmp42', 'MP4'),  # MP4 variant
+                (b'\x00\x00\x00\x1cftypisom', 'MP4'),  # MP4 variant
+                (b'RIFF', 'AVI/WebM'),  # AVI or WebM
+                (b'\x00\x00\x01\xba', 'MPEG'),  # MPEG PS
+                (b'\x00\x00\x01\xb3', 'MPEG'),  # MPEG video
+                (b'FLV', 'FLV'),  # Flash Video
+            ]
+
+            for sig, format_name in video_signatures:
+                if sig in header[:50]:
+                    logger.debug(f"Verified video file format: {format_name}")
+                    return True
+
+            # If we got here, we didn't find a known video signature
+            # But it's not HTML either, so give benefit of doubt
+            logger.warning(
+                f"Could not identify video format (but not HTML): {video_file}\n"
+                f"File may be valid but in unexpected format. Proceeding with caution."
+            )
+            return True  # Assume it's okay if not obviously HTML
+
+        except Exception as e:
+            logger.error(f"Failed to verify video file {video_file}: {e}")
+            return False  # Fail safe - don't trust file we can't verify
 
     def _download_thumbnail(self, video: Video, video_dir: Path) -> None:
         """Download video thumbnail and set git-annex metadata.
