@@ -23,7 +23,7 @@ classifiers = [
 
 dependencies = [
     "datasalad>=0.3.0",
-    "yt-dlp>=2024.1.0",
+    "yt-dlp>=2026.2.0",  # Requires recent version for challenge solver 0.4.0+
     "click>=8.0.0",
     "jsonschema>=4.0.0",
     "tomli>=2.0.0; python_version < '3.11'",

@@ -130,4 +130,16 @@ annextube generate-web --output-dir ~/my-archive
 - 001-youtube-backup: Added Python 3.10+
 
 <!-- MANUAL ADDITIONS START -->
+## Test Channel
+
+For integration and E2E tests, use the official AnnexTube test channel:
+- **URL**: https://www.youtube.com/@AnnexTubeTesting
+- **Purpose**: Small, controlled channel for testing all features
+- **Use in tests**: Replace `@yarikoptic` or other channels with `@AnnexTubeTesting` for new tests
+
+This channel is maintained specifically for annextube testing and has:
+- A small number of videos (fast tests)
+- Playlists (for playlist testing)
+- Captions (for caption testing)
+- Predictable content (stable test fixtures)
 <!-- MANUAL ADDITIONS END -->
