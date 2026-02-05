@@ -2,6 +2,8 @@
 
 YouTube archive system using git-annex for efficient storage and incremental updates.
 
+**[Live Demo](https://con.github.io/annextube/)** - Try the web interface with sample videos from the DataLad channel
+
 ## Features
 
 - **Complete channel archival**: Videos, metadata, comments, and captions
