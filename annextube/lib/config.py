@@ -400,22 +400,23 @@ def generate_config_template(urls: list[str] | None = None, enable_videos: bool 
     thumbnails_str = str(enable_thumbnails).lower()
 
     # Build organization section separately to avoid f-string brace escaping issues
-    organization_section = f'''# Repository organization and file paths
+    # Build organization section (use string format() to avoid brace escaping confusion)
+    organization_section = '''# Repository organization and file paths
 [organization]
 video_path_pattern = "{video_path_pattern}"  # Path pattern for videos (video_id tracked in TSV)
 # Available placeholders:
-#   {{{{year}}}} - Publication year (YYYY)
-#   {{{{month}}}} - Publication month (MM)
-#   {{{{date}}}} - Publication date (YYYY-MM-DD)
-#   {{{{video_id}}}} - YouTube video ID (optional, tracked in videos.tsv)
-#   {{{{sanitized_title}}}} - Video title (filesystem-safe, hyphens for words)
-#   {{{{channel_id}}}} - Channel ID
-#   {{{{channel_name}}}} - Channel name (sanitized)
+#   {{year}} - Publication year (YYYY)
+#   {{month}} - Publication month (MM)
+#   {{date}} - Publication date (YYYY-MM-DD)
+#   {{video_id}} - YouTube video ID (optional, tracked in videos.tsv)
+#   {{sanitized_title}} - Video title (filesystem-safe, hyphens for words)
+#   {{channel_id}} - Channel ID
+#   {{channel_name}} - Channel name (sanitized)
 # Examples:
-#   "{{{{year}}}}/{{{{month}}}}/{{{{date}}}}_{{{{sanitized_title}}}}" - Hierarchical by year/month (default)
-#   "{{{{date}}}}_{{{{sanitized_title}}}}" - Flat layout with date + title
-#   "{{{{date}}}}_{{{{video_id}}}}_{{{{sanitized_title}}}}" - Include ID
-#   "{{{{video_id}}}}" - Just video ID (compact)
+#   "{{year}}/{{month}}/{{date}}_{{sanitized_title}}" - Hierarchical by year/month (default)
+#   "{{date}}_{{sanitized_title}}" - Flat layout with date + title
+#   "{{date}}_{{video_id}}_{{sanitized_title}}" - Include ID
+#   "{{video_id}}" - Just video ID (compact)
 
 channel_path_pattern = "{{channel_id}}"  # Path pattern for channels
 
@@ -437,7 +438,7 @@ playlist_video_pattern = "{{video_index:04d}}_{{video_path_basename}}"  # Patter
 #   "{{video_index}}_{{video_path_basename}}" - 1_2026-01-15_video-title
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
-'''
+'''.format(video_path_pattern=video_path_pattern)
 
     # Handle comments_depth: None means don't set it (use default = unlimited)
     if comments_depth is None:
