@@ -1030,15 +1030,24 @@ class Archiver:
 
         # Download captions (if enabled and mode allows)
         # For NEW videos: always try to fetch if configured (we don't know what's available yet)
-        # For EXISTING videos: only fetch if captions exist and mode allows it
+        # For EXISTING videos: try to fetch if captions enabled AND mode allows
+        # (even if captions_available is empty - user may have enabled captions later)
         caption_count = 0
+        captions_enabled = self._get_component_value('captions')
         if is_new_video:
             # New video: try to download if captions enabled, regardless of what metadata says
-            should_fetch_captions = self._get_component_value('captions')
+            should_fetch_captions = captions_enabled
+            logger.info(f"Caption check for {video.video_id}: NEW video, captions_enabled={captions_enabled}, should_fetch={should_fetch_captions}")
         else:
-            # Existing video: only download if captions available and mode allows
-            should_fetch_captions = bool(self._get_component_value('captions') and video.captions_available and
-                                        self._should_process_component("captions"))
+            # Existing video: download if captions enabled AND mode allows
+            # Don't check captions_available - it may be empty if captions were disabled previously
+            mode_allows = self._should_process_component("captions")
+            should_fetch_captions = bool(captions_enabled and mode_allows)
+            logger.info(
+                f"Caption check for {video.video_id}: EXISTING video, "
+                f"captions_enabled={captions_enabled}, mode_allows={mode_allows}, "
+                f"should_fetch={should_fetch_captions}"
+            )
         if should_fetch_captions:
             downloaded_captions = self._download_captions(video, video_dir)
             caption_count = len(downloaded_captions)
@@ -1051,6 +1060,8 @@ class Archiver:
                 with AtomicFileWriter(metadata_path) as f:
                     json.dump(video.to_dict(), f, indent=2)
                 logger.debug(f"Updated metadata with {len(downloaded_captions)} downloaded captions")
+            else:
+                logger.debug(f"No captions downloaded for {video.video_id} (none available)")
 
         # Download comments (if enabled and mode allows)
         # For NEW videos: always fetch if configured, regardless of mode
@@ -1204,6 +1215,7 @@ class Archiver:
             # Use caption settings from config
             language_pattern = self.config.components.caption_languages
             auto_translated_langs = self.config.components.auto_translated_captions
+            logger.info(f"Attempting caption download for {video.video_id}: pattern={language_pattern}, auto_translated={auto_translated_langs}")
 
             # Extract video base filename (without extension) to match video file
             # e.g., "video.mkv" -> "video"
