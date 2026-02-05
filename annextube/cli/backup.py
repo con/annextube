@@ -74,7 +74,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Backup with limit
         annextube backup --limit 10
     """
-    # Log versions for debugging
+    # Log versions at INFO level (like duct does)
     try:
         from annextube._version import version as annextube_version
     except ImportError:
@@ -86,9 +86,8 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
     except Exception:
         ytdlp_version = "unknown"
 
+    logger.info(f"annextube {annextube_version} with yt-dlp {ytdlp_version}")
     logger.info(f"Starting backup operation")
-    logger.debug(f"annextube version: {annextube_version}")
-    logger.debug(f"yt-dlp version: {ytdlp_version}")
 
     # Check if this is a git-annex repo
     git_annex = GitAnnexService(output_dir)

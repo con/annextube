@@ -38,6 +38,20 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         DIRECTORY: Directory to initialize (default: current directory)
         URLS: YouTube channel or playlist URLs to add to configuration
     """
+    # Log version at INFO level
+    try:
+        from annextube._version import version as annextube_version
+    except ImportError:
+        annextube_version = "unknown"
+
+    try:
+        import yt_dlp
+        ytdlp_version = yt_dlp.version.__version__
+    except Exception:
+        ytdlp_version = "unknown"
+
+    logger.info(f"annextube {annextube_version} with yt-dlp {ytdlp_version}")
+
     output_dir = directory
     logger.info(f"Initializing annextube archive at {output_dir}")
 
