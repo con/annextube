@@ -180,3 +180,84 @@ class TestE2EBackupFeatures:
                 "Git should be clean after backup. "
                 f"Status: {subprocess.run(['git', 'status', '--porcelain'], cwd=repo_path, capture_output=True, text=True).stdout}"
             )
+
+    def test_default_init_includes_playlists_with_title_paths(self) -> None:
+        """Test that default init config includes playlists and uses title-based paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+
+            # Use annextube init with default settings (playlists=all, podcasts=all by default)
+            # Using yarikoptic channel which has playlists
+            channel_url = "https://www.youtube.com/@yarikoptic"
+
+            subprocess.run(
+                ["uv", "run", "annextube", "init", str(repo_path), channel_url,
+                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                check=True,
+                capture_output=True
+            )
+
+            # Run backup to discover and backup playlists
+            subprocess.run(
+                ["uv", "run", "annextube", "backup",
+                 "--output-dir", str(repo_path)],
+                check=True,
+                capture_output=True
+            )
+
+            # --- Verify playlists were discovered ---
+            playlists_dir = repo_path / "playlists"
+            assert playlists_dir.exists(), "playlists/ directory should exist"
+
+            playlist_dirs = [d for d in playlists_dir.iterdir() if d.is_dir()]
+            assert len(playlist_dirs) >= 1, (
+                f"Expected at least 1 playlist with default include_playlists='all', "
+                f"got {len(playlist_dirs)} playlist dirs"
+            )
+
+            # --- Verify playlist directories use titles (not IDs) ---
+            for pdir in playlist_dirs:
+                # Playlist IDs look like: PLxxx (start with PL and are alphanumeric)
+                # Titles are human-readable with hyphens/underscores
+                dir_name = pdir.name
+
+                # Should NOT be just a playlist ID (which starts with PL and is ~34 chars)
+                assert not (dir_name.startswith("PL") and len(dir_name) == 34 and dir_name[2:].replace("_", "").replace("-", "").isalnum()), (
+                    f"Playlist directory should use title, not ID. Got: {dir_name}"
+                )
+
+                # Should contain readable text (hyphens or underscores, not all alphanumeric)
+                assert "-" in dir_name or "_" in dir_name or " " in dir_name, (
+                    f"Playlist directory should be human-readable title. Got: {dir_name}"
+                )
+
+            # --- Verify playlists.tsv has correct mapping ---
+            playlists_tsv = repo_path / "playlists" / "playlists.tsv"
+            assert playlists_tsv.exists(), "playlists.tsv should exist"
+
+            lines = playlists_tsv.read_text().strip().split("\n")
+            assert len(lines) >= 2, "playlists.tsv should have header + at least 1 playlist"
+
+            # Parse header and first playlist entry
+            header = lines[0].split("\t")
+            assert "path" in header, "playlists.tsv should have 'path' column"
+            assert "title" in header, "playlists.tsv should have 'title' column"
+
+            path_idx = header.index("path")
+            title_idx = header.index("title")
+
+            first_entry = lines[1].split("\t")
+            path_value = first_entry[path_idx]
+            title_value = first_entry[title_idx]
+
+            # Verify path matches a real directory
+            playlist_path = playlists_dir / path_value
+            assert playlist_path.exists(), f"Playlist path from TSV should exist: {path_value}"
+
+            # Verify path is derived from title (not ID)
+            # Title should be recognizable in the path (sanitized)
+            assert any(
+                word.lower() in path_value.lower()
+                for word in title_value.split()
+                if len(word) > 3  # Check words longer than 3 chars
+            ), f"Playlist path '{path_value}' should be derived from title '{title_value}'"
