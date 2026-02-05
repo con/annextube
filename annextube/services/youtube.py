@@ -172,9 +172,15 @@ class YouTubeService:
             yt-dlp options dictionary
         """
         logger.debug(f"Building yt-dlp options (download={download})")
+
+        # Enable yt-dlp's own verbose logging if we're in debug mode
+        import logging as stdlib_logging
+        enable_ytdlp_verbose = logger.level <= stdlib_logging.DEBUG
+
         opts: dict[str, Any] = {
-            "quiet": True,
-            "no_warnings": True,
+            "quiet": not enable_ytdlp_verbose,  # Disable quiet in debug mode
+            "no_warnings": not enable_ytdlp_verbose,  # Show warnings in debug mode
+            "verbose": enable_ytdlp_verbose,  # Enable yt-dlp's verbose output
             "extract_flat": False,  # Get full metadata
             "skip_download": not download,
         }
