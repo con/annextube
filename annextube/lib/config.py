@@ -78,7 +78,6 @@ class OrganizationConfig:
     video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}"  # Default: hierarchical by year/month
     channel_path_pattern: str = "{channel_id}"
     playlist_path_pattern: str = "{playlist_title}"  # Use sanitized playlist title by default
-    playlist_symlink_pattern: str = "{video_playlist_index:04d}_{video_dir_name}"  # Pattern for playlist symlinks
     video_filename: str = "video.mkv"  # Filename for video file within video directory
 
 
@@ -222,9 +221,6 @@ class Config:
             ),
             channel_path_pattern=organization_data.get("channel_path_pattern", "{channel_id}"),
             playlist_path_pattern=organization_data.get("playlist_path_pattern", "{playlist_title}"),
-            playlist_symlink_pattern=organization_data.get(
-                "playlist_symlink_pattern", "{video_playlist_index:04d}_{video_dir_name}"
-            ),
             video_filename=organization_data.get("video_filename", "video.mkv"),
         )
 
@@ -425,19 +421,7 @@ playlist_path_pattern = "{{playlist_title}}"  # Path pattern for playlists (sani
 #   {{playlist_title}} - Playlist title (filesystem-safe)
 #   {{channel_id}} - Channel ID
 #   {{channel_name}} - Channel name (sanitized)
-
-playlist_symlink_pattern = "{{video_playlist_index:04d}}_{{video_dir_name}}"  # Pattern for playlist symlinks
-# Available placeholders for playlist symlinks:
-#   {{video_playlist_index}} - Position in playlist (1-based integer)
-#   {{video_dir_name}} - Video directory name (from video_path_pattern)
-#   {{sanitized_title}} - Video title (filesystem-safe)
-#   {{date}} - Video publication date (YYYY-MM-DD)
-#   {{video_id}} - YouTube video ID
-# Format specifiers supported (e.g., :04d for zero-padded 4 digits)
-# Examples:
-#   "{{video_playlist_index:04d}}_{{video_dir_name}}" - 0001_video-dir (default)
-#   "{{video_playlist_index:03d}}-{{sanitized_title}}" - 001-video-title
-#   "{{video_playlist_index}}_{{date}}_{{video_id}}" - 1_2024-01-15_abc123
+# Note: Playlist symlinks use format: {{index:04d}}_{{video_dir_name}} (hardcoded)
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
 '''

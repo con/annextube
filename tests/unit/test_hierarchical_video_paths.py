@@ -177,8 +177,7 @@ def test_playlist_symlink_with_hierarchical_paths(tmp_path: Path) -> None:
     config = Config(
         components=ComponentsConfig(),
         organization=OrganizationConfig(
-            video_path_pattern="{year}/{month}/{date}_{sanitized_title}",
-            playlist_symlink_pattern="{video_playlist_index:04d}_{video_dir_name}"
+            video_path_pattern="{year}/{month}/{date}_{sanitized_title}"
         )
     )
 
@@ -395,100 +394,24 @@ def test_video_path_with_invalid_placeholder_raises_error(tmp_path: Path) -> Non
 
 
 @pytest.mark.ai_generated
-def test_playlist_symlink_with_pattern(tmp_path: Path) -> None:
-    """Test that playlist symlinks are generated from playlist_symlink_pattern."""
+def test_playlist_symlink_format(tmp_path: Path) -> None:
+    """Test that playlist symlinks use {index:04d}_{video_dir_name} format."""
     from annextube.lib.config import ComponentsConfig, Config
 
-    # Create config with custom symlink pattern
     config = Config(
         components=ComponentsConfig(),
-        organization=OrganizationConfig(
-            playlist_symlink_pattern="{video_playlist_index:03d}-{sanitized_title}"
-        )
+        organization=OrganizationConfig()
     )
 
     archiver = Archiver(tmp_path, config)
-
-    video = Video(
-        video_id="test123",
-        title="Test Video Title",
-        description="Test description",
-        channel_id="UC123",
-        channel_name="Test Channel",
-        published_at=datetime(2026, 1, 28, 12, 0, 0),
-        duration=300,
-        view_count=1000,
-        like_count=100,
-        comment_count=0,
-        thumbnail_url="https://example.com/thumb.jpg",
-        license="standard",
-        privacy_status="public",
-        availability="public",
-        tags=[],
-        categories=[],
-        captions_available=[],
-        has_auto_captions=False,
-        download_status="not_downloaded",
-        source_url="https://youtube.com/watch?v=test123",
-        fetched_at=datetime(2026, 1, 28, 12, 0, 0),
-    )
 
     video_dir = tmp_path / "videos" / "2026-01-28_Test-Video-Title"
-    symlink_name = archiver._get_playlist_symlink_name(video, video_dir, 5)
 
-    # Should use custom pattern: 005-Test-Video-Title (3 digits, hyphen separator)
-    assert symlink_name == "005-Test-Video-Title"
-
-
-@pytest.mark.ai_generated
-def test_playlist_symlink_with_invalid_placeholder_raises_error(tmp_path: Path) -> None:
-    """Test that invalid placeholders in playlist_symlink_pattern raise ValueError."""
-    from annextube.lib.config import ComponentsConfig, Config
-
-    # Create config with invalid placeholder
-    config = Config(
-        components=ComponentsConfig(),
-        organization=OrganizationConfig(
-            playlist_symlink_pattern="{invalid_field}_{video_dir_name}"
-        )
-    )
-
-    archiver = Archiver(tmp_path, config)
-
-    video = Video(
-        video_id="test123",
-        title="Test Video",
-        description="Test description",
-        channel_id="UC123",
-        channel_name="Test Channel",
-        published_at=datetime(2026, 1, 28, 12, 0, 0),
-        duration=300,
-        view_count=1000,
-        like_count=100,
-        comment_count=0,
-        thumbnail_url="https://example.com/thumb.jpg",
-        license="standard",
-        privacy_status="public",
-        availability="public",
-        tags=[],
-        categories=[],
-        captions_available=[],
-        has_auto_captions=False,
-        download_status="not_downloaded",
-        source_url="https://youtube.com/watch?v=test123",
-        fetched_at=datetime(2026, 1, 28, 12, 0, 0),
-    )
-
-    video_dir = tmp_path / "videos" / "test-video"
-
-    # Should raise ValueError with helpful message
-    with pytest.raises(ValueError) as exc_info:
-        archiver._get_playlist_symlink_name(video, video_dir, 1)
-
-    error_msg = str(exc_info.value)
-    assert "invalid_field" in error_msg
-    assert "playlist_symlink_pattern" in error_msg
-    assert "Valid placeholders:" in error_msg
+    # Test various indices
+    assert archiver._get_playlist_symlink_name(video_dir, 1) == "0001_2026-01-28_Test-Video-Title"
+    assert archiver._get_playlist_symlink_name(video_dir, 42) == "0042_2026-01-28_Test-Video-Title"
+    assert archiver._get_playlist_symlink_name(video_dir, 999) == "0999_2026-01-28_Test-Video-Title"
+    assert archiver._get_playlist_symlink_name(video_dir, 1234) == "1234_2026-01-28_Test-Video-Title"
 
 
 @pytest.mark.ai_generated

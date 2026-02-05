@@ -446,50 +446,20 @@ class Archiver:
 
         return self.repo_path / "playlists" / path_str
 
-    def _get_playlist_symlink_name(self, video: Video, video_dir: Path, playlist_index: int) -> str:
-        """Generate playlist symlink name from pattern.
+    def _get_playlist_symlink_name(self, video_dir: Path, playlist_index: int) -> str:
+        """Generate playlist symlink name.
+
+        Format: {index:04d}_{video_dir_name}
+        Example: 0001_2026-01-15_video-title
 
         Args:
-            video: Video model instance
             video_dir: Path to video directory
             playlist_index: 1-based position in playlist
 
         Returns:
             Symlink filename (e.g., "0001_video-title")
         """
-        pattern = self.config.organization.playlist_symlink_pattern
-
-        # Extract date from published_at
-        try:
-            if isinstance(video.published_at, datetime):
-                date_obj = video.published_at
-                date_str = date_obj.strftime('%Y-%m-%d')
-            else:
-                date_obj = datetime.fromisoformat(str(video.published_at).replace('Z', '+00:00'))
-                date_str = date_obj.strftime('%Y-%m-%d')
-        except Exception as e:
-            logger.warning(f"Failed to parse date from published_at: {e}")
-            date_str = 'unknown'
-
-        # Build placeholders
-        placeholders = {
-            'video_playlist_index': playlist_index,
-            'video_dir_name': video_dir.name,
-            'sanitized_title': sanitize_filename(video.title),
-            'date': date_str,
-            'video_id': video.video_id,
-        }
-
-        # Replace placeholders in pattern using .format()
-        try:
-            symlink_name = pattern.format(**placeholders)
-        except KeyError as e:
-            raise ValueError(
-                f"Unknown placeholder {e} in playlist_symlink_pattern: {pattern}. "
-                f"Valid placeholders: {', '.join(sorted(placeholders.keys()))}"
-            ) from e
-
-        return symlink_name
+        return f"{playlist_index:04d}_{video_dir.name}"
 
     def _discover_playlists(self, channel_url: str, include_pattern: str,
                            exclude_pattern: str | None, include_podcasts: str) -> list[str]:
@@ -833,8 +803,8 @@ class Archiver:
             # Create ordered symlink in playlist directory (even if already processed)
             video_dir = self._get_video_path(video)
             if video_dir.exists():
-                # Generate symlink name from pattern
-                symlink_name = self._get_playlist_symlink_name(video, video_dir, i)
+                # Generate symlink name: {index:04d}_{video_dir_name}
+                symlink_name = self._get_playlist_symlink_name(video_dir, i)
                 symlink_path = playlist_dir / symlink_name
 
                 # Create relative symlink (for repository portability)

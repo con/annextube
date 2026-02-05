@@ -31,8 +31,7 @@ def test_config_defaults():
     org = OrganizationConfig()
     assert org.video_path_pattern == "{year}/{month}/{date}_{sanitized_title}", \
         "Default video_path_pattern should use hierarchical organization"
-    assert org.playlist_symlink_pattern == "{video_playlist_index:04d}_{video_dir_name}", \
-        "Default playlist_symlink_pattern should use 4-digit index and video_dir_name"
+    # Playlist symlinks use hardcoded format: {index:04d}_{video_dir_name}
 
 
 @pytest.mark.ai_generated
