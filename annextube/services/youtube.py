@@ -82,6 +82,9 @@ class YouTubeService:
         # Create YouTube API client for enhanced metadata if key provided
         self.api_client = create_api_client(youtube_api_key)
 
+        # Debug: Show what config was passed to YouTubeService
+        logger.debug(f"YouTubeService initialized with: cookies_file={cookies_file}, cookies_from_browser={cookies_from_browser}, proxy={proxy}, api_key={'***' if youtube_api_key else None}")
+
     def _retry_on_rate_limit(self, func, *args, **kwargs):
         """Retry function on rate limit errors with exponential backoff.
 
