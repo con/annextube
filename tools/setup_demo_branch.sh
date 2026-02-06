@@ -2,6 +2,12 @@
 set -e  # Exit on error
 set -u  # Exit on undefined variable
 
+# Ensure we're in the project root
+if [ ! -f "pyproject.toml" ] || [ ! -d "annextube" ]; then
+    echo "Error: This script must be run from the annextube project root"
+    exit 1
+fi
+
 # Parse command line arguments
 FORCE_CLEAN=false
 while [[ $# -gt 0 ]]; do
@@ -55,14 +61,6 @@ else
     else
         echo "Branch 'annextubetesting' does not exist, will create it"
     fi
-fi
-
-# Temporarily move .noannex to allow git-annex in worktree
-NOANNEX_MOVED=false
-if [ -f .noannex ]; then
-    echo "Temporarily moving .noannex to allow git-annex init in worktree..."
-    mv .noannex .noannex.temp
-    NOANNEX_MOVED=true
 fi
 
 # Create worktrees directory
@@ -143,10 +141,10 @@ The `annextubetesting` branch is an **orphan branch** (no shared history with ma
 
 ## Content
 
-- **10 videos** from the @AnnexTubeTesting channel
+- **Videos** from the @AnnexTubeTesting channel (all available)
 - **Metadata, thumbnails, and captions**
 - **Video files** (unannexed, stored directly in git)
-- **5 playlists** with video symlinks
+- **Playlists** with video symlinks
 
 ## How It Works
 
@@ -170,10 +168,10 @@ To update the demo content, run the setup script from the master branch:
 git checkout master
 
 # Run the setup script (incremental update by default)
-./tools/setup-demo-branch.sh
+./tools/setup_demo_branch.sh
 
 # Or force a clean rebuild
-./tools/setup-demo-branch.sh --force-clean
+./tools/setup_demo_branch.sh --force-clean
 
 # Push the updated branch
 git push origin annextubetesting
@@ -181,9 +179,9 @@ git push origin annextubetesting
 
 The script will:
 - Create/update the annextubetesting branch in a worktree
-- Run \`annextube backup\` to fetch latest content
+- Run \`annextube init\` and \`annextube backup\` to fetch latest content
 - Unannex video files to store them directly in git
-- Commit all changes
+- Generate README and commit all changes
 
 ## Content Structure
 
@@ -209,7 +207,7 @@ This branch uses `--all-to-git` mode, which means:
 - This is an orphan branch - it has no shared history with master
 - Content was generated using:
   ```
-  annextube init . https://www.youtube.com/@AnnexTubeTesting --comments 0 --limit 10 --all-to-git
+  annextube init . https://www.youtube.com/@AnnexTubeTesting --all-to-git
   annextube backup --output-dir .
   datalad run -m "unannexing..." --input 'videos/*/*/*/video.mkv' 'git annex unannex {inputs}'
   ```
@@ -249,11 +247,12 @@ echo "video.mkv files (unannexed): $mkv_files"
 echo "video.mkv symlinks (should be 0): $mkv_symlinks"
 
 # Verify expectations
-if [ "$video_count" -eq 10 ] && [ "$playlist_count" -eq 5 ] && [ "$mkv_symlinks" -eq 0 ] && [ "$mkv_files" -eq 10 ]; then
+if [ "$video_count" -gt 0 ] && [ "$playlist_count" -gt 0 ] && [ "$mkv_symlinks" -eq 0 ] && [ "$mkv_files" -eq "$video_count" ]; then
     echo "✓ Content verification passed!"
+    echo "  Videos: $video_count, Playlists: $playlist_count, Unannexed files: $mkv_files"
 else
-    echo "⚠ WARNING: Unexpected content counts!"
-    echo "  Expected: 10 videos, 5 playlists, 10 unannexed video.mkv files, 0 symlinks"
+    echo "⚠ WARNING: Content verification failed!"
+    echo "  Expected: >0 videos, >0 playlists, 0 symlinks, mkv_files == video_count"
     echo "  Got: $video_count videos, $playlist_count playlists, $mkv_files files, $mkv_symlinks symlinks"
 fi
 
@@ -265,9 +264,3 @@ echo "To return to master:"
 echo "  cd ../.."
 echo "  git checkout master"
 
-# Restore .noannex if we moved it
-cd ../..
-if [ "$NOANNEX_MOVED" = true ] && [ -f .noannex.temp ]; then
-    mv .noannex.temp .noannex
-    echo "Restored .noannex in master branch"
-fi
