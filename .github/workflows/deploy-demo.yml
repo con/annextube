@@ -4,7 +4,8 @@ on:
   push:
     branches: [ master ]
     paths:
-      - 'demo/**'
+      - 'annextube/**'
+      - 'frontend/**'
       - '.github/workflows/deploy-demo.yml'
   workflow_dispatch:
 
@@ -25,38 +26,63 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Build site
+      - name: Install git-annex
         run: |
-          # Create build directory
-          mkdir -p .gh-pages
+          sudo apt-get update
+          sudo apt-get install -y git-annex
 
-          # Copy web app to root
-          cp -r demo/web/* .gh-pages/
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
 
-          # Copy data directories alongside web app
-          cp -r demo/videos .gh-pages/
-          cp -r demo/playlists .gh-pages/
-          cp demo/authors.tsv .gh-pages/
-          cp demo/README.md .gh-pages/
+      - name: Generate demo archive
+        run: |
+          # Create temp demo directory
+          mkdir -p demo-build
+          cd demo-build
 
-          # Add file tree for inspection
-          tree -H '.' -L 3 --charset utf-8 -T "annextube Demo Files" \
-            -I '*.git' .gh-pages/ > .gh-pages/files.html || \
-            find .gh-pages/ -type f ! -path '*/.git/*' > .gh-pages/files.txt
+          # Initialize archive with test channel
+          uv run annextube init . https://www.youtube.com/@AnnexTubeTesting \
+            --comments 0 --limit 10
+
+          # Run backup to fetch data
+          uv run annextube backup --output-dir .
+
+          # Generate web UI
+          uv run annextube generate-web --output-dir .
+
+          # The web UI is now in ./web/
+          cd ..
 
       - name: Deploy to GitHub Pages
         run: |
           # Switch to gh-pages branch (create if needed)
           git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
 
-          # Remove all files except .gh-pages and .git
-          git rm -rf . || true
+          # Remove all existing files
+          git rm -rf . 2>/dev/null || true
+          rm -rf * .gitignore .gitattributes 2>/dev/null || true
 
-          # Copy built site
-          cp -r .gh-pages/* .
-          rm -rf .gh-pages
+          # Copy generated web UI
+          cp -r demo-build/web/* .
+
+          # Add a README
+          cat > README.md << 'EOF'
+          # annextube Demo
+
+          This demo is automatically generated from the @AnnexTubeTesting channel.
+
+          It showcases:
+          - Video metadata browsing
+          - Playlist navigation
+          - Search functionality
+          - Client-side static web UI (no backend required)
+
+          Generated from: https://github.com/con/annextube
+          EOF
 
           # Commit and push
           git add -A
-          git commit -m "Deploy demo from ${{ github.sha }}" || echo "No changes to commit"
+          git commit -m "Deploy demo generated from ${{ github.sha }}" || echo "No changes"
           git push origin gh-pages --force
