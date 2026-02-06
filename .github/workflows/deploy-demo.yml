@@ -31,16 +31,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git-annex
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
         with:
-          node-version: '20'
+          deno-version: v2.x
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
 
       - name: Generate demo archive
         run: |
+          # Verify deno is available
+          which deno
+          deno --version
+
           # Create temp demo directory
           mkdir -p demo-build
           cd demo-build
