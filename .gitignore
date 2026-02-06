@@ -105,3 +105,4 @@ annextube/_version.py
 .deno
 .local
 .worktrees
+.config
