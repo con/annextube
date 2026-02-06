@@ -2,6 +2,20 @@
 set -e  # Exit on error
 set -u  # Exit on undefined variable
 
+# Track whether we moved .noannex (for cleanup)
+NOANNEX_MOVED=false
+
+# Cleanup function to restore .noannex on exit/error
+cleanup() {
+    if [ "$NOANNEX_MOVED" = true ] && [ -f .noannex.temp ]; then
+        echo
+        echo "Restoring .noannex due to script exit..."
+        git mv .noannex.temp .noannex 2>/dev/null || true
+        git commit -m "Restore .noannex after script exit" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 # Ensure we're in the project root
 if [ ! -f "pyproject.toml" ] || [ ! -d "annextube" ]; then
     echo "Error: This script must be run from the annextube project root"
@@ -61,6 +75,15 @@ else
     else
         echo "Branch 'annextubetesting' does not exist, will create it"
     fi
+fi
+
+# Temporarily move .noannex from master to allow git-annex init in worktree
+# (git-annex checks parent repository for .noannex)
+if [ -f .noannex ]; then
+    echo "Temporarily moving .noannex to allow git-annex init..."
+    git mv .noannex .noannex.temp
+    git commit -m "Temporarily disable .noannex for demo branch creation"
+    NOANNEX_MOVED=true
 fi
 
 # Create worktrees directory
@@ -264,4 +287,9 @@ echo
 echo "To return to master:"
 echo "  cd ../.."
 echo "  git checkout master"
+
+# Restore .noannex (handled by trap cleanup, but be explicit about success)
+cd ../..
+echo
+echo "(.noannex will be restored by cleanup handler)"
 
