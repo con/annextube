@@ -27,8 +27,9 @@ logger = get_logger(__name__)
 @click.option("--include-playlists", default="all", help="Playlist inclusion: 'all' (default), 'none', or regex pattern")
 @click.option("--include-podcasts", default="all", help="Podcast inclusion: 'all' (default), 'none', or regex pattern")
 @click.option("--video-path-pattern", default="{year}/{month}/{date}_{sanitized_title}", help="Path pattern for video directories (default: {year}/{month}/{date}_{sanitized_title})")
+@click.option("--all-to-git", is_flag=True, default=False, help="Keep all files in git (no annexing). Use for demos/GitHub Pages.")
 @click.pass_context
-def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str):
+def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
@@ -69,7 +70,7 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         git_annex.init_repo(description="annextube YouTube archive")
 
         # Configure .gitattributes
-        git_annex.configure_gitattributes()
+        git_annex.configure_gitattributes(all_to_git=all_to_git)
 
         # Create config directory and template
         config_dir = output_dir / ".annextube"
@@ -94,9 +95,12 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         # Success message
         click.echo("Initialized YouTube archive repository in current directory")
         click.echo("Git-annex backend: URL (for video URLs)")
-        click.echo("Tracking configuration:")
-        click.echo("  - *.json, *.tsv, *.md, *.vtt -> git")
-        click.echo("  - *.mp4, *.webm, *.jpg, *.png -> git-annex")
+        if all_to_git:
+            click.echo("Tracking configuration: ALL FILES IN GIT (demo mode)")
+        else:
+            click.echo("Tracking configuration:")
+            click.echo("  - *.json, *.tsv, *.md, *.vtt -> git")
+            click.echo("  - *.mp4, *.webm, *.jpg, *.png -> git-annex")
         click.echo()
         click.echo(f"Configuration created: {config_path}")
         if urls:

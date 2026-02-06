@@ -131,50 +131,64 @@ class GitAnnexService:
         else:
             logger.debug("No yt-dlp options to configure for git-annex")
 
-    def configure_gitattributes(self) -> None:
+    def configure_gitattributes(self, all_to_git: bool = False) -> None:
         """Configure .gitattributes for file tracking rules.
+
+        Args:
+            all_to_git: If True, keep all files in git (no annexing). Useful for demos/GitHub Pages.
 
         Default: Binary files and files >10k -> git-annex
         Large text files (.vtt captions, comments.json) -> git-annex
         Small metadata files (.tsv, .md, README) -> git
+
+        With all_to_git=True: Everything goes to git (no annexing)
         """
         gitattributes_path = self.repo_path / ".gitattributes"
 
-        rules = [
-            "# annextube file tracking configuration",
-            "",
-            "# Default: Binary files and files >10k go to git-annex",
-            "* annex.largefiles=(((mimeencoding=binary)and(largerthan=0))or(largerthan=10k))",
-            "",
-            "# Small metadata files -> git (override default)",
-            "*.tsv annex.largefiles=nothing",
-            "*.md annex.largefiles=nothing",
-            "README* annex.largefiles=nothing",
-            "LICENSE* annex.largefiles=nothing",
-            ".gitignore annex.largefiles=nothing",
-            ".gitattributes annex.largefiles=nothing",
-            "",
-            "# Sensitive data files -> git-annex (contains personal information)",
-            "authors.tsv annex.largefiles=anything",
-            "comments.json annex.largefiles=anything",
-            "",
-            "# Large text files -> git-annex (VTT captions)",
-            "*.vtt annex.largefiles=anything",
-            "",
-            "# Media files -> git-annex (covered by default, explicit for clarity)",
-            "*.mp4 annex.largefiles=anything",
-            "*.webm annex.largefiles=anything",
-            "*.mkv annex.largefiles=anything",
-            "*.jpg annex.largefiles=anything",
-            "*.jpeg annex.largefiles=anything",
-            "*.png annex.largefiles=anything",
-            "*.webp annex.largefiles=anything",
-        ]
+        if all_to_git:
+            # Demo mode: Keep everything in git (no annexing)
+            rules = [
+                "# annextube demo configuration - all files in git (no git-annex)",
+                "",
+                "* annex.largefiles=nothing",
+            ]
+            logger.info("Configured .gitattributes for demo mode (all files in git)")
+        else:
+            # Normal mode: Large files and binaries go to git-annex
+            rules = [
+                "# annextube file tracking configuration",
+                "",
+                "# Default: Binary files and files >10k go to git-annex",
+                "* annex.largefiles=(((mimeencoding=binary)and(largerthan=0))or(largerthan=10k))",
+                "",
+                "# Small metadata files -> git (override default)",
+                "*.tsv annex.largefiles=nothing",
+                "*.md annex.largefiles=nothing",
+                "README* annex.largefiles=nothing",
+                "LICENSE* annex.largefiles=nothing",
+                ".gitignore annex.largefiles=nothing",
+                ".gitattributes annex.largefiles=nothing",
+                "",
+                "# Sensitive data files -> git-annex (contains personal information)",
+                "authors.tsv annex.largefiles=anything",
+                "comments.json annex.largefiles=anything",
+                "",
+                "# Large text files -> git-annex (VTT captions)",
+                "*.vtt annex.largefiles=anything",
+                "",
+                "# Media files -> git-annex (covered by default, explicit for clarity)",
+                "*.mp4 annex.largefiles=anything",
+                "*.webm annex.largefiles=anything",
+                "*.mkv annex.largefiles=anything",
+                "*.jpg annex.largefiles=anything",
+                "*.jpeg annex.largefiles=anything",
+                "*.png annex.largefiles=anything",
+                "*.webp annex.largefiles=anything",
+            ]
+            logger.info("Configured .gitattributes for file tracking")
 
         with open(gitattributes_path, "w") as f:
             f.write("\n".join(rules))
-
-        logger.info("Configured .gitattributes for file tracking")
 
     def addurl(
         self, url: str, file_path: Path, relaxed: bool = True, fast: bool = True, no_raw: bool = False
