@@ -74,6 +74,10 @@ version-file = "annextube/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["annextube"]
+# Include built frontend in distribution
+include = [
+    "web/**/*",
+]
 
 [tool.hatch.build.targets.sdist]
 exclude = [

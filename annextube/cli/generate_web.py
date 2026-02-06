@@ -88,7 +88,15 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
                 f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
                 err=True,
             )
-            click.echo("Run 'cd frontend && npm run build' to build the frontend first.")
+            click.echo()
+            click.echo("The web frontend is not included in this installation.")
+            click.echo()
+            click.echo("Options to fix this:")
+            click.echo("  1. Development: Run 'cd frontend && npm run build' to build the frontend")
+            click.echo("  2. Production: Install from a release that includes the built frontend")
+            click.echo("  3. Manual: Copy a pre-built web/ directory to your installation")
+            click.echo()
+            click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
             raise click.Abort()
 
         # Copy frontend to web directory
