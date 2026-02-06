@@ -87,7 +87,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         ytdlp_version = "unknown"
 
     logger.info(f"annextube {annextube_version} with yt-dlp {ytdlp_version}")
-    logger.info(f"Starting backup operation")
+    logger.info("Starting backup operation")
 
     # Check if this is a git-annex repo
     git_annex = GitAnnexService(output_dir)

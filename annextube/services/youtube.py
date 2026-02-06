@@ -179,6 +179,7 @@ class YouTubeService:
         # Enable yt-dlp's own verbose logging only at HEAVY_DEBUG level (5)
         # Regular DEBUG level (10) shows only annextube debug logs
         import logging as stdlib_logging
+
         from annextube.lib.logging_config import HEAVY_DEBUG
 
         # Check effective level (handles inheritance from parent loggers)

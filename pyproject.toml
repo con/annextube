@@ -75,6 +75,19 @@ version-file = "annextube/_version.py"
 [tool.hatch.build.targets.wheel]
 packages = ["annextube"]
 
+[tool.hatch.build.targets.sdist]
+exclude = [
+    ".venv",
+    ".tox",
+    ".cache",
+    ".config",
+    ".local",
+    ".deno",
+    ".worktrees",
+    ".duct",
+    "test-archives",
+]
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = ["-ra", "--strict-markers", "--strict-config"]

@@ -438,7 +438,7 @@ playlist_video_pattern = "{{video_index:04d}}_{{video_path_basename}}"  # Patter
 #   "{{video_index}}_{{video_path_basename}}" - 1_2026-01-15_video-title
 
 video_filename = "video.mkv"  # Filename for video file (use .mkv for best compatibility)
-'''.format(video_path_pattern=video_path_pattern)
+'''.format(video_path_pattern=video_path_pattern)  # noqa: UP032 - Use .format() to avoid {{{{}}} confusion
 
     # Handle comments_depth: None means don't set it (use default = unlimited)
     if comments_depth is None:

@@ -101,9 +101,7 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
         assert "captions_available" in metadata
 
         # Comments (may not exist if video has no comments)
-        comments_path = video_dir / "comments.json"
-        # Test channel videos may have no comments, so only verify
-        # the file exists when comments are expected
+        # Test channel videos may have no comments, so we don't verify
 
         # Thumbnail
         thumbnail_path = video_dir / "thumbnail.jpg"
