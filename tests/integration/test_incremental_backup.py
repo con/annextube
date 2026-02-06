@@ -129,7 +129,7 @@ def test_incremental_backup_detects_new_videos():
         )
 
         # Verify incremental mode detected and processed new videos
-        assert "videos-incremental" in result.stdout
+        assert "all-incremental" in result.stdout
 
         # Verify 5 videos total in TSV now
         with open(videos_tsv) as f:
