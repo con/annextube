@@ -73,7 +73,8 @@ if git show-ref --verify --quiet refs/heads/annextubetesting; then
     git worktree add .worktrees/annextubetesting annextubetesting
 else
     # New branch - create orphan branch with empty worktree
-    git worktree add --orphan annextubetesting .worktrees/annextubetesting
+    # Note: --orphan requires -b to name the branch
+    git worktree add --orphan -b annextubetesting .worktrees/annextubetesting
 fi
 
 cd .worktrees/annextubetesting
