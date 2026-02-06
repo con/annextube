@@ -327,9 +327,9 @@ def test_config_template_includes_hierarchical_pattern() -> None:
     # Verify template shows hierarchical pattern in config value
     assert 'video_path_pattern = "{year}/{month}/{date}_{sanitized_title}"' in template
 
-    # Verify documentation mentions year and month placeholders (with double braces for escaping)
-    assert "{{year}}" in template or "{{{{year}}}}" in template  # Either double or quad braces
-    assert "{{month}}" in template or "{{{{month}}}}" in template
+    # Verify documentation mentions year and month placeholders (single braces after fix)
+    assert "{year}" in template
+    assert "{month}" in template
 
 
 @pytest.mark.ai_generated

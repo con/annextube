@@ -21,10 +21,11 @@ def test_incremental_backup_no_reprocessing():
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)
 
-        # Initialize repository
+        # Initialize repository (disable playlists to test channel-only incremental behavior)
         result = subprocess.run(
             ["uv", "run", "annextube", "init", str(repo_path), test_channel,
-             "--no-videos", "--comments", "0", "--no-captions"],
+             "--no-videos", "--comments", "0", "--no-captions",
+             "--include-playlists", "none"],
             capture_output=True,
             text=True,
             check=True
@@ -64,8 +65,8 @@ def test_incremental_backup_no_reprocessing():
             check=True
         )
 
-        # Verify incremental mode was used
-        assert "videos-incremental" in result2.stdout, "Should use incremental mode by default"
+        # Verify incremental mode was used (default is all-incremental)
+        assert "all-incremental" in result2.stdout, "Should use all-incremental mode by default"
 
         # Verify no new videos were found (two-pass approach filtered them out)
         stderr_lower = result2.stderr.lower()
@@ -93,10 +94,11 @@ def test_incremental_backup_detects_new_videos():
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir)
 
-        # Initialize repository
+        # Initialize repository (disable playlists to test channel-only incremental behavior)
         subprocess.run(
             ["uv", "run", "annextube", "init", str(repo_path), test_channel,
-             "--no-videos", "--comments", "0", "--no-captions"],
+             "--no-videos", "--comments", "0", "--no-captions",
+             "--include-playlists", "none"],
             check=True,
             capture_output=True
         )
