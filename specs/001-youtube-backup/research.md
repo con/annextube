@@ -291,7 +291,19 @@ class GitAnnexService:
    - Configure via `retries`, `fragment_retries`, `sleep_interval`
    - Catch exceptions for deleted/private videos gracefully
 
-5. **Rate limiting**:
+5. **Challenge solver dependencies**:
+   - yt-dlp uses JavaScript challenge solvers to bypass YouTube bot detection
+   - Requires Deno runtime and up-to-date challenge solver scripts
+   - Install with `[default]` extra: `pip install -U "yt-dlp[default]"`
+   - **Known issue**: Outdated yt-dlp dependencies cause errors like:
+     ```
+     [jsc:deno] Challenge solver lib script version 0.3.2 is not supported
+     (source: python package, variant: ScriptVariant.MINIFIED, supported version: 0.4.0)
+     ```
+   - **Fix**: Upgrade yt-dlp with all dependencies: `python3 -m pip install -U "yt-dlp[default]"`
+   - Project requires `yt-dlp>=2026.2.0` which includes challenge solver 0.4.0+
+
+6. **Rate limiting**:
    - Use `sleep_interval` and `max_sleep_interval` options
    - Respect YouTube's rate limits (built into yt-dlp)
    - Consider `playlist_items` for filtering (reduce API calls)
