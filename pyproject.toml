@@ -72,6 +72,9 @@ raw-options = { version_scheme = "post-release", local_scheme = "node-and-date" 
 [tool.hatch.build.hooks.vcs]
 version-file = "annextube/_version.py"
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["annextube"]
 # Include built frontend in distribution
