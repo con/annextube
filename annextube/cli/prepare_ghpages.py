@@ -315,6 +315,12 @@ def copy_frontend_to_ghpages(
     import annextube
 
     search_paths = []
+
+    # Check environment variable first (same as build step)
+    env_frontend = os.environ.get('ANNEXTUBE_FRONTEND_DIR')
+    if env_frontend:
+        search_paths.append(Path(env_frontend))
+
     if hasattr(annextube, '__file__') and annextube.__file__:
         annextube_root = Path(annextube.__file__).parent.parent
         search_paths.append(annextube_root / 'frontend')
