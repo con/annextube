@@ -439,6 +439,13 @@ def setup_ghpages_config(repo_path: Path, branch_name: str) -> None:
     nojekyll.touch()
     logger.debug("Created .nojekyll")
 
+    # Create .gitignore to exclude build artifacts
+    gitignore = repo_path / '.gitignore'
+    gitignore.write_text("""# Exclude annextube source checkout (used only for building)
+_annextube_source/
+""")
+    logger.debug("Created .gitignore")
+
     # Create 404.html for client-side routing
     html_404 = repo_path / '404.html'
     html_404.write_text("""<!DOCTYPE html>
