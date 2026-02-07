@@ -24,7 +24,7 @@ def _generate_channel_json(output_dir: Path) -> Path:
         Path to generated channel.json
     """
     # Load config to get channel info
-    config = load_config(output_dir)
+    config = load_config(repo_path=output_dir)
 
     if not config.sources:
         raise click.ClickException("No sources configured. Cannot generate channel.json.")
