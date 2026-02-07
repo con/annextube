@@ -1,6 +1,7 @@
 """Integration test for incremental backup functionality."""
 
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -23,7 +24,7 @@ def test_incremental_backup_no_reprocessing():
 
         # Initialize repository (disable playlists to test channel-only incremental behavior)
         result = subprocess.run(
-            ["uv", "run", "annextube", "init", str(repo_path), test_channel,
+            [sys.executable, "-m", "annextube", "init", str(repo_path), test_channel,
              "--no-videos", "--comments", "0", "--no-captions",
              "--include-playlists", "none"],
             capture_output=True,
@@ -35,7 +36,7 @@ def test_incremental_backup_no_reprocessing():
 
         # First backup - should process videos
         result1 = subprocess.run(
-            ["uv", "run", "annextube", "backup",
+            [sys.executable, "-m", "annextube", "backup",
              "--output-dir", str(repo_path),
              "--limit", str(limit)],
             capture_output=True,
@@ -57,7 +58,7 @@ def test_incremental_backup_no_reprocessing():
 
         # Second backup - should NOT reprocess any videos
         result2 = subprocess.run(
-            ["uv", "run", "annextube", "backup",
+            [sys.executable, "-m", "annextube", "backup",
              "--output-dir", str(repo_path),
              "--limit", str(limit)],
             capture_output=True,
@@ -96,7 +97,7 @@ def test_incremental_backup_detects_new_videos():
 
         # Initialize repository (disable playlists to test channel-only incremental behavior)
         subprocess.run(
-            ["uv", "run", "annextube", "init", str(repo_path), test_channel,
+            [sys.executable, "-m", "annextube", "init", str(repo_path), test_channel,
              "--no-videos", "--comments", "0", "--no-captions",
              "--include-playlists", "none"],
             check=True,
@@ -105,7 +106,7 @@ def test_incremental_backup_detects_new_videos():
 
         # First backup - get 2 videos
         subprocess.run(
-            ["uv", "run", "annextube", "backup",
+            [sys.executable, "-m", "annextube", "backup",
              "--output-dir", str(repo_path),
              "--limit", "2"],
             check=True,
@@ -120,7 +121,7 @@ def test_incremental_backup_detects_new_videos():
 
         # Second backup - increase limit to 5 (simulates 3 "new" videos)
         result = subprocess.run(
-            ["uv", "run", "annextube", "backup",
+            [sys.executable, "-m", "annextube", "backup",
              "--output-dir", str(repo_path),
              "--limit", "5"],
             capture_output=True,

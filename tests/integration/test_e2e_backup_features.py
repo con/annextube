@@ -8,6 +8,7 @@ Requires network access and yt-dlp installed.
 
 import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -191,7 +192,7 @@ class TestE2EBackupFeatures:
             channel_url = "https://www.youtube.com/@yarikoptic"
 
             subprocess.run(
-                ["uv", "run", "annextube", "init", str(repo_path), channel_url,
+                [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
                  "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
                 check=True,
                 capture_output=True
@@ -199,7 +200,7 @@ class TestE2EBackupFeatures:
 
             # Run backup to discover and backup playlists
             subprocess.run(
-                ["uv", "run", "annextube", "backup",
+                [sys.executable, "-m", "annextube", "backup",
                  "--output-dir", str(repo_path)],
                 check=True,
                 capture_output=True
