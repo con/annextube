@@ -477,6 +477,322 @@ Deep Learning State of the Art  Lex Fridman  2020-01-10  5261      100000  5000 
 - Lock file pattern for cron safety
 - Config storage in .datalad/config
 
+## In Development: Archive Sharing via GitHub Pages
+
+**Status**: Design & Implementation Phase
+**Branch**: `enh-gh_pages`
+**Testing Repository**: https://github.com/con/annextubetesting
+
+### Overview
+
+Enable users to easily share their YouTube archives as public repositories on GitHub (and potentially other git hosting platforms), with web interface deployable to GitHub Pages. This transforms annextube from a purely local archival tool into a shareable preservation platform.
+
+**Key Goals**:
+1. Generic support for publishing any archived channel to GitHub Pages
+2. Handle git-annex annexed content availability for public access
+3. Support hybrid deployment: metadata always available, content optionally available from annex URLs
+4. Enable community-driven archive sharing and preservation
+
+### Immediate TODO (Phase 1)
+
+#### Unannex Workflow for Public Availability
+
+**Feature**: Selectively unannex files to make them directly available in git (not just tracked by git-annex)
+
+**Use Cases**:
+- Publish small archives (demo channels) with full video content
+- Make thumbnails and metadata always available without git-annex
+- Create demo repositories without requiring users to have git-annex installed
+
+**Requirements**:
+- **TD-001**: CLI command to unannex specific files or file patterns (e.g., thumbnails, small videos)
+  ```bash
+  annextube unannex --pattern "*.jpg" --output-dir ~/my-archive
+  annextube unannex --pattern "videos/*/video.mkv" --max-size 10M --output-dir ~/my-archive
+  ```
+- **TD-002**: Support size-based filtering (only unannex files under N MB)
+- **TD-003**: Dry-run mode to preview what would be unannexed
+- **TD-004**: Automatic .gitattributes update to prevent re-annexing
+- **TD-005**: Progress reporting for large unannex operations
+- **TD-006**: Warning when unannexing would exceed GitHub file size limits (100MB per file, 100GB per repo)
+
+**Implementation Notes**:
+- Use `git annex unannex <file>` followed by `git add <file>`
+- Update `.gitattributes` to exclude unannexed patterns from future annexing
+- Consider `git annex unlock` + `git annex add --force-small` pattern for controlled unannexing
+
+**Testing**:
+- Test with AnnexTubeTesting channel (small archive)
+- Verify unannexed files are directly accessible after `git clone` (no git-annex needed)
+- Verify web interface works with unannexed content
+
+---
+
+#### GitHub Pages Deployment Workflow
+
+**Feature**: Prepare and deploy archive to GitHub Pages with working web interface
+
+**Requirements**:
+- **TD-007**: CLI command to prepare gh-pages deployment
+  ```bash
+  annextube prepare-ghpages --output-dir ~/my-archive --target-dir ~/my-archive-ghpages
+  ```
+- **TD-008**: Generate optimized frontend build for GitHub Pages
+- **TD-009**: Create deployment-ready branch (orphan gh-pages branch)
+- **TD-010**: Update web interface base URL handling for GitHub Pages paths
+- **TD-011**: Documentation for GitHub Pages setup and configuration
+
+**Implementation Notes**:
+- Frontend must handle base path (e.g., `/annextubetesting/` for repo-based pages)
+- Use hash-based routing for client-side navigation
+- Ensure all resource paths are relative or properly prefixed
+
+---
+
+### Near Future TODO (Phase 2)
+
+#### Annex Remote URL Integration for Video Playback
+
+**Feature**: Use git-annex remote URLs (S3, WebDAV, etc.) for video playback in web interface
+
+**Background**: When archives are pushed to git-annex special remotes (S3, Backblaze B2, rsync, etc.), git-annex registers the URLs where content is accessible. The web interface can use these URLs to play videos directly from the remote without requiring local content.
+
+**Requirements**:
+- **TD-012**: Extract registered URLs from git-annex for each video file
+  ```bash
+  git annex whereis --json <file>
+  # Parse 'whereis' output for web-accessible URLs
+  ```
+- **TD-013**: Update Video model schema to include `annex_remote_urls: list[str]`
+- **TD-014**: Extend videos.tsv to include primary annex remote URL column
+- **TD-015**: Frontend: Detect when video file is not locally available
+- **TD-016**: Frontend: Fall back to annex remote URLs for video playback
+- **TD-017**: Frontend: Support multiple URLs per video (redundancy)
+- **TD-018**: Frontend: UI control to switch between available URLs (e.g., dropdown with URL sources)
+- **TD-019**: Frontend: Clearly indicate playback source ("Playing from S3", "Playing from WebDAV", vs "Playing locally")
+- **TD-020**: Frontend: Handle URL access errors gracefully (try next URL if one fails)
+
+**Technical Design**:
+
+```python
+# Extract annex URLs for a video file
+def get_annex_remote_urls(video_path: Path) -> list[dict]:
+    """
+    Get all registered remote URLs for an annexed file.
+
+    Returns:
+        List of dicts with keys: remote_name, url, accessibility
+
+    Example:
+        [
+            {"remote": "s3-public", "url": "https://s3.amazonaws.com/bucket/video.mkv", "web_accessible": true},
+            {"remote": "webdav-backup", "url": "https://webdav.example.com/video.mkv", "web_accessible": true},
+            {"remote": "local-nas", "url": "file:///mnt/nas/video.mkv", "web_accessible": false}
+        ]
+    """
+    # git annex whereis --json video.mkv
+    # Parse 'urls' field from each remote
+    # Filter for web-accessible URLs (http/https)
+    pass
+
+# videos.tsv extended schema:
+# title | channel | published | duration | views | likes | comments | captions | annex_url | path | video_id
+#       |         |           |          |       |       |          |          | https://s3... | ... | ...
+```
+
+**Frontend Playback Logic**:
+```javascript
+// Video component logic
+async function loadVideo(videoId) {
+  // 1. Try local file path first (fastest)
+  if (await checkFileExists(localPath)) {
+    return localPath;
+  }
+
+  // 2. Fall back to annex remote URLs
+  const remoteUrls = video.annex_remote_urls;
+  for (const urlInfo of remoteUrls) {
+    if (urlInfo.web_accessible) {
+      try {
+        // Test URL accessibility
+        const response = await fetch(urlInfo.url, {method: 'HEAD'});
+        if (response.ok) {
+          setPlaybackSource(`Remote: ${urlInfo.remote}`);
+          return urlInfo.url;
+        }
+      } catch (e) {
+        console.warn(`Failed to access ${urlInfo.remote}: ${e}`);
+        continue;
+      }
+    }
+  }
+
+  // 3. No sources available
+  showError("Video not available locally or from remotes");
+}
+```
+
+**UI Mockup**:
+```
+[Video Player]
+┌─────────────────────────────────┐
+│                                 │
+│        [Video Playing]          │
+│                                 │
+└─────────────────────────────────┘
+
+Playback Source: [Dropdown ▼]
+  ○ Local (not available)
+  ● S3 Public (playing)
+  ○ WebDAV Backup
+
+[i] Video is playing from cloud storage (S3).
+    Local copy not available.
+```
+
+**Benefits**:
+- Archives can be browsed and watched without downloading all content locally
+- Users can clone metadata-only (fast) and stream videos on-demand
+- Supports hybrid archives: metadata in git, content in cheap cloud storage
+- Enables sustainable long-term archiving (metadata always free, content costs minimal)
+
+**Challenges**:
+- CORS requirements for cross-origin video playback (S3 buckets must allow CORS)
+- URL expiration (presigned URLs from S3 expire, need refresh mechanism)
+- Bandwidth costs (cloud egress fees for video streaming)
+- Privacy considerations (URLs may be public or require authentication)
+
+**Implementation Priority**: Medium (after basic gh-pages deployment works)
+
+---
+
+### Technical Architecture
+
+#### Deployment Models
+
+**Model 1: Fully Contained Archive** (Demo, small channels)
+- All content unannexed (videos, thumbnails, metadata)
+- No git-annex required for users to clone and use
+- Suitable for GitHub Pages up to repository size limits
+- Use case: AnnexTubeTesting demo, small educational archives
+
+**Model 2: Metadata-Only + Annex URLs** (Large channels)
+- Metadata and thumbnails unannexed (always available)
+- Videos remain annexed with URLs pointing to special remotes (S3, etc.)
+- Users clone metadata quickly, stream videos from cloud
+- Use case: Large channel archives, cost-effective preservation
+
+**Model 3: Hybrid** (Flexible)
+- Critical videos unannexed (most important content always available)
+- Bulk content annexed with remote URLs
+- Thumbnails and metadata always available
+- Use case: Curated archives with featured content
+
+---
+
+#### Repository Structure for Sharing
+
+```
+annextubetesting/              # Public GitHub repository
+├── .git/                      # Git repository (metadata only)
+├── .gitattributes             # Configured for unannexed patterns
+├── videos/
+│   ├── videos.tsv             # Always available (git)
+│   └── {video_folders}/
+│       ├── metadata.json      # Always available (git)
+│       ├── thumbnail.jpg      # Unannexed (git) - always visible
+│       ├── video.mkv          # Option A: Unannexed (git) for small archives
+│       │                      # Option B: Annexed with S3 URL for large archives
+│       └── captions/          # Always available (git)
+├── playlists/
+│   └── playlists.tsv          # Always available (git)
+├── frontend/
+│   └── dist/                  # Built frontend for GitHub Pages
+└── index.html                 # Entry point for GitHub Pages
+```
+
+**Key Decisions**:
+- TSV files always in git (metadata index)
+- Thumbnails always unannexed (small, high-value for browsing)
+- Captions always in git (small, important for accessibility)
+- Videos: configurable (unannex for small archives, annex+URL for large)
+
+---
+
+### Testing Plan
+
+#### Phase 1 Testing (Unannex & Deployment)
+1. **Test with AnnexTubeTesting channel**:
+   - Create full archive of @AnnexTubeTesting channel
+   - Unannex all content (small channel, suitable for GitHub)
+   - Push to GitHub repository: https://github.com/con/annextubetesting
+   - Deploy to GitHub Pages
+   - Verify web interface works without git-annex
+
+2. **Test unannex workflows**:
+   - Unannex only thumbnails (pattern: `*.jpg`)
+   - Unannex videos under 10MB
+   - Verify .gitattributes prevents re-annexing
+   - Test dry-run mode
+
+#### Phase 2 Testing (Annex URL Playback)
+1. **Setup test remote**:
+   - Configure S3 special remote with public bucket
+   - Push AnnexTubeTesting videos to S3
+   - Verify git-annex registers S3 URLs
+
+2. **Test URL extraction**:
+   - Extract URLs from `git annex whereis --json`
+   - Update videos.tsv with annex URLs
+   - Verify URL accessibility via HTTP HEAD requests
+
+3. **Test frontend playback**:
+   - Clone repository without video content
+   - Load web interface
+   - Attempt video playback
+   - Verify fallback to S3 URLs
+   - Test URL switching in UI
+
+4. **Test error handling**:
+   - Simulate S3 URL inaccessible (remove CORS)
+   - Verify graceful error message
+   - Test fallback to next URL in list
+
+---
+
+### Documentation TODO
+
+- [ ] How-to guide: "Publishing Your Archive to GitHub Pages"
+- [ ] How-to guide: "Setting Up S3 Special Remote for Public Archives"
+- [ ] Reference: Unannex command options and patterns
+- [ ] Reference: GitHub Pages deployment configuration
+- [ ] Explanation: Deployment models and trade-offs
+- [ ] Tutorial: Create and share your first archive (using AnnexTubeTesting)
+
+---
+
+### Open Questions
+
+1. **GitHub file size limits**: How to handle videos >100MB in fully contained archives?
+   - Option A: Warn and skip large files during unannex
+   - Option B: Use Git LFS (additional dependency)
+   - Option C: Document as limitation, recommend annex URL model
+
+2. **CORS configuration**: How to guide users to configure S3 CORS properly?
+   - Provide S3 CORS policy template in docs
+   - Add `annextube check-remote-cors` command to verify configuration
+
+3. **URL expiration**: How to handle presigned URLs that expire?
+   - For public remotes (S3 public bucket): no expiration
+   - For private remotes: need refresh mechanism (out of scope for Phase 1)
+
+4. **Multiple remote redundancy**: How to prioritize URLs when multiple available?
+   - Use remote cost/preference from git-annex configuration
+   - Allow user override via UI
+   - Default order: local > fastest remote > cheapest remote
+
+---
+
 ## Future Enhancements (Post v0.1.0)
 
 These features are deferred to future versions but are planned for consideration:
