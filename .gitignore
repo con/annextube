@@ -106,3 +106,4 @@ annextube/_version.py
 .local
 .worktrees
 .config
+.ssh
