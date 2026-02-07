@@ -250,6 +250,52 @@ class Archiver:
         # Default: process everything
         return True
 
+    def _has_uncommitted_changes(self) -> bool:
+        """Check if there are uncommitted changes in the repository.
+
+        Returns:
+            True if there are staged or unstaged changes
+        """
+        import subprocess
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=self.repo_path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return bool(result.stdout.strip())
+
+    def _checkpoint(self, channel_url: str, videos_processed: int, total_videos: int) -> None:
+        """Create a checkpoint by regenerating TSVs and committing progress.
+
+        Args:
+            channel_url: URL of the channel being backed up
+            videos_processed: Number of videos processed so far
+            total_videos: Total number of videos to process
+        """
+        if not self._has_uncommitted_changes():
+            logger.debug("No uncommitted changes, skipping checkpoint")
+            return
+
+        logger.info(f"Checkpoint: {videos_processed}/{total_videos} videos processed")
+
+        # Regenerate TSVs to include newly processed videos
+        try:
+            self.export.generate_all()
+        except Exception as e:
+            logger.warning(f"Failed to regenerate TSVs during checkpoint: {e}")
+            # Continue with commit anyway - TSVs can be regenerated later
+
+        # Commit staged changes
+        try:
+            self.git_annex.add_and_commit(
+                f"Checkpoint: {channel_url} ({videos_processed}/{total_videos} videos)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to commit checkpoint: {e}")
+            raise
+
     def _load_video_paths(self) -> dict[str, str]:
         """Load existing video ID to path mapping from videos.tsv.
 
@@ -659,21 +705,49 @@ class Archiver:
         if self.update_mode != "playlists":
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
-            # Process each video (fail-fast: errors will propagate)
-            for i, video_meta in enumerate(videos_metadata, 1):
-                logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                video = self.youtube.metadata_to_video(video_meta)
-                caption_count = self._process_video(video)
+            # Process each video with checkpoint support
+            checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
 
-                stats["videos_processed"] += 1
-                stats["videos_tracked"] += 1
-                stats["metadata_saved"] += 1
-                stats["captions_downloaded"] += caption_count
+            try:
+                for i, video_meta in enumerate(videos_metadata, 1):
+                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
+                    video = self.youtube.metadata_to_video(video_meta)
+                    caption_count = self._process_video(video)
 
-            # Commit changes
-            self.git_annex.add_and_commit(
-                f"Backup channel: {channel_url} ({stats['videos_processed']} videos)"
-            )
+                    stats["videos_processed"] += 1
+                    stats["videos_tracked"] += 1
+                    stats["metadata_saved"] += 1
+                    stats["captions_downloaded"] += caption_count
+
+                    # Periodic checkpoint
+                    if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
+                        self._checkpoint(channel_url, i, len(videos_metadata))
+
+                # Final commit (if checkpoints disabled or remaining videos after last checkpoint)
+                if self._has_uncommitted_changes():
+                    self.git_annex.add_and_commit(
+                        f"Backup channel: {channel_url} ({stats['videos_processed']} videos)"
+                    )
+
+            except KeyboardInterrupt:
+                logger.warning("Backup interrupted by user (Ctrl+C)")
+
+                # Auto-commit partial progress if enabled
+                if self.config.backup.auto_commit_on_interrupt and self._has_uncommitted_changes():
+                    logger.info(f"Auto-committing partial progress ({stats['videos_processed']} videos processed)...")
+                    try:
+                        # Regenerate TSVs to include all processed videos
+                        self.export.generate_all()
+                        self.git_annex.add_and_commit(
+                            f"Partial backup (interrupted): {channel_url} ({stats['videos_processed']} videos)"
+                        )
+                        logger.info("Partial progress committed successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to commit partial progress: {e}")
+                        logger.info("Uncommitted changes remain. Run 'git status' to inspect.")
+
+                # Re-raise to propagate interruption
+                raise
 
             logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
         else:
@@ -795,51 +869,79 @@ class Archiver:
             logger.info("Playlist content unchanged, skipping video processing")
             return stats
 
-        # Process each video and create ordered symlinks (fail-fast)
-        for i, video_meta in enumerate(videos_metadata, 1):
-            video = self.youtube.metadata_to_video(video_meta)
-            video_id = video.video_id
+        # Process each video and create ordered symlinks with checkpoint support
+        checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
 
-            # Check if video was already processed in this run (e.g., from channel backup)
-            if video_id in self._processed_video_ids:
-                logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
-                caption_count = 0
-            else:
-                logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                # Process video (creates video directory with content)
-                caption_count = self._process_video(video)
+        try:
+            for i, video_meta in enumerate(videos_metadata, 1):
+                video = self.youtube.metadata_to_video(video_meta)
+                video_id = video.video_id
 
-                stats["videos_processed"] += 1
-                stats["videos_tracked"] += 1
-                stats["metadata_saved"] += 1
-                stats["captions_downloaded"] += caption_count
+                # Check if video was already processed in this run (e.g., from channel backup)
+                if video_id in self._processed_video_ids:
+                    logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
+                    caption_count = 0
+                else:
+                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
+                    # Process video (creates video directory with content)
+                    caption_count = self._process_video(video)
 
-            # Create ordered symlink in playlist directory (even if already processed)
-            video_dir = self._get_video_path(video)
-            if video_dir.exists():
-                # Generate symlink name: {index:04d}_{video_dir_name}
-                symlink_name = self._get_playlist_symlink_name(video_dir, i)
-                symlink_path = playlist_dir / symlink_name
+                    stats["videos_processed"] += 1
+                    stats["videos_tracked"] += 1
+                    stats["metadata_saved"] += 1
+                    stats["captions_downloaded"] += caption_count
 
-                # Create relative symlink (for repository portability)
-                # From: playlists/{playlist_title}/{symlink}
-                # To:   videos/{year}/{month}/{video_dir_name} (or videos/{video_dir_name} for flat)
-                # Use relative_to() to support both flat and hierarchical layouts
-                relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
+                # Create ordered symlink in playlist directory (even if already processed)
+                video_dir = self._get_video_path(video)
+                if video_dir.exists():
+                    # Generate symlink name: {index:04d}_{video_dir_name}
+                    symlink_name = self._get_playlist_symlink_name(video_dir, i)
+                    symlink_path = playlist_dir / symlink_name
 
-                # Remove existing symlink if present
-                if symlink_path.exists() or symlink_path.is_symlink():
-                    symlink_path.unlink()
+                    # Create relative symlink (for repository portability)
+                    # From: playlists/{playlist_title}/{symlink}
+                    # To:   videos/{year}/{month}/{video_dir_name} (or videos/{video_dir_name} for flat)
+                    # Use relative_to() to support both flat and hierarchical layouts
+                    relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
 
-                symlink_path.symlink_to(relative_target)
-                logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
-            else:
-                logger.warning(f"Video directory not found, skipping symlink: {video_dir}")
+                    # Remove existing symlink if present
+                    if symlink_path.exists() or symlink_path.is_symlink():
+                        symlink_path.unlink()
 
-        # Commit changes
-        self.git_annex.add_and_commit(
-            f"Backup playlist: {playlist.title} ({stats['videos_processed']} videos)"
-        )
+                    symlink_path.symlink_to(relative_target)
+                    logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
+                else:
+                    logger.warning(f"Video directory not found, skipping symlink: {video_dir}")
+
+                # Periodic checkpoint
+                if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
+                    self._checkpoint(playlist_url, i, len(videos_metadata))
+
+            # Final commit (if checkpoints disabled or remaining videos after last checkpoint)
+            if self._has_uncommitted_changes():
+                self.git_annex.add_and_commit(
+                    f"Backup playlist: {playlist.title} ({stats['videos_processed']} videos)"
+                )
+
+        except KeyboardInterrupt:
+            logger.warning("Backup interrupted by user (Ctrl+C)")
+
+            # Auto-commit partial progress if enabled
+            if self.config.backup.auto_commit_on_interrupt and self._has_uncommitted_changes():
+                logger.info(f"Auto-committing partial progress ({stats['videos_processed']} videos processed)...")
+                try:
+                    # Regenerate TSVs to include all processed videos
+                    self.export.generate_all()
+                    self.git_annex.add_and_commit(
+                        f"Partial backup (interrupted): {playlist.title} ({stats['videos_processed']} videos)"
+                    )
+                    logger.info("Partial progress committed successfully")
+                except Exception as e:
+                    logger.error(f"Failed to commit partial progress: {e}")
+                    logger.info("Uncommitted changes remain. Run 'git status' to inspect.")
+
+            # Re-raise to propagate interruption
+            raise
 
         logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
 
