@@ -36,6 +36,8 @@ def test_multi_channel_collection_workflow():
         print("\n=== Creating channel 1: AnnexTubeTesting ===")
         result = subprocess.run(
             [
+                "uv",
+                "run",
                 "annextube",
                 "init",
                 str(ch1_dir),
@@ -56,7 +58,7 @@ def test_multi_channel_collection_workflow():
         # Backup channel 1
         print("\n=== Backing up channel 1 ===")
         result = subprocess.run(
-            ["annextube", "backup", "--output-dir", str(ch1_dir)],
+            ["uv", "run", "annextube", "backup", "--output-dir", str(ch1_dir)],
             capture_output=True,
             text=True,
             check=True,
@@ -67,7 +69,7 @@ def test_multi_channel_collection_workflow():
         print("\n=== Exporting channel.json for channel 1 ===")
         result = subprocess.run(
             [
-                "annextube",
+                "uv", "run", "annextube",
                 "export",
                 "--output-dir",
                 str(ch1_dir),
@@ -86,7 +88,7 @@ def test_multi_channel_collection_workflow():
         print("\n=== Creating channel 2: Andriy Popyk ===")
         result = subprocess.run(
             [
-                "annextube",
+                "uv", "run", "annextube",
                 "init",
                 str(ch2_dir),
                 "https://www.youtube.com/@apopyk",
@@ -106,7 +108,7 @@ def test_multi_channel_collection_workflow():
         # Backup channel 2
         print("\n=== Backing up channel 2 ===")
         result = subprocess.run(
-            ["annextube", "backup", "--output-dir", str(ch2_dir)],
+            ["uv", "run", "annextube", "backup", "--output-dir", str(ch2_dir)],
             capture_output=True,
             text=True,
             check=True,
@@ -117,7 +119,7 @@ def test_multi_channel_collection_workflow():
         print("\n=== Exporting channel.json for channel 2 ===")
         result = subprocess.run(
             [
-                "annextube",
+                "uv", "run", "annextube",
                 "export",
                 "--output-dir",
                 str(ch2_dir),
@@ -156,7 +158,7 @@ def test_multi_channel_collection_workflow():
         # Aggregate channels
         print("\n=== Aggregating channels ===")
         result = subprocess.run(
-            ["annextube", "aggregate", str(collection_dir)],
+            ["uv", "run", "annextube", "aggregate", str(collection_dir)],
             capture_output=True,
             text=True,
             check=True,
@@ -201,7 +203,7 @@ def test_multi_channel_collection_workflow():
         # Generate web UI
         print("\n=== Generating web UI ===")
         result = subprocess.run(
-            ["annextube", "generate-web", "--output-dir", str(collection_dir)],
+            ["uv", "run", "annextube", "generate-web", "--output-dir", str(collection_dir)],
             capture_output=True,
             text=True,
             check=True,
@@ -249,7 +251,7 @@ def test_aggregate_with_depth():
         print("\n=== Creating nested channel ===")
         result = subprocess.run(
             [
-                "annextube",
+                "uv", "run", "annextube",
                 "init",
                 str(ch_dir),
                 "https://www.youtube.com/@AnnexTubeTesting",
@@ -266,7 +268,7 @@ def test_aggregate_with_depth():
         )
 
         result = subprocess.run(
-            ["annextube", "backup", "--output-dir", str(ch_dir)],
+            ["uv", "run", "annextube", "backup", "--output-dir", str(ch_dir)],
             capture_output=True,
             text=True,
             check=True,
@@ -274,7 +276,7 @@ def test_aggregate_with_depth():
 
         result = subprocess.run(
             [
-                "annextube",
+                "uv", "run", "annextube",
                 "export",
                 "--output-dir",
                 str(ch_dir),
@@ -288,7 +290,7 @@ def test_aggregate_with_depth():
         # Aggregate with depth 1 (should find nothing)
         print("\n=== Aggregating with depth 1 (should find nothing) ===")
         result = subprocess.run(
-            ["annextube", "aggregate", str(collection_dir), "--depth", "1"],
+            ["uv", "run", "annextube", "aggregate", str(collection_dir), "--depth", "1"],
             capture_output=True,
             text=True,
         )
@@ -298,7 +300,7 @@ def test_aggregate_with_depth():
         # Aggregate with depth 2 (should find the channel)
         print("\n=== Aggregating with depth 2 (should find channel) ===")
         result = subprocess.run(
-            ["annextube", "aggregate", str(collection_dir), "--depth", "2", "--force"],
+            ["uv", "run", "annextube", "aggregate", str(collection_dir), "--depth", "2", "--force"],
             capture_output=True,
             text=True,
             check=True,
