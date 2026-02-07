@@ -312,24 +312,24 @@ auto_commit_on_interrupt = true # Commit partial work on Ctrl+C
 
 ## Implementation Checklist
 
-### Phase 1: Quota Handling
-- [ ] Create `annextube/lib/quota_manager.py`
-- [ ] Implement `calculate_next_quota_reset()` with PT timezone handling
-- [ ] Implement `sleep_with_progress()` with Ctrl+C support
-- [ ] Add `QuotaExceededError` exception class
-- [ ] Modify `youtube_api.py` to detect and handle quota errors
-- [ ] Add configuration options to config schema
-- [ ] Write unit tests for timezone calculations
-- [ ] Write integration test for quota wait logic
+### Phase 1: Quota Handling ✅ COMPLETED
+- [x] Create `annextube/lib/quota_manager.py` (commit: a57965e)
+- [x] Implement `calculate_next_quota_reset()` with PT timezone handling
+- [x] Implement `sleep_with_progress()` with Ctrl+C support
+- [x] Add `QuotaExceededError` exception class
+- [x] Modify `youtube_api.py` to detect and handle quota errors
+- [ ] Add configuration options to config schema (pending - using defaults for now)
+- [x] Write unit tests for timezone calculations (21 tests in test_quota_manager.py)
+- [x] Write integration test for quota wait logic (10 tests in test_youtube_api_quota_handling.py)
 - [ ] Document quota behavior in user guide
 
-### Phase 2: Periodic Checkpoints
-- [ ] Add checkpoint logic to `archiver.backup_channel()`
-- [ ] Add checkpoint logic to `archiver.backup_playlist()`
-- [ ] Implement `_has_uncommitted_changes()` helper
-- [ ] Add Ctrl+C handler with auto-commit
-- [ ] Add checkpoint configuration options
-- [ ] Update TSV generation to be checkpoint-aware
+### Phase 2: Periodic Checkpoints ✅ COMPLETED
+- [x] Add checkpoint logic to `archiver.backup_channel()` (commit: 7f5fe62)
+- [x] Add checkpoint logic to `archiver.backup_playlist()`
+- [x] Implement `_has_uncommitted_changes()` helper
+- [x] Add Ctrl+C handler with auto-commit
+- [x] Add checkpoint configuration options (BackupConfig in config.py)
+- [x] Update TSV generation to be checkpoint-aware (calls export.generate_all() at each checkpoint)
 - [ ] Write integration tests for checkpoint behavior
 - [ ] Document interruption recovery in user guide
 
