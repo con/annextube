@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.config import save_config_template
 from annextube.lib.logging_config import get_logger
 from annextube.services.git_annex import GitAnnexService
@@ -60,10 +61,17 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Check if already initialized
-    git_annex = GitAnnexService(output_dir)
-    if git_annex.is_annex_repo():
-        click.echo(f"Error: {output_dir} is already a git-annex repository", err=True)
+    archive_info = discover_annextube(output_dir)
+    if archive_info is not None:
+        error_msg = (
+            f"Error: {output_dir} is already a multi-channel collection."
+            if archive_info.type == "multi-channel"
+            else f"Error: {output_dir} is already a single-channel annextube archive."
+        )
+        click.echo(error_msg, err=True)
         return
+
+    git_annex = GitAnnexService(output_dir)
 
     try:
         # Initialize git-annex

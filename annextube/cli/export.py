@@ -6,10 +6,10 @@ from pathlib import Path
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.config import load_config
 from annextube.lib.logging_config import get_logger
 from annextube.services.export import ExportService
-from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
 
@@ -196,13 +196,15 @@ def export(ctx: click.Context, what: str, output_dir: Path, output: Path, channe
     """
     logger.info(f"Starting export: {what}")
 
-    # Check if this is a git-annex repo
-    git_annex = GitAnnexService(output_dir)
-    if not git_annex.is_annex_repo():
-        click.echo(
-            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-            err=True,
+    # Check if this is a single-channel archive
+    archive_info = discover_annextube(output_dir)
+    if archive_info is None or archive_info.type == "multi-channel":
+        error_msg = (
+            f"Error: {output_dir} is not a single-channel annextube archive."
+            if archive_info
+            else f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first."
         )
+        click.echo(error_msg, err=True)
         raise click.Abort()
 
     try:

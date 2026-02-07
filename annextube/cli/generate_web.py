@@ -5,9 +5,9 @@ from pathlib import Path
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.logging_config import get_logger
 from annextube.services.export import ExportService
-from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
 
@@ -54,19 +54,16 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
     """
     logger.info("Starting web browser generation")
 
-    # Check if this is a multi-channel collection (channels.tsv exists)
-    channels_tsv = output_dir / "channels.tsv"
-    is_multi_channel = channels_tsv.exists()
+    # Discover archive type
+    archive_info = discover_annextube(output_dir)
+    if archive_info is None:
+        click.echo(
+            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
+            err=True,
+        )
+        raise click.Abort()
 
-    if not is_multi_channel:
-        # Single-channel archive: must be git-annex repo
-        git_annex = GitAnnexService(output_dir)
-        if not git_annex.is_annex_repo():
-            click.echo(
-                f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-                err=True,
-            )
-            raise click.Abort()
+    is_multi_channel = archive_info.type == "multi-channel"
 
     try:
         web_dir = output_dir / "web"
@@ -82,7 +79,7 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
         if is_multi_channel:
             # Multi-channel collection: channels.tsv already exists, just copy frontend
             click.echo("Multi-channel collection detected (channels.tsv found)")
-            click.echo(f"Channels overview: {channels_tsv}")
+            click.echo(f"Channels overview: {archive_info.channels_tsv}")
         else:
             # Single-channel archive: ensure TSV metadata files are up to date
             click.echo("Updating metadata files...")

@@ -9,10 +9,10 @@ from threading import Thread
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.logging_config import get_logger
 from annextube.lib.range_server import RangeHTTPRequestHandler
 from annextube.services.export import ExportService
-from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
 
@@ -167,20 +167,16 @@ def serve(
         # Regenerate everything before serving
         annextube serve --regenerate=all
     """
-    # Check if this is a multi-channel collection (channels.tsv exists)
-    channels_tsv = output_dir / "channels.tsv"
-    is_multi_channel = channels_tsv.exists()
+    # Discover archive type
+    archive_info = discover_annextube(output_dir)
+    if archive_info is None:
+        click.echo(
+            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
+            err=True,
+        )
+        raise click.Abort()
 
-    if not is_multi_channel:
-        # Single-channel archive: must be git-annex repo
-        git_annex = GitAnnexService(output_dir)
-        if not git_annex.is_annex_repo():
-            click.echo(
-                f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-                err=True,
-            )
-            raise click.Abort()
-
+    is_multi_channel = archive_info.type == "multi-channel"
     web_dir = output_dir / "web"
     if not web_dir.exists():
         click.echo(

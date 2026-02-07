@@ -6,12 +6,12 @@ from typing import Any
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.config import load_config
 from annextube.lib.date_utils import parse_date
 from annextube.lib.logging_config import get_logger
 from annextube.services.archiver import Archiver
 from annextube.services.export import ExportService
-from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
 
@@ -89,13 +89,15 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
     logger.info(f"annextube {annextube_version} with yt-dlp {ytdlp_version}")
     logger.info("Starting backup operation")
 
-    # Check if this is a git-annex repo
-    git_annex = GitAnnexService(output_dir)
-    if not git_annex.is_annex_repo():
-        click.echo(
-            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-            err=True,
+    # Check if this is an annextube archive
+    archive_info = discover_annextube(output_dir)
+    if archive_info is None or archive_info.type == "multi-channel":
+        error_msg = (
+            f"Error: {output_dir} is not a single-channel annextube archive."
+            if archive_info
+            else f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first."
         )
+        click.echo(error_msg, err=True)
         raise click.Abort()
 
     try:
