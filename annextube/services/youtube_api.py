@@ -21,24 +21,27 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from annextube.lib.logging_config import get_logger
+from annextube.lib.quota_manager import QuotaExceededError, QuotaManager
 
 logger = get_logger(__name__)
 
 class YouTubeAPICommentsService:
     """Fetch comments using YouTube Data API v3 (supports replies)."""
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, quota_manager: QuotaManager | None = None):
         """
         Initialize YouTube API client.
 
         Args:
             api_key: YouTube Data API v3 key. If not provided, reads from YOUTUBE_API_KEY env var.
+            quota_manager: QuotaManager instance for handling quota exceeded errors (default: enabled with 48h max wait)
         """
         self.api_key = api_key or os.environ.get('YOUTUBE_API_KEY')
         if not self.api_key:
             raise ValueError("YouTube API key required. Set YOUTUBE_API_KEY environment variable.")
 
         self.youtube = build('youtube', 'v3', developerKey=self.api_key)
+        self.quota_manager = quota_manager or QuotaManager()
 
     def fetch_comments(
         self,
@@ -171,7 +174,12 @@ class YouTubeAPICommentsService:
                 # Comments disabled or quota exceeded
                 if 'commentsDisabled' in str(e):
                     return []  # Video has comments disabled
-                raise  # Other 403 error (quota, permissions)
+                elif 'quotaExceeded' in str(e):
+                    # Handle quota exceeded - wait until midnight PT or raise error
+                    self.quota_manager.handle_quota_exceeded(str(e))
+                    # If we get here, quota has reset - retry the operation
+                    return self.fetch_comments(video_id, max_comments, max_replies_per_thread, existing_comment_ids)
+                raise  # Other 403 error (permissions, etc.)
             elif e.resp.status == 404:
                 # Video not found
                 return []
@@ -224,11 +232,12 @@ class YouTubeAPIMetadataClient:
         "recordingDetails",
     ]
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, quota_manager: QuotaManager | None = None):
         """Initialize YouTube API metadata client.
 
         Args:
             api_key: YouTube Data API v3 key. If not provided, reads from YOUTUBE_API_KEY env var.
+            quota_manager: QuotaManager instance for handling quota exceeded errors (default: enabled with 48h max wait)
 
         Raises:
             ValueError: If API key is not provided
@@ -238,6 +247,7 @@ class YouTubeAPIMetadataClient:
             raise ValueError("YouTube API key required. Set YOUTUBE_API_KEY environment variable.")
 
         self.youtube = build("youtube", "v3", developerKey=self.api_key, cache_discovery=False)
+        self.quota_manager = quota_manager or QuotaManager()
         logger.info("YouTube API metadata client initialized (quota cost: 10 units/video)")
 
     def get_video_details(
@@ -309,6 +319,13 @@ class YouTubeAPIMetadataClient:
             return result
 
         except HttpError as e:
+            # Check if this is a quota exceeded error
+            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                # Handle quota exceeded - wait until midnight PT or raise error
+                self.quota_manager.handle_quota_exceeded(str(e))
+                # If we get here, quota has reset - retry the operation
+                return self.get_video_details(video_ids, parts)
+
             logger.error(
                 f"YouTube API HTTP error: {e.resp.status} - {e.content.decode()}",
                 exc_info=True,
