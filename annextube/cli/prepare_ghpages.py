@@ -199,10 +199,16 @@ def build_frontend_for_ghpages(repo_path: Path, repo_name: str) -> None:
     """
     # Find frontend directory
     # Try multiple locations:
-    # 1. In the annextube project (for development)
-    # 2. Relative to target repository (for deployed installations)
+    # 1. Environment variable ANNEXTUBE_FRONTEND_DIR (for GitHub Actions)
+    # 2. In the annextube project (for development)
+    # 3. Relative to target repository (for deployed installations)
 
     search_paths = []
+
+    # Check environment variable first (set by GitHub Action)
+    env_frontend = os.environ.get('ANNEXTUBE_FRONTEND_DIR')
+    if env_frontend:
+        search_paths.append(Path(env_frontend))
 
     # Check if __file__ is available (running from source)
     import annextube
