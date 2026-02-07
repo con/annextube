@@ -11,8 +11,10 @@ import type {
   Video,
   Playlist,
   Comment,
+  Channel,
   VideoTSVRow,
   PlaylistTSVRow,
+  ChannelTSVRow,
 } from '@/types/models';
 
 export class DataLoader {
@@ -244,6 +246,56 @@ export class DataLoader {
   }
 
   /**
+   * Check if this is a multi-channel collection (channels.tsv exists)
+   */
+  async isMultiChannelMode(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/channels.tsv`);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Load channels from channels.tsv (for multi-channel collections)
+   */
+  async loadChannels(): Promise<Channel[]> {
+    const response = await fetch(`${this.baseUrl}/channels.tsv`);
+    if (!response.ok) {
+      throw new Error(`Failed to load channels.tsv: ${response.statusText}`);
+    }
+
+    const text = await response.text();
+    const rows = parseTSV(text) as unknown as ChannelTSVRow[];
+
+    // Convert TSV rows to Channel objects
+    return rows.map((row) => this.parseTSVChannel(row));
+  }
+
+  /**
+   * Load videos for a specific channel directory
+   *
+   * @param channelDir - Relative path to channel directory (from channels.tsv)
+   */
+  async loadChannelVideos(channelDir: string): Promise<Video[]> {
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/videos/videos.tsv`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load videos for channel ${channelDir}: ${response.statusText}`
+      );
+    }
+
+    const text = await response.text();
+    const rows = parseTSV(text) as unknown as VideoTSVRow[];
+
+    // Convert TSV rows to Video objects
+    return rows.map((row) => this.parseTSVVideo(row));
+  }
+
+  /**
    * Clear all caches (useful for testing or manual refresh)
    */
   clearCache(): void {
@@ -303,6 +355,35 @@ export class DataLoader {
       video_ids: [],
       updated_at: row.last_sync,
       fetched_at: row.last_sync,
+    };
+  }
+
+  /**
+   * Convert TSV row to Channel object
+   */
+  private parseTSVChannel(row: ChannelTSVRow): Channel {
+    return {
+      channel_id: row.channel_id,
+      name: row.title,
+      description: row.description,
+      custom_url: row.custom_url,
+      subscriber_count: parseIntField(row.subscriber_count),
+      video_count: parseIntField(row.video_count),
+      avatar_url: '',
+      videos: [],
+      playlists: [],
+      last_sync: row.last_sync,
+      created_at: '',
+      fetched_at: row.last_sync,
+      archive_stats: {
+        total_videos_archived: parseIntField(row.total_videos_archived),
+        first_video_date: row.first_video_date || undefined,
+        last_video_date: row.last_video_date || undefined,
+        total_duration_seconds: 0,
+        total_size_bytes: 0,
+      },
+      // Add channel_dir as custom property for navigation
+      channel_dir: row.channel_dir,
     };
   }
 }

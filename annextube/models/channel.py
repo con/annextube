@@ -1,7 +1,18 @@
 """Channel entity model."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import TypedDict
+
+
+class ArchiveStats(TypedDict, total=False):
+    """Statistics computed from local archive."""
+
+    total_videos_archived: int
+    first_video_date: str | None  # ISO 8601 date
+    last_video_date: str | None  # ISO 8601 date
+    total_duration_seconds: int
+    total_size_bytes: int
 
 
 @dataclass
@@ -22,6 +33,7 @@ class Channel:
     custom_url: str | None = None
     banner_url: str | None = None
     country: str | None = None
+    archive_stats: ArchiveStats = field(default_factory=dict)  # Stats from local archive
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
@@ -40,6 +52,7 @@ class Channel:
             "last_sync": self.last_sync.isoformat(),
             "created_at": self.created_at.isoformat(),
             "fetched_at": self.fetched_at.isoformat(),
+            "archive_stats": self.archive_stats,
         }
 
     @classmethod
@@ -60,4 +73,5 @@ class Channel:
             last_sync=datetime.fromisoformat(data["last_sync"]),
             created_at=datetime.fromisoformat(data["created_at"]),
             fetched_at=datetime.fromisoformat(data["fetched_at"]),
+            archive_stats=data.get("archive_stats", {}),
         )

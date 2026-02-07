@@ -1,13 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import type { Video, Playlist } from '@/types/models';
+  import type { Video, Playlist, Channel } from '@/types/models';
   import { dataLoader } from '@/services/data-loader';
   import { router } from '@/services/router';
   import { searchService } from '@/services/search';
   import VideoList from '@/components/VideoList.svelte';
   import VideoDetail from '@/components/VideoDetail.svelte';
   import FilterPanel from '@/components/FilterPanel.svelte';
+  import ChannelList from '@/components/ChannelList.svelte';
 
+  let isMultiChannel = false;
+  let channels: Channel[] = [];
+  let selectedChannel: Channel | null = null;
   let allVideos: Video[] = [];
   let filteredVideos: Video[] = [];
   let playlists: Playlist[] = [];
@@ -17,23 +21,32 @@
   let selectedVideo: Video | null = null;
 
   onMount(async () => {
-    // Load all videos and playlists
     try {
-      allVideos = await dataLoader.loadVideos();
-      filteredVideos = allVideos;
+      // Check if this is a multi-channel collection
+      isMultiChannel = await dataLoader.isMultiChannelMode();
 
-      // Initialize search service with all videos
-      searchService.initialize(allVideos);
+      if (isMultiChannel) {
+        // Load channels list
+        channels = await dataLoader.loadChannels();
+        loading = false;
+      } else {
+        // Single-channel mode: load videos directly
+        allVideos = await dataLoader.loadVideos();
+        filteredVideos = allVideos;
 
-      // Load playlists (non-blocking, failure is OK)
-      try {
-        playlists = await dataLoader.loadPlaylists();
-      } catch (err) {
-        console.warn('Could not load playlists:', err);
-        playlists = [];
+        // Initialize search service with all videos
+        searchService.initialize(allVideos);
+
+        // Load playlists (non-blocking, failure is OK)
+        try {
+          playlists = await dataLoader.loadPlaylists();
+        } catch (err) {
+          console.warn('Could not load playlists:', err);
+          playlists = [];
+        }
+
+        loading = false;
       }
-
-      loading = false;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error loading archive';
       loading = false;
@@ -52,6 +65,28 @@
     });
   });
 
+  async function handleChannelClick(channel: Channel) {
+    // Load videos for this channel
+    loading = true;
+    selectedChannel = channel;
+    try {
+      allVideos = await dataLoader.loadChannelVideos(channel.channel_dir!);
+      filteredVideos = allVideos;
+      searchService.initialize(allVideos);
+      loading = false;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Unknown error loading channel';
+      loading = false;
+    }
+  }
+
+  function handleBackToChannels() {
+    selectedChannel = null;
+    allVideos = [];
+    filteredVideos = [];
+    error = null;
+  }
+
   function handleVideoClick(video: Video) {
     router.navigate('video', { video_id: video.video_id });
   }
@@ -68,10 +103,17 @@
 <main>
   <header>
     <div class="header-content">
+      {#if selectedChannel}
+        <button class="back-button" on:click={handleBackToChannels}>
+          ← Back to channels
+        </button>
+      {/if}
       <h1>📹 YouTube Archive Browser</h1>
       <p class="subtitle">
-        {#if !loading && !error}
-          {allVideos.length} videos archived
+        {#if isMultiChannel && !selectedChannel}
+          {channels.length} channel{channels.length !== 1 ? 's' : ''} in collection
+        {:else if !loading && !error}
+          {allVideos.length} video{allVideos.length !== 1 ? 's' : ''} archived
         {/if}
       </p>
     </div>
@@ -80,7 +122,16 @@
   <div class="container">
     {#if selectedVideo}
       <VideoDetail video={selectedVideo} onBack={handleBackToList} />
+    {:else if isMultiChannel && !selectedChannel}
+      <!-- Multi-channel mode: show channels overview -->
+      <ChannelList
+        {channels}
+        {loading}
+        {error}
+        onChannelClick={handleChannelClick}
+      />
     {:else}
+      <!-- Single-channel mode or channel selected: show videos -->
       {#if !loading && !error}
         <FilterPanel
           videos={allVideos}
@@ -125,6 +176,21 @@
     max-width: 1400px;
     margin: 0 auto;
     padding: 20px 32px;
+  }
+
+  .back-button {
+    background: none;
+    border: none;
+    color: #065fd4;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 0;
+    margin-bottom: 8px;
+    display: inline-block;
+  }
+
+  .back-button:hover {
+    text-decoration: underline;
   }
 
   h1 {
