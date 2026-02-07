@@ -52,7 +52,7 @@ def compute_archive_stats(channel_dir: Path) -> dict:
     Returns:
         Archive stats dictionary
     """
-    videos_tsv = channel_dir / "videos.tsv"
+    videos_tsv = channel_dir / "videos" / "videos.tsv"
 
     stats = {
         "total_videos_archived": 0,
@@ -63,7 +63,7 @@ def compute_archive_stats(channel_dir: Path) -> dict:
     }
 
     if not videos_tsv.exists():
-        logger.warning(f"videos.tsv not found in {channel_dir}, archive_stats will be empty")
+        logger.warning(f"videos/videos.tsv not found in {channel_dir}, archive_stats will be empty")
         return stats
 
     try:

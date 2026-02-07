@@ -73,7 +73,7 @@ def _generate_channel_json(output_dir: Path) -> Path:
                 continue
 
     # Compute archive stats from videos.tsv
-    videos_tsv = output_dir / "videos.tsv"
+    videos_tsv = output_dir / "videos" / "videos.tsv"
     archive_stats = {
         "total_videos_archived": 0,
         "first_video_date": None,
