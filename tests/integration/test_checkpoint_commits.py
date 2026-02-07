@@ -52,6 +52,35 @@ def _count_metadata_files(repo_path: Path) -> int:
     return len(list(videos_dir.rglob("metadata.json")))
 
 
+def _create_process_video_mock(archiver):
+    """Create a mock for _process_video that actually creates files.
+
+    This is needed so that _has_uncommitted_changes() returns True
+    and commits are actually created during checkpoints.
+    """
+    def mock_process_video(video):
+        """Mock that creates actual metadata.json files for git to track."""
+        import json
+
+        # Get video directory path using archiver's method
+        video_dir = archiver._get_video_path(video)
+        video_dir.mkdir(parents=True, exist_ok=True)
+
+        # Create metadata.json
+        metadata_file = video_dir / "metadata.json"
+        with open(metadata_file, 'w') as f:
+            json.dump({
+                "video_id": video.video_id,
+                "title": video.title,
+                "upload_date": video.upload_date
+            }, f, indent=2)
+
+        # Return caption count (0 for this mock)
+        return 0
+
+    return mock_process_video
+
+
 @pytest.mark.ai_generated
 class TestCheckpointCommits:
     """Tests for checkpoint commit behavior during backup."""
@@ -89,7 +118,7 @@ class TestCheckpointCommits:
                         return video
                     mock_to_video.side_effect = create_mock_video
 
-                    with patch.object(archiver, "_process_video", return_value=0):
+                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
                         # Run backup
                         archiver.backup_channel("test-channel")
 
@@ -139,7 +168,7 @@ class TestCheckpointCommits:
                         return video
                     mock_to_video.side_effect = create_mock_video
 
-                    with patch.object(archiver, "_process_video", return_value=0):
+                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
                         archiver.backup_channel("test-channel")
 
             # Check commit history
@@ -183,7 +212,7 @@ class TestCheckpointCommits:
                         return video
                     mock_to_video.side_effect = create_mock_video
 
-                    with patch.object(archiver, "_process_video", return_value=0):
+                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
                         # Spy on export.generate_all calls
                         original_generate = archiver.export.generate_all
                         generate_calls = []
@@ -237,9 +266,13 @@ class TestCheckpointCommits:
 
                     # Simulate Ctrl+C after processing 3 videos
                     process_count = [0]
+                    base_mock = _create_process_video_mock(archiver)
 
                     def process_with_interrupt(video):
                         process_count[0] += 1
+                        # Create files for first 2 videos
+                        if process_count[0] < 3:
+                            result = base_mock(video)
                         if process_count[0] == 3:
                             raise KeyboardInterrupt("User interrupted")
                         return 0
@@ -290,9 +323,13 @@ class TestCheckpointCommits:
                     mock_to_video.side_effect = create_mock_video
 
                     process_count = [0]
+                    base_mock = _create_process_video_mock(archiver)
 
                     def process_with_interrupt(video):
                         process_count[0] += 1
+                        # Create files for first 2 videos
+                        if process_count[0] < 3:
+                            result = base_mock(video)
                         if process_count[0] == 3:
                             raise KeyboardInterrupt("User interrupted")
                         return 0
@@ -348,7 +385,7 @@ def test_checkpoint_interval_zero_disables_checkpoints():
                     return video
                 mock_to_video.side_effect = create_mock_video
 
-                with patch.object(archiver, "_process_video", return_value=0):
+                with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
                     archiver.backup_channel("test-channel")
 
         commits = _get_git_commit_messages(repo_path)
