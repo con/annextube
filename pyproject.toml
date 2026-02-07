@@ -29,6 +29,7 @@ dependencies = [
     "tomli>=2.0.0; python_version < '3.11'",
     "google-api-python-client>=2.0.0",  # For YouTube Data API v3 comment fetching
     "platformdirs>=4.0.0",  # Cross-platform config directory discovery
+    "tqdm>=4.0.0",  # Progress bars for long operations
 ]
 
 [project.optional-dependencies]
