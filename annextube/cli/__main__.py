@@ -12,6 +12,7 @@ from annextube.cli.generate_web import generate_web
 from annextube.cli.info import info
 from annextube.cli.init import init
 from annextube.cli.init_user_config import init_user_config
+from annextube.cli.prepare_ghpages import prepare_ghpages
 from annextube.cli.serve import serve
 from annextube.cli.unannex import unannex
 from annextube.lib.logging_config import setup_logging
@@ -74,6 +75,7 @@ cli.add_command(serve)
 cli.add_command(info)
 cli.add_command(check)
 cli.add_command(unannex)
+cli.add_command(prepare_ghpages)
 
 
 def main():
