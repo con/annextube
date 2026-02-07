@@ -197,18 +197,37 @@ def build_frontend_for_ghpages(repo_path: Path, repo_name: str) -> None:
         repo_path: Path to repository
         repo_name: GitHub repository name
     """
-    # Find frontend directory (should be in parent of worktree)
-    frontend_dir = repo_path.parent.parent / 'frontend'
+    # Find frontend directory
+    # Try multiple locations:
+    # 1. In the annextube project (for development)
+    # 2. Relative to target repository (for deployed installations)
 
-    if not frontend_dir.exists():
-        # Try relative to repo_path
-        frontend_dir = repo_path.parent / 'frontend'
+    search_paths = []
 
-    if not frontend_dir.exists():
+    # Check if __file__ is available (running from source)
+    import annextube
+    if hasattr(annextube, '__file__') and annextube.__file__:
+        # Running from source - frontend is in project root
+        annextube_root = Path(annextube.__file__).parent.parent
+        search_paths.append(annextube_root / 'frontend')
+
+    # Also try relative to repo_path
+    search_paths.extend([
+        repo_path.parent.parent / 'frontend',
+        repo_path.parent / 'frontend',
+        repo_path / 'frontend'
+    ])
+
+    frontend_dir = None
+    for path in search_paths:
+        if path.exists() and (path / 'package.json').exists():
+            frontend_dir = path
+            break
+
+    if not frontend_dir:
+        search_str = '\n'.join(f"  - {p}" for p in search_paths)
         raise FileNotFoundError(
-            f"Frontend directory not found. Searched:\n"
-            f"  - {repo_path.parent.parent / 'frontend'}\n"
-            f"  - {repo_path.parent / 'frontend'}"
+            f"Frontend directory not found. Searched:\n{search_str}"
         )
 
     logger.info(f"Building frontend from: {frontend_dir}")
@@ -286,16 +305,30 @@ def copy_frontend_to_ghpages(
         branch_name: Target branch name
         was_built: Whether frontend was just built
     """
-    # Find frontend dist directory
-    frontend_dir = repo_path.parent.parent / 'frontend'
-    if not frontend_dir.exists():
-        frontend_dir = repo_path.parent / 'frontend'
+    # Find frontend dist directory using same logic as build
+    import annextube
 
-    dist_dir = frontend_dir / 'dist'
+    search_paths = []
+    if hasattr(annextube, '__file__') and annextube.__file__:
+        annextube_root = Path(annextube.__file__).parent.parent
+        search_paths.append(annextube_root / 'frontend')
 
-    if not dist_dir.exists():
+    search_paths.extend([
+        repo_path.parent.parent / 'frontend',
+        repo_path.parent / 'frontend',
+        repo_path / 'frontend'
+    ])
+
+    dist_dir = None
+    for path in search_paths:
+        candidate = path / 'dist'
+        if candidate.exists():
+            dist_dir = candidate
+            break
+
+    if not dist_dir:
         raise FileNotFoundError(
-            f"Frontend dist directory not found: {dist_dir}\n"
+            f"Frontend dist directory not found.\n"
             f"Run with --build-frontend to build first."
         )
 
