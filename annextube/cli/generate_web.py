@@ -54,14 +54,19 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
     """
     logger.info("Starting web browser generation")
 
-    # Check if this is a git-annex repo
-    git_annex = GitAnnexService(output_dir)
-    if not git_annex.is_annex_repo():
-        click.echo(
-            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-            err=True,
-        )
-        raise click.Abort()
+    # Check if this is a multi-channel collection (channels.tsv exists)
+    channels_tsv = output_dir / "channels.tsv"
+    is_multi_channel = channels_tsv.exists()
+
+    if not is_multi_channel:
+        # Single-channel archive: must be git-annex repo
+        git_annex = GitAnnexService(output_dir)
+        if not git_annex.is_annex_repo():
+            click.echo(
+                f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
+                err=True,
+            )
+            raise click.Abort()
 
     try:
         web_dir = output_dir / "web"
@@ -74,13 +79,18 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
             )
             raise click.Abort()
 
-        # Ensure TSV metadata files are up to date
-        click.echo("Updating metadata files...")
-        export_service = ExportService(output_dir)
-        videos_tsv, playlists_tsv, authors_tsv = export_service.generate_all()
-        click.echo(f"  [ok] {videos_tsv.name}")
-        click.echo(f"  [ok] {playlists_tsv.name}")
-        click.echo(f"  [ok] {authors_tsv.name}")
+        if is_multi_channel:
+            # Multi-channel collection: channels.tsv already exists, just copy frontend
+            click.echo("Multi-channel collection detected (channels.tsv found)")
+            click.echo(f"Channels overview: {channels_tsv}")
+        else:
+            # Single-channel archive: ensure TSV metadata files are up to date
+            click.echo("Updating metadata files...")
+            export_service = ExportService(output_dir)
+            videos_tsv, playlists_tsv, authors_tsv = export_service.generate_all()
+            click.echo(f"  [ok] {videos_tsv.name}")
+            click.echo(f"  [ok] {playlists_tsv.name}")
+            click.echo(f"  [ok] {authors_tsv.name}")
 
         # Check if frontend build exists
         if not FRONTEND_BUILD_DIR.exists():
