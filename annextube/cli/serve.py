@@ -167,14 +167,19 @@ def serve(
         # Regenerate everything before serving
         annextube serve --regenerate=all
     """
-    # Check if this is a git-annex repo
-    git_annex = GitAnnexService(output_dir)
-    if not git_annex.is_annex_repo():
-        click.echo(
-            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-            err=True,
-        )
-        raise click.Abort()
+    # Check if this is a multi-channel collection (channels.tsv exists)
+    channels_tsv = output_dir / "channels.tsv"
+    is_multi_channel = channels_tsv.exists()
+
+    if not is_multi_channel:
+        # Single-channel archive: must be git-annex repo
+        git_annex = GitAnnexService(output_dir)
+        if not git_annex.is_annex_repo():
+            click.echo(
+                f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
+                err=True,
+            )
+            raise click.Abort()
 
     web_dir = output_dir / "web"
     if not web_dir.exists():
@@ -184,49 +189,62 @@ def serve(
         )
         raise click.Abort()
 
-    # Regenerate if requested
+    # Regenerate if requested (only for single-channel archives)
     if regenerate:
-        try:
-            # Regenerate TSV files
-            if regenerate in ['tsv', 'all']:
-                click.echo("Regenerating TSV files...")
-                export = ExportService(output_dir)
-                videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
-                click.echo(f"  [ok] {videos_tsv.name}")
-                click.echo(f"  [ok] {playlists_tsv.name}")
-                click.echo(f"  [ok] {authors_tsv.name}")
+        if is_multi_channel:
+            click.echo(
+                "Warning: --regenerate is not supported for multi-channel collections. "
+                "Regenerate individual channels instead.",
+                err=True,
+            )
+        else:
+            try:
+                # Regenerate TSV files
+                if regenerate in ['tsv', 'all']:
+                    click.echo("Regenerating TSV files...")
+                    export = ExportService(output_dir)
+                    videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
+                    click.echo(f"  [ok] {videos_tsv.name}")
+                    click.echo(f"  [ok] {playlists_tsv.name}")
+                    click.echo(f"  [ok] {authors_tsv.name}")
 
-            # Regenerate web UI
-            if regenerate in ['web', 'all']:
-                click.echo("Regenerating web UI...")
+                # Regenerate web UI
+                if regenerate in ['web', 'all']:
+                    click.echo("Regenerating web UI...")
 
-                # Check if frontend build exists
-                if not FRONTEND_BUILD_DIR.exists():
-                    click.echo(
-                        f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
-                        err=True,
-                    )
-                    click.echo("Run 'cd frontend && npm run build' to build the frontend first.")
-                    raise click.Abort()
+                    # Check if frontend build exists
+                    if not FRONTEND_BUILD_DIR.exists():
+                        click.echo(
+                            f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
+                            err=True,
+                        )
+                        click.echo("Run 'cd frontend && npm run build' to build the frontend first.")
+                        raise click.Abort()
 
-                # Copy frontend to web directory
-                if web_dir.exists():
-                    shutil.rmtree(web_dir)
-                shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
-                click.echo("  [ok] web/")
+                    # Copy frontend to web directory
+                    if web_dir.exists():
+                        shutil.rmtree(web_dir)
+                    shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
+                    click.echo("  [ok] web/")
 
-        except Exception as e:
-            click.echo(f"Error regenerating: {e}", err=True)
-            raise click.Abort() from e
+            except Exception as e:
+                click.echo(f"Error regenerating: {e}", err=True)
+                raise click.Abort() from e
 
-    # Start watcher thread if enabled
+    # Start watcher thread if enabled (only for single-channel archives)
     watcher_thread = None
     watcher = None
     if watch:
-        watcher = ArchiveWatcher(output_dir, web_dir, watch_interval)
-        watcher_thread = Thread(target=watcher.watch, daemon=True)
-        watcher_thread.start()
-        click.echo(f"[ok] Watching for changes (interval: {watch_interval}s)")
+        if is_multi_channel:
+            click.echo(
+                "Info: Auto-watch disabled for multi-channel collections. "
+                "Watch individual channels instead."
+            )
+        else:
+            watcher = ArchiveWatcher(output_dir, web_dir, watch_interval)
+            watcher_thread = Thread(target=watcher.watch, daemon=True)
+            watcher_thread.start()
+            click.echo(f"[ok] Watching for changes (interval: {watch_interval}s)")
 
     # Change to archive directory
     os.chdir(output_dir)
@@ -237,13 +255,16 @@ def serve(
         socketserver.TCPServer.allow_reuse_address = True
         with socketserver.TCPServer((host, port), RangeHTTPRequestHandler) as httpd:
             click.echo()
-            click.echo(f"Serving annextube archive at http://{host}:{port}/")
+            if is_multi_channel:
+                click.echo(f"Serving multi-channel collection at http://{host}:{port}/")
+            else:
+                click.echo(f"Serving annextube archive at http://{host}:{port}/")
             click.echo(f"Directory: {output_dir}")
             click.echo(f"Web UI: http://{host}:{port}/web/")
             click.echo()
             click.echo("Features:")
             click.echo("  [ok] HTTP Range requests (video seeking enabled)")
-            if watch:
+            if watch and not is_multi_channel:
                 click.echo(f"  [ok] Auto-regenerate TSVs on changes ({watch_interval}s interval)")
             click.echo()
             click.echo("Press Ctrl+C to stop")
