@@ -80,7 +80,7 @@ class YouTubeAPICommentsService:
         Raises:
             HttpError: If API request fails
         """
-        all_comments = []
+        all_comments: list[dict] = []
         next_page_token = None
         fetched_threads = 0
         existing_ids = existing_comment_ids or set()

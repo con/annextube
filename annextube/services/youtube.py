@@ -304,7 +304,7 @@ class YouTubeService:
                     # Filter to find new video IDs
                     all_entries = list(info.get("entries", []))
                     logger.info(f"Scanning {len(all_entries)} videos for new content...")
-                    new_video_ids = []
+                    new_video_ids: list[str] = []
                     consecutive_existing = 0
 
                     for i, entry in enumerate(all_entries, 1):

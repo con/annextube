@@ -1260,7 +1260,7 @@ class Archiver:
             for sig in html_signatures:
                 if header.startswith(sig) or sig in header[:200]:
                     logger.error(f"File appears to be HTML/text, not video: {video_file}")
-                    logger.debug(f"File header: {header[:100]}")
+                    logger.debug(f"File header: {header[:100]!r}")
                     return False
 
             # Check for common video container signatures
