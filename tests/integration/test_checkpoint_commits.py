@@ -115,6 +115,8 @@ class TestCheckpointCommits:
                         video.video_id = meta["id"]
                         video.title = meta["title"]
                         video.upload_date = "2026-01-01"
+                        video.channel_name = "Test Channel"
+                        video.published_at = "2026-01-01T00:00:00Z"
                         return video
                     mock_to_video.side_effect = create_mock_video
 
@@ -165,6 +167,8 @@ class TestCheckpointCommits:
                         video.video_id = meta["id"]
                         video.title = meta["title"]
                         video.upload_date = "2026-01-01"
+                        video.channel_name = "Test Channel"
+                        video.published_at = "2026-01-01T00:00:00Z"
                         return video
                     mock_to_video.side_effect = create_mock_video
 
@@ -209,6 +213,8 @@ class TestCheckpointCommits:
                         video.video_id = meta["id"]
                         video.title = meta["title"]
                         video.upload_date = "2026-01-01"
+                        video.channel_name = "Test Channel"
+                        video.published_at = "2026-01-01T00:00:00Z"
                         return video
                     mock_to_video.side_effect = create_mock_video
 
@@ -261,6 +267,8 @@ class TestCheckpointCommits:
                         video.video_id = meta["id"]
                         video.title = meta["title"]
                         video.upload_date = "2026-01-01"
+                        video.channel_name = "Test Channel"
+                        video.published_at = "2026-01-01T00:00:00Z"
                         return video
                     mock_to_video.side_effect = create_mock_video
 
@@ -319,6 +327,8 @@ class TestCheckpointCommits:
                         video.video_id = meta["id"]
                         video.title = meta["title"]
                         video.upload_date = "2026-01-01"
+                        video.channel_name = "Test Channel"
+                        video.published_at = "2026-01-01T00:00:00Z"
                         return video
                     mock_to_video.side_effect = create_mock_video
 
