@@ -10,7 +10,6 @@ from typing import Literal
 
 from annextube.services.git_annex import GitAnnexService
 
-
 ArchiveType = Literal["single-channel", "multi-channel"]
 
 

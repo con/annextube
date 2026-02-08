@@ -21,7 +21,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from annextube.lib.logging_config import get_logger
-from annextube.lib.quota_manager import QuotaExceededError, QuotaManager
+from annextube.lib.quota_manager import QuotaManager
 
 logger = get_logger(__name__)
 

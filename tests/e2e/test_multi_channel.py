@@ -229,10 +229,10 @@ def test_multi_channel_collection_workflow():
         print("\n✅ Multi-channel collection workflow successful!")
         print(f"Collection directory: {collection_dir}")
         print("Structure:")
-        print(f"  - channels.tsv (2 channels)")
+        print("  - channels.tsv (2 channels)")
         print(f"  - ch-annextubetesting/ ({ch1_data['archive_stats']['total_videos_archived']} videos)")
         print(f"  - ch-apopyk/ ({ch2_data['archive_stats']['total_videos_archived']} videos)")
-        print(f"  - web/index.html")
+        print("  - web/index.html")
 
 
 @pytest.mark.network

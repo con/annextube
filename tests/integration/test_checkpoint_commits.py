@@ -60,7 +60,6 @@ def _create_process_video_mock(archiver):
     """
     def mock_process_video(video):
         """Mock that creates actual metadata.json files for git to track."""
-        import json
 
         # Get video directory path using archiver's method
         video_dir = archiver._get_video_path(video)
@@ -280,7 +279,7 @@ class TestCheckpointCommits:
                         process_count[0] += 1
                         # Create files for first 2 videos
                         if process_count[0] < 3:
-                            result = base_mock(video)
+                            base_mock(video)
                         if process_count[0] == 3:
                             raise KeyboardInterrupt("User interrupted")
                         return 0
@@ -339,7 +338,7 @@ class TestCheckpointCommits:
                         process_count[0] += 1
                         # Create files for first 2 videos
                         if process_count[0] < 3:
-                            result = base_mock(video)
+                            base_mock(video)
                         if process_count[0] == 3:
                             raise KeyboardInterrupt("User interrupted")
                         return 0
@@ -392,6 +391,8 @@ def test_checkpoint_interval_zero_disables_checkpoints():
                     video.video_id = meta["id"]
                     video.title = meta["title"]
                     video.upload_date = "2026-01-01"
+                    video.channel_name = "Test Channel"
+                    video.published_at = "2026-01-01T00:00:00Z"
                     return video
                 mock_to_video.side_effect = create_mock_video
 

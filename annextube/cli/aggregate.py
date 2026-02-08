@@ -7,7 +7,6 @@ from pathlib import Path
 import click
 
 from annextube.lib.logging_config import get_logger
-from annextube.models.channel import Channel
 
 logger = get_logger(__name__)
 
@@ -67,7 +66,7 @@ def compute_archive_stats(channel_dir: Path) -> dict:
         return stats
 
     try:
-        with open(videos_tsv, 'r', encoding='utf-8') as f:
+        with open(videos_tsv, encoding='utf-8') as f:
             reader = csv.DictReader(f, delimiter='\t')
             rows = list(reader)
 
@@ -174,7 +173,7 @@ def aggregate(directory: Path, depth: int, output: Path | None, force: bool):
 
         try:
             # Load channel.json
-            with open(channel_json_path, 'r', encoding='utf-8') as f:
+            with open(channel_json_path, encoding='utf-8') as f:
                 channel_data = json.load(f)
 
             # Compute archive stats

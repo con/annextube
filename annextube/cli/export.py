@@ -64,7 +64,7 @@ def _generate_channel_json(output_dir: Path) -> Path:
         # Find first video metadata.json
         for metadata_file in videos_dir.rglob("metadata.json"):
             try:
-                with open(metadata_file, 'r', encoding='utf-8') as f:
+                with open(metadata_file, encoding='utf-8') as f:
                     video_data = json.load(f)
                     channel_id = channel_id or video_data.get("channel_id", "")
                     channel_name = video_data.get("channel_name", "")
@@ -84,7 +84,7 @@ def _generate_channel_json(output_dir: Path) -> Path:
 
     if videos_tsv.exists():
         try:
-            with open(videos_tsv, 'r', encoding='utf-8') as f:
+            with open(videos_tsv, encoding='utf-8') as f:
                 reader = csv.DictReader(f, delimiter='\t')
                 rows = list(reader)
 
@@ -108,12 +108,6 @@ def _generate_channel_json(output_dir: Path) -> Path:
                             pass
         except Exception as e:
             logger.warning(f"Error reading videos.tsv: {e}")
-
-    # Count playlists
-    playlists_dir = output_dir / "playlists"
-    playlist_count = 0
-    if playlists_dir.exists():
-        playlist_count = len(list(playlists_dir.glob("*/playlist.json")))
 
     # Build channel.json
     from datetime import datetime

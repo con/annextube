@@ -2,7 +2,6 @@
 
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
-from zoneinfo import ZoneInfo
 
 import pytest
 
