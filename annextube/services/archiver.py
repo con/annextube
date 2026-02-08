@@ -819,7 +819,14 @@ class Archiver:
 
         # Get playlist videos
         limit = self.config.filters.limit
-        all_videos = self.youtube.get_playlist_videos(playlist_url, limit=limit)
+        # Enable incremental mode to skip known unavailable videos
+        incremental = self.update_mode in ["videos-incremental", "all-incremental", "playlists"]
+        all_videos = self.youtube.get_playlist_videos(
+            playlist_url,
+            limit=limit,
+            repo_path=self.repo_path,
+            incremental=incremental
+        )
 
         # Apply date filter if specified (but NOT on initial backup)
         # Check if this is initial backup by looking for existing TSV
