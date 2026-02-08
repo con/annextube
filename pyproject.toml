@@ -141,6 +141,7 @@ ignore_missing_imports = true
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+exclude = ["annextube/_version.py"]
 
 [tool.ruff.lint]
 select = [
