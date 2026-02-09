@@ -142,7 +142,7 @@ def _generate_channel_json(output_dir: Path) -> Path:
 @click.command()
 @click.argument(
     "what",
-    type=click.Choice(["videos", "playlists", "authors", "all"], case_sensitive=False),
+    type=click.Choice(["all", "videos", "playlists", "authors"], case_sensitive=False),
     default="all",
     required=False,
 )

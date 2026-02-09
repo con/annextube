@@ -28,8 +28,8 @@ logger = get_logger(__name__)
 @click.option(
     "--update",
     type=click.Choice([
-        "videos-incremental",  # New videos only
         "all-incremental",      # New videos + social for recent (default)
+        "videos-incremental",  # New videos only
         "all-force",            # Re-process everything
         "social",               # Comments + captions only (shortcut)
         "playlists",            # Playlists only
@@ -39,7 +39,7 @@ logger = get_logger(__name__)
     ], case_sensitive=False),
     default="all-incremental",
     show_default=True,
-    help="Update mode: videos-incremental (new videos only), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
+    help="Update mode: all-incremental (new videos + social for recent), videos-incremental (new videos only), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
 )
 @click.option(
     "--from-date",

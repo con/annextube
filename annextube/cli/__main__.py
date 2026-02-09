@@ -32,7 +32,7 @@ except ImportError:
 )
 @click.option(
     "--log-level",
-    type=click.Choice(["heavy-debug", "debug", "info", "warning", "error", "critical"]),
+    type=click.Choice(["info", "warning", "error", "critical", "debug", "heavy-debug"]),
     default="info",
     show_default=True,
     help="Log level (heavy-debug includes yt-dlp debug output)",
