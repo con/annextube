@@ -34,6 +34,7 @@ except ImportError:
     "--log-level",
     type=click.Choice(["heavy-debug", "debug", "info", "warning", "error", "critical"]),
     default="info",
+    show_default=True,
     help="Log level (heavy-debug includes yt-dlp debug output)",
 )
 @click.option("--json", "json_output", is_flag=True, help="JSON output mode")

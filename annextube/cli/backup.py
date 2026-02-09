@@ -38,7 +38,8 @@ logger = get_logger(__name__)
         "tsv_metadata"          # Regenerate TSVs only (no downloads)
     ], case_sensitive=False),
     default="all-incremental",
-    help="Update mode: all-incremental (new videos + social for recent, default), videos-incremental (new videos only), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
+    show_default=True,
+    help="Update mode: videos-incremental (new videos only), all-incremental (new videos + social for recent), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
 )
 @click.option(
     "--from-date",
