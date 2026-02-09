@@ -367,8 +367,8 @@ def copy_frontend_to_ghpages(
 def copy_data_to_ghpages(repo_path: Path, branch_name: str) -> None:
     """Copy data files from master branch to gh-pages.
 
-    Only copies unannexed files. Annexed files (symlinks to .git/annex) are
-    removed since they cannot be served on GitHub Pages.
+    Copies both unannexed files and git-annex symlinks. The symlinks can be
+    resolved later by running 'git annex get' or removed if content is unavailable.
 
     Args:
         repo_path: Path to repository
@@ -401,26 +401,8 @@ def copy_data_to_ghpages(repo_path: Path, branch_name: str) -> None:
                 logger.warning(f"Could not copy {item} (not found in master/main)")
                 continue
 
-        # Remove git-annex symlinks (they won't work on GitHub Pages)
-        item_path = repo_path / item
-        if item_path.is_dir():
-            # Find and remove all git-annex symlinks in this directory
-            annexed_count = 0
-            for file_path in item_path.rglob('*'):
-                if file_path.is_symlink():
-                    target = os.readlink(str(file_path))
-                    # Check if it's a git-annex symlink (points to .git/annex)
-                    if '.git/annex/objects' in target:
-                        file_path.unlink()
-                        annexed_count += 1
-            if annexed_count > 0:
-                logger.info(f"Removed {annexed_count} annexed files from {item} (not available for GitHub Pages)")
-        elif item_path.is_symlink():
-            # Single file that's a symlink
-            target = os.readlink(str(item_path))
-            if '.git/annex/objects' in target:
-                item_path.unlink()
-                logger.info(f"Removed annexed file {item} (not available for GitHub Pages)")
+    logger.info(f"Data files copied to {branch_name} (including any git-annex symlinks)")
+    logger.info(f"Run 'git annex get' to fetch annexed content, or remove symlinks if content is unavailable")
 
 
 def setup_ghpages_config(repo_path: Path, branch_name: str) -> None:
