@@ -56,9 +56,29 @@
     router.subscribe(async (route) => {
       currentRoute = route;
       if (route.name === 'video') {
-        // Find video by ID and set as selected
         const videoId = route.params.video_id;
+        const channelDir = route.params.channel_dir;
+
+        // If channel context is provided, load channel first
+        if (channelDir && isMultiChannel) {
+          const channel = channels.find((c) => c.channel_dir === channelDir);
+          if (channel && channel.channel_dir !== selectedChannel?.channel_dir) {
+            await loadChannelData(channel);
+          }
+        }
+
+        // Find video by ID in loaded videos
         selectedVideo = allVideos.find((v) => v.video_id === videoId) || null;
+
+        // If video not found in current context, try loading metadata directly
+        if (!selectedVideo) {
+          try {
+            selectedVideo = await dataLoader.loadVideoMetadata(videoId);
+          } catch (err) {
+            console.warn('Could not load video metadata:', err);
+            selectedVideo = null;
+          }
+        }
       } else if (route.name === 'channel' && isMultiChannel) {
         // Load channel videos from URL
         const channelDir = route.params.channel_dir;
@@ -114,11 +134,24 @@
   }
 
   function handleVideoClick(video: Video) {
-    router.navigate('video', { video_id: video.video_id });
+    // Include channel context in video URL if available
+    if (selectedChannel) {
+      router.navigate('video', {
+        video_id: video.video_id,
+        channel_dir: selectedChannel.channel_dir!,
+      });
+    } else {
+      router.navigate('video', { video_id: video.video_id });
+    }
   }
 
   function handleBackToList() {
-    router.navigate('home');
+    // Return to channel view if in channel context, otherwise home
+    if (selectedChannel) {
+      router.navigate('channel', { channel_dir: selectedChannel.channel_dir! });
+    } else {
+      router.navigate('home');
+    }
   }
 
   function handleFilterChange(filtered: Video[]) {

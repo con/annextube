@@ -54,9 +54,10 @@ export class URLStateManager {
    * Encode state object to URL hash
    *
    * @param state - State object to encode
-   * @returns URL hash string (e.g., "#/?search=test&from=2024-01-01")
+   * @param routePrefix - Optional route prefix to preserve (e.g., "/channel/ch-foo")
+   * @returns URL hash string (e.g., "#/channel/ch-foo?search=test&from=2024-01-01")
    */
-  encodeHash(state: URLState): string {
+  encodeHash(state: URLState, routePrefix?: string): string {
     const params = new URLSearchParams();
 
     if (state.search) params.set('search', state.search);
@@ -72,16 +73,39 @@ export class URLStateManager {
     if (state.sortDirection) params.set('dir', state.sortDirection);
 
     const queryString = params.toString();
-    return queryString ? `#/?${queryString}` : '#/';
+    const prefix = routePrefix || '/';
+    return queryString ? `#${prefix}?${queryString}` : `#${prefix}`;
   }
 
   /**
-   * Update URL hash without page reload
+   * Extract route prefix from hash (everything before '?')
+   *
+   * @param hash - URL hash (e.g., "#/channel/ch-foo?search=test")
+   * @returns Route prefix (e.g., "/channel/ch-foo")
+   */
+  getRoutePrefix(hash: string): string {
+    // Remove leading #
+    const cleanHash = hash.replace(/^#/, '');
+
+    // Split on '?' to separate route from query params
+    const questionIndex = cleanHash.indexOf('?');
+    if (questionIndex === -1) {
+      // No query params, return the whole thing (or '/' if empty)
+      return cleanHash || '/';
+    }
+
+    // Return everything before '?'
+    return cleanHash.substring(0, questionIndex) || '/';
+  }
+
+  /**
+   * Update URL hash without page reload, preserving current route
    *
    * @param state - State object to encode and set
    */
   updateHash(state: URLState): void {
-    window.location.hash = this.encodeHash(state);
+    const currentRoutePrefix = this.getRoutePrefix(window.location.hash);
+    window.location.hash = this.encodeHash(state, currentRoutePrefix);
   }
 
   /**

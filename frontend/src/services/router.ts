@@ -4,7 +4,8 @@
  * Routes:
  * - #/ or empty → Home (video list or multi-channel overview)
  * - #/channel/{channel_dir} → Channel view in multi-channel mode
- * - #/video/{video_id} → Video detail
+ * - #/channel/{channel_dir}/video/{video_id} → Video detail with channel context
+ * - #/video/{video_id} → Video detail (backward compatibility, no channel context)
  */
 
 export interface Route {
@@ -49,7 +50,13 @@ export class Router {
     } else if (name === 'channel') {
       window.location.hash = `#/channel/${params.channel_dir}`;
     } else if (name === 'video') {
-      window.location.hash = `#/video/${params.video_id}`;
+      // If channel_dir is provided, use nested route format
+      if (params.channel_dir) {
+        window.location.hash = `#/channel/${params.channel_dir}/video/${params.video_id}`;
+      } else {
+        // Backward compatibility: video without channel context
+        window.location.hash = `#/video/${params.video_id}`;
+      }
     }
   }
 
@@ -78,13 +85,29 @@ export class Router {
     // Remove leading slash
     const path = hash.startsWith('/') ? hash.slice(1) : hash;
 
+    // Split on '?' to handle query params separately
+    const questionIndex = path.indexOf('?');
+    const cleanPath = questionIndex === -1 ? path : path.substring(0, questionIndex);
+
     // Empty or just "/" → home
-    if (!path || path === '/') {
+    if (!cleanPath || cleanPath === '/') {
       return { name: 'home', params: {} };
     }
 
-    // /channel/{channel_dir}
-    const channelMatch = path.match(/^channel\/([^/?]+)/);
+    // /channel/{channel_dir}/video/{video_id} (nested route with channel context)
+    const nestedVideoMatch = cleanPath.match(/^channel\/([^/]+)\/video\/([^/]+)$/);
+    if (nestedVideoMatch) {
+      return {
+        name: 'video',
+        params: {
+          channel_dir: nestedVideoMatch[1],
+          video_id: nestedVideoMatch[2],
+        },
+      };
+    }
+
+    // /channel/{channel_dir} (channel view)
+    const channelMatch = cleanPath.match(/^channel\/([^/]+)$/);
     if (channelMatch) {
       return {
         name: 'channel',
@@ -92,8 +115,8 @@ export class Router {
       };
     }
 
-    // /video/{video_id}
-    const videoMatch = path.match(/^video\/([^/?]+)/);
+    // /video/{video_id} (backward compatibility: video without channel context)
+    const videoMatch = cleanPath.match(/^video\/([^/]+)$/);
     if (videoMatch) {
       return {
         name: 'video',

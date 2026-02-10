@@ -5,6 +5,7 @@
   Updates URL hash to preserve filter state (mykrok pattern).
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Video, Playlist } from '@/types/models';
   import { searchService } from '@/services/search';
   import { filterService } from '@/services/filter';
@@ -15,7 +16,7 @@
   export let playlists: Playlist[] = [];
   export let onFilterChange: (filtered: Video[]) => void;
 
-  // Filter state
+  // Filter state (initialize with defaults, will be overridden by URL state on mount)
   let searchQuery = '';
   let dateFrom = '';
   let dateTo = '';
@@ -25,6 +26,29 @@
   let selectedPlaylists: string[] = [];
   let sortField: SortField = 'date';
   let sortDirection: SortDirection = 'desc';
+
+  // Restore filter state from URL on mount
+  onMount(() => {
+    const urlState = urlStateManager.getCurrentState();
+
+    if (urlState.search) searchQuery = urlState.search;
+    if (urlState.dateFrom) dateFrom = urlState.dateFrom;
+    if (urlState.dateTo) dateTo = urlState.dateTo;
+    if (urlState.channels) selectedChannels = urlState.channels;
+    if (urlState.tags) selectedTags = urlState.tags;
+    if (urlState.playlists) selectedPlaylists = urlState.playlists;
+    if (urlState.sortField) sortField = urlState.sortField;
+    if (urlState.sortDirection) sortDirection = urlState.sortDirection;
+
+    // Convert downloadStatus array to dropdown value
+    if (urlState.downloadStatus) {
+      if (urlState.downloadStatus.includes('downloaded')) {
+        selectedStatusFilter = 'downloaded';
+      } else if (urlState.downloadStatus.includes('metadata_only')) {
+        selectedStatusFilter = 'metadata_only';
+      }
+    }
+  });
 
   // UI state
   let filtersExpanded = true;
