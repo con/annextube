@@ -107,3 +107,11 @@ annextube/_version.py
 .worktrees
 .config
 .ssh
+
+# Various files claude likes to create
+CHANGES_SUMMARY.md
+DEMO_SETUP.md
+EXAMPLE_UNAVAILABLE_FILTERING.md
+
+# no duct logs here -- only for tests etc
+.duct
