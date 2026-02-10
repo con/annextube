@@ -206,6 +206,143 @@ class ExportService:
 
         return videos_tsv, playlists_tsv, authors_tsv
 
+    def generate_channel_json(self) -> Path:
+        """Generate channel.json with channel metadata and archive statistics.
+
+        Returns:
+            Path to generated channel.json
+        """
+        import csv
+        from datetime import datetime
+
+        from annextube.lib.config import load_config
+
+        logger.info(f"Generating channel.json at {self.repo_path}")
+
+        # Load config to get channel info
+        config = load_config(repo_path=self.repo_path)
+
+        if not config.sources:
+            raise ValueError("No sources configured. Cannot generate channel.json.")
+
+        # Get first channel source
+        channel_source = None
+        for source in config.sources:
+            if source.type == "channel":
+                channel_source = source
+                break
+
+        if not channel_source:
+            raise ValueError("No channel sources found in config.")
+
+        # Parse channel ID from URL
+        # Format: https://www.youtube.com/@username or https://www.youtube.com/channel/UCxxxxxx
+        url = channel_source.url
+        custom_url = None
+        channel_id = None
+
+        if "@" in url:
+            # Custom URL format
+            custom_url = url.split("@")[-1].split("/")[0].split("?")[0]
+        elif "/channel/" in url:
+            # Channel ID format
+            channel_id = url.split("/channel/")[-1].split("/")[0].split("?")[0]
+
+        # Try to get channel metadata from existing video
+        # (We'll use the first video's channel metadata)
+        videos_dir = self.repo_path / "videos"
+        channel_name = ""
+        channel_desc = ""
+        subscriber_count = 0
+        video_count = 0
+
+        if videos_dir.exists():
+            # Find first video metadata.json
+            for metadata_file in videos_dir.rglob("metadata.json"):
+                try:
+                    with open(metadata_file, encoding='utf-8') as f:
+                        video_data = json.load(f)
+                        channel_id = channel_id or video_data.get("channel_id", "")
+                        channel_name = video_data.get("channel_name", "")
+                        break
+                except Exception:
+                    continue
+
+        # Compute archive stats from videos.tsv
+        videos_tsv = self.repo_path / "videos" / "videos.tsv"
+        total_videos = 0
+        first_date: str | None = None
+        last_date: str | None = None
+        total_duration = 0
+        total_size = 0
+
+        if videos_tsv.exists():
+            try:
+                with open(videos_tsv, encoding='utf-8') as f:
+                    reader = csv.DictReader(f, delimiter='\t')
+                    rows = list(reader)
+
+                    total_videos = len(rows)
+
+                    if rows:
+                        dates: list[str] = [
+                            date for row in rows
+                            if (date := row.get('published_at')) is not None
+                        ]
+                        if dates:
+                            first_date = min(dates)
+                            last_date = max(dates)
+
+                        for row in rows:
+                            try:
+                                total_duration += int(row.get('duration', 0))
+                            except (ValueError, TypeError):
+                                pass
+
+                            try:
+                                total_size += int(row.get('file_size', 0))
+                            except (ValueError, TypeError):
+                                pass
+            except Exception as e:
+                logger.warning(f"Error reading videos.tsv: {e}")
+
+        archive_stats: dict[str, int | str | None] = {
+            "total_videos_archived": total_videos,
+            "first_video_date": first_date,
+            "last_video_date": last_date,
+            "total_duration_seconds": total_duration,
+            "total_size_bytes": total_size,
+        }
+
+        # Build channel.json
+        now = datetime.now().isoformat()
+
+        channel_data = {
+            "channel_id": channel_id or "",
+            "name": channel_name,
+            "description": channel_desc,
+            "custom_url": custom_url or "",
+            "subscriber_count": subscriber_count,
+            "video_count": video_count,
+            "avatar_url": "",
+            "banner_url": "",
+            "country": "",
+            "videos": [],
+            "playlists": [],
+            "last_sync": now,
+            "created_at": "",
+            "fetched_at": now,
+            "archive_stats": archive_stats,
+        }
+
+        # Write channel.json
+        output_path = self.repo_path / "channel.json"
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(channel_data, f, indent=2)
+
+        logger.info(f"Generated channel.json with {archive_stats['total_videos_archived']} videos")
+        return output_path
+
     def _calculate_playlist_duration(self, playlist_dir: Path) -> int:
         """Calculate total duration of all videos in playlist.
 

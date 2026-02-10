@@ -1,142 +1,16 @@
 """Export command for annextube."""
 
-import csv
-import json
 from pathlib import Path
 
 import click
 
 from annextube.lib.archive_discovery import discover_annextube
-from annextube.lib.config import load_config
 from annextube.lib.logging_config import get_logger
 from annextube.services.export import ExportService
 
 logger = get_logger(__name__)
 
 
-def _generate_channel_json(output_dir: Path) -> Path:
-    """Generate channel.json with channel metadata and archive statistics.
-
-    Args:
-        output_dir: Archive directory
-
-    Returns:
-        Path to generated channel.json
-    """
-    # Load config to get channel info
-    config = load_config(repo_path=output_dir)
-
-    if not config.sources:
-        raise click.ClickException("No sources configured. Cannot generate channel.json.")
-
-    # Get first channel source
-    channel_source = None
-    for source in config.sources:
-        if source.type == "channel":
-            channel_source = source
-            break
-
-    if not channel_source:
-        raise click.ClickException("No channel sources found in config.")
-
-    # Parse channel ID from URL
-    # Format: https://www.youtube.com/@username or https://www.youtube.com/channel/UCxxxxxx
-    url = channel_source.url
-    custom_url = None
-    channel_id = None
-
-    if "@" in url:
-        # Custom URL format
-        custom_url = url.split("@")[-1].split("/")[0].split("?")[0]
-    elif "/channel/" in url:
-        # Channel ID format
-        channel_id = url.split("/channel/")[-1].split("/")[0].split("?")[0]
-
-    # Try to get channel metadata from existing video
-    # (We'll use the first video's channel metadata)
-    videos_dir = output_dir / "videos"
-    channel_name = ""
-    channel_desc = ""
-    subscriber_count = 0
-    video_count = 0
-
-    if videos_dir.exists():
-        # Find first video metadata.json
-        for metadata_file in videos_dir.rglob("metadata.json"):
-            try:
-                with open(metadata_file, encoding='utf-8') as f:
-                    video_data = json.load(f)
-                    channel_id = channel_id or video_data.get("channel_id", "")
-                    channel_name = video_data.get("channel_name", "")
-                    break
-            except Exception:
-                continue
-
-    # Compute archive stats from videos.tsv
-    videos_tsv = output_dir / "videos" / "videos.tsv"
-    archive_stats = {
-        "total_videos_archived": 0,
-        "first_video_date": None,
-        "last_video_date": None,
-        "total_duration_seconds": 0,
-        "total_size_bytes": 0,
-    }
-
-    if videos_tsv.exists():
-        try:
-            with open(videos_tsv, encoding='utf-8') as f:
-                reader = csv.DictReader(f, delimiter='\t')
-                rows = list(reader)
-
-                archive_stats["total_videos_archived"] = len(rows)
-
-                if rows:
-                    dates = [row.get('published_at') for row in rows if row.get('published_at')]
-                    if dates:
-                        archive_stats["first_video_date"] = min(dates)
-                        archive_stats["last_video_date"] = max(dates)
-
-                    for row in rows:
-                        try:
-                            archive_stats["total_duration_seconds"] += int(row.get('duration', 0))
-                        except (ValueError, TypeError):
-                            pass
-
-                        try:
-                            archive_stats["total_size_bytes"] += int(row.get('file_size', 0))
-                        except (ValueError, TypeError):
-                            pass
-        except Exception as e:
-            logger.warning(f"Error reading videos.tsv: {e}")
-
-    # Build channel.json
-    from datetime import datetime
-    now = datetime.now().isoformat()
-
-    channel_data = {
-        "channel_id": channel_id or "",
-        "name": channel_name,
-        "description": channel_desc,
-        "custom_url": custom_url or "",
-        "subscriber_count": subscriber_count,
-        "video_count": video_count,
-        "avatar_url": "",
-        "banner_url": "",
-        "country": "",
-        "videos": [],
-        "playlists": [],
-        "last_sync": now,
-        "created_at": "",
-        "fetched_at": now,
-        "archive_stats": archive_stats,
-    }
-
-    # Write channel.json
-    output_path = output_dir / "channel.json"
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(channel_data, f, indent=2)
-
-    return output_path
 
 
 @click.command()
@@ -230,8 +104,12 @@ def export(ctx: click.Context, what: str, output_dir: Path, output: Path, channe
 
         # Generate channel.json if requested
         if channel_json:
-            channel_json_path = _generate_channel_json(output_dir)
-            click.echo(f"[ok] Generated {channel_json_path}")
+            try:
+                channel_json_path = export_service.generate_channel_json()
+                click.echo(f"[ok] Generated {channel_json_path}")
+            except ValueError as e:
+                logger.error(f"Failed to generate channel.json: {e}")
+                click.echo(f"Error: {e}", err=True)
 
         click.echo()
         click.echo("[ok] Export complete!")

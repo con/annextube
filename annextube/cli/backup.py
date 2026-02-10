@@ -176,6 +176,15 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 stats = archiver.backup_channel(url)
             _print_stats(stats)
 
+            # Generate channel.json for multi-channel collection integration
+            try:
+                exporter = ExportService(output_dir)
+                channel_json_path = exporter.generate_channel_json()
+                logger.info(f"Generated channel.json at {channel_json_path}")
+            except Exception as e:
+                # Don't fail the entire backup if channel.json generation fails
+                logger.warning(f"Could not generate channel.json: {e}")
+
         else:
             # Config mode: backup all enabled sources
             enabled_sources = [s for s in config.sources if s.enabled]
@@ -225,6 +234,15 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
 
             if total_stats["errors"]:
                 click.echo(f"  Errors: {len(total_stats['errors'])}")
+
+        # Generate channel.json for multi-channel collection integration
+        try:
+            exporter = ExportService(output_dir)
+            channel_json_path = exporter.generate_channel_json()
+            logger.info(f"Generated channel.json at {channel_json_path}")
+        except Exception as e:
+            # Don't fail the entire backup if channel.json generation fails
+            logger.warning(f"Could not generate channel.json: {e}")
 
         click.echo()
         click.echo("[ok] Backup complete!")
