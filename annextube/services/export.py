@@ -96,6 +96,23 @@ class ExportService:
                     # Regular file (not symlink) - definitely downloaded
                     download_status = "downloaded"
 
+                # Update metadata.json if download_status or file_path changed
+                metadata_needs_update = False
+                if metadata.get("download_status") != download_status:
+                    metadata["download_status"] = download_status
+                    metadata_needs_update = True
+                if metadata.get("file_path") != str(relative_path):
+                    metadata["file_path"] = str(relative_path)
+                    metadata_needs_update = True
+
+                if metadata_needs_update:
+                    try:
+                        with open(metadata_path, "w", encoding="utf-8") as f:
+                            json.dump(metadata, f, indent=2)
+                        logger.debug(f"Updated metadata.json for {video_id}: download_status={download_status}, file_path={relative_path}")
+                    except OSError as e:
+                        logger.warning(f"Failed to update metadata.json for {video_id}: {e}")
+
                 video_entry = {
                     "video_id": video_id,
                     "title": metadata.get("title", ""),
