@@ -319,6 +319,7 @@ class GitAnnexService:
             timestamp_patterns = [
                 '"fetched_at":',
                 '"last_modified":',
+                '"last_sync":',
             ]
 
             for file_path in modified_files:
@@ -414,10 +415,11 @@ class GitAnnexService:
                 return False  # No changes staged
 
             # Check if ALL changed lines are timestamp-only updates
-            # Timestamp fields: fetched_at, last_modified, last_updated
+            # Timestamp fields: fetched_at, last_modified, last_sync, last_updated
             timestamp_patterns = [
                 '"fetched_at":',
                 '"last_modified":',
+                '"last_sync":',
                 '\tlast_updated\t',  # TSV column
             ]
 
