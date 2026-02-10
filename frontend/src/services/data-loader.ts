@@ -101,11 +101,14 @@ export class DataLoader {
   /**
    * Load full video metadata from JSON (on-demand, mykrok pattern)
    *
-   * @param videoId - YouTube video ID
+   * @param video - Video object from TSV (contains video_id and file_path)
    * @param channelDir - Optional channel directory for multi-channel mode
    * @returns Full Video object with all metadata
    */
-  async loadVideoMetadata(videoId: string, channelDir?: string): Promise<Video> {
+  async loadVideoMetadata(video: Video, channelDir?: string): Promise<Video> {
+    const videoId = video.video_id;
+    const filePath = video.file_path || videoId;
+
     // Cache key includes channel context
     const cacheKey = channelDir ? `${channelDir}:${videoId}` : videoId;
 
@@ -113,9 +116,6 @@ export class DataLoader {
     if (this.metadataCache.has(cacheKey)) {
       return this.metadataCache.get(cacheKey)!;
     }
-
-    // Get file_path from videos cache (use path if available, otherwise video_id)
-    const filePath = this.getVideoPath(videoId);
 
     // Build URL with or without channel prefix
     const metadataUrl = channelDir
@@ -134,13 +134,8 @@ export class DataLoader {
 
     // Preserve fields from TSV that aren't in metadata.json
     // (These are calculated during TSV export)
-    if (this.videosCache) {
-      const tsvVideo = this.videosCache.find((v) => v.video_id === videoId);
-      if (tsvVideo) {
-        metadata.file_path = filePath;
-        metadata.download_status = tsvVideo.download_status;
-      }
-    }
+    metadata.file_path = filePath;
+    metadata.download_status = video.download_status;
 
     // Cache for future requests
     this.metadataCache.set(cacheKey, metadata);
@@ -151,11 +146,14 @@ export class DataLoader {
   /**
    * Load comments for a video (on-demand, mykrok pattern)
    *
-   * @param videoId - YouTube video ID
+   * @param video - Video object from TSV (contains video_id and file_path)
    * @param channelDir - Optional channel directory for multi-channel mode
    * @returns Array of Comment objects (may include nested replies)
    */
-  async loadComments(videoId: string, channelDir?: string): Promise<Comment[]> {
+  async loadComments(video: Video, channelDir?: string): Promise<Comment[]> {
+    const videoId = video.video_id;
+    const filePath = video.file_path || videoId;
+
     // Cache key includes channel context
     const cacheKey = channelDir ? `${channelDir}:${videoId}` : videoId;
 
@@ -163,9 +161,6 @@ export class DataLoader {
     if (this.commentsCache.has(cacheKey)) {
       return this.commentsCache.get(cacheKey)!;
     }
-
-    // Get file_path from videos cache
-    const filePath = this.getVideoPath(videoId);
 
     // Build URL with or without channel prefix
     const commentsUrl = channelDir
