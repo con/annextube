@@ -1,10 +1,38 @@
 /**
+ * Unescape special characters in TSV field value.
+ *
+ * Replaces escape sequences with actual characters:
+ * - \\n -> Newline
+ * - \\r -> Carriage return
+ * - \\t -> Tab
+ * - \\\\ -> Backslash
+ *
+ * CRITICAL: Must unescape backslash FIRST to avoid double-unescaping.
+ * Example: "Path\\\\to\\\\file" should become "Path\to\file", not "Path<tab>o<tab>file"
+ *
+ * @param value - Escaped field value from TSV
+ * @returns Unescaped string
+ */
+function unescapeTSVField(value: string): string {
+  if (!value) return '';
+
+  // Unescape backslash first using a placeholder to avoid double-unescaping
+  return value
+    .replace(/\\\\/g, '\x00')  // Temporarily replace \\\\ with null byte
+    .replace(/\\t/g, '\t')
+    .replace(/\\r/g, '\r')
+    .replace(/\\n/g, '\n')
+    .replace(/\x00/g, '\\');   // Replace null byte with single backslash
+}
+
+/**
  * Lightweight TSV parser with no dependencies.
  * Inspired by mykrok's proven 632-byte implementation.
  *
  * Parses tab-separated values into an array of objects.
  * - Handles Unix (LF) and Windows (CRLF) line endings
  * - Supports empty fields
+ * - Unescapes special characters (\\n, \\t, \\r, \\\\)
  * - Returns all values as strings (caller handles type conversion)
  *
  * @param tsvText - Raw TSV file content
@@ -33,7 +61,7 @@ export function parseTSV(tsvText: string): Record<string, string>[] {
       .map((line) => {
         const values = line.split('\t');
         return Object.fromEntries(
-          headers.map((header, i) => [header, values[i] || ''])
+          headers.map((header, i) => [header, unescapeTSVField(values[i] || '')])
         );
       })
   );

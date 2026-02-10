@@ -7,6 +7,7 @@ from pathlib import Path
 import magic
 
 from annextube.lib.logging_config import get_logger
+from annextube.lib.tsv_utils import escape_tsv_field
 
 from .authors import AuthorsService
 
@@ -377,7 +378,7 @@ class ExportService:
         return total
 
     def _write_videos_tsv(self, output_path: Path, videos: list[dict[str, str]]) -> None:
-        """Write videos to TSV file.
+        """Write videos to TSV file with proper escaping.
 
         Args:
             output_path: Path to output file
@@ -389,26 +390,26 @@ class ExportService:
                     "duration\tview_count\tlike_count\tcomment_count\t"
                     "thumbnail_url\tdownload_status\tsource_url\tpath\n")
 
-            # Write rows
+            # Write rows (escape special characters in string fields)
             for video in videos:
                 f.write(
-                    f"{video['video_id']}\t"
-                    f"{video['title']}\t"
-                    f"{video['channel_id']}\t"
-                    f"{video['channel_name']}\t"
-                    f"{video['published_at']}\t"
+                    f"{escape_tsv_field(video['video_id'])}\t"
+                    f"{escape_tsv_field(video['title'])}\t"
+                    f"{escape_tsv_field(video['channel_id'])}\t"
+                    f"{escape_tsv_field(video['channel_name'])}\t"
+                    f"{escape_tsv_field(video['published_at'])}\t"
                     f"{video['duration']}\t"
                     f"{video['view_count']}\t"
                     f"{video['like_count']}\t"
                     f"{video['comment_count']}\t"
-                    f"{video['thumbnail_url']}\t"
-                    f"{video['download_status']}\t"
-                    f"{video['source_url']}\t"
-                    f"{video['path']}\n"
+                    f"{escape_tsv_field(video['thumbnail_url'])}\t"
+                    f"{escape_tsv_field(video['download_status'])}\t"
+                    f"{escape_tsv_field(video['source_url'])}\t"
+                    f"{escape_tsv_field(video['path'])}\n"
                 )
 
     def _write_playlists_tsv(self, output_path: Path, playlists: list[dict[str, str]]) -> None:
-        """Write playlists to TSV file.
+        """Write playlists to TSV file with proper escaping.
 
         Args:
             output_path: Path to output file
@@ -419,19 +420,19 @@ class ExportService:
             f.write("playlist_id\ttitle\tchannel_id\tchannel_name\tvideo_count\t"
                     "total_duration\tprivacy_status\tcreated_at\tlast_sync\tpath\n")
 
-            # Write rows
+            # Write rows (escape special characters in string fields)
             for playlist in playlists:
                 f.write(
-                    f"{playlist['playlist_id']}\t"
-                    f"{playlist['title']}\t"
-                    f"{playlist['channel_id']}\t"
-                    f"{playlist['channel_name']}\t"
+                    f"{escape_tsv_field(playlist['playlist_id'])}\t"
+                    f"{escape_tsv_field(playlist['title'])}\t"
+                    f"{escape_tsv_field(playlist['channel_id'])}\t"
+                    f"{escape_tsv_field(playlist['channel_name'])}\t"
                     f"{playlist['video_count']}\t"
                     f"{playlist['total_duration']}\t"
-                    f"{playlist['privacy_status']}\t"
-                    f"{playlist['created_at']}\t"
-                    f"{playlist['last_sync']}\t"
-                    f"{playlist['path']}\n"
+                    f"{escape_tsv_field(playlist['privacy_status'])}\t"
+                    f"{escape_tsv_field(playlist['created_at'])}\t"
+                    f"{escape_tsv_field(playlist['last_sync'])}\t"
+                    f"{escape_tsv_field(playlist['path'])}\n"
                 )
 
     def _write_empty_videos_tsv(self, output_path: Path) -> None:

@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from annextube.lib.logging_config import get_logger
+from annextube.lib.tsv_utils import escape_tsv_field
 
 logger = get_logger(__name__)
 
@@ -180,20 +181,20 @@ def aggregate(directory: Path, depth: int, output: Path | None, force: bool):
             channel_dir_abs = root_dir / rel_channel_dir
             archive_stats = compute_archive_stats(channel_dir_abs)
 
-            # Build row for TSV
+            # Build row for TSV (escape special characters in string fields)
             row = {
-                "channel_id": channel_data.get("channel_id", ""),
-                "title": channel_data.get("name", ""),
-                "custom_url": channel_data.get("custom_url", ""),
-                "description": channel_data.get("description", ""),
+                "channel_id": escape_tsv_field(channel_data.get("channel_id", "")),
+                "title": escape_tsv_field(channel_data.get("name", "")),
+                "custom_url": escape_tsv_field(channel_data.get("custom_url", "")),
+                "description": escape_tsv_field(channel_data.get("description", "")),
                 "subscriber_count": channel_data.get("subscriber_count", 0),
                 "video_count": channel_data.get("video_count", 0),
                 "playlist_count": len(channel_data.get("playlists", [])),
                 "total_videos_archived": archive_stats["total_videos_archived"],
-                "first_video_date": archive_stats["first_video_date"] or "",
-                "last_video_date": archive_stats["last_video_date"] or "",
-                "last_sync": channel_data.get("last_sync", ""),
-                "channel_dir": str(rel_channel_dir),
+                "first_video_date": escape_tsv_field(archive_stats["first_video_date"] or ""),
+                "last_video_date": escape_tsv_field(archive_stats["last_video_date"] or ""),
+                "last_sync": escape_tsv_field(channel_data.get("last_sync", "")),
+                "channel_dir": escape_tsv_field(str(rel_channel_dir)),
             }
 
             channels_data.append(row)
