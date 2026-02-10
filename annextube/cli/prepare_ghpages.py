@@ -268,7 +268,7 @@ def create_ghpages_branch(repo_path: Path, branch_name: str) -> None:
         repo_path: Path to repository
         branch_name: Branch name (e.g., 'gh-pages')
     """
-    # Check if branch exists
+    # Check if local branch exists
     result = subprocess.run(
         ['git', 'rev-parse', '--verify', f'refs/heads/{branch_name}'],
         cwd=repo_path,
@@ -276,21 +276,37 @@ def create_ghpages_branch(repo_path: Path, branch_name: str) -> None:
     )
 
     if result.returncode != 0:
-        # Branch doesn't exist, create orphan
-        logger.info(f"Creating new orphan branch: {branch_name}")
-        subprocess.run(
-            ['git', 'checkout', '--orphan', branch_name],
-            cwd=repo_path,
-            check=True
-        )
-        # Remove all files from index
-        subprocess.run(
-            ['git', 'rm', '-rf', '.'],
+        # Local branch doesn't exist - check if remote branch exists
+        remote_result = subprocess.run(
+            ['git', 'rev-parse', '--verify', f'refs/remotes/origin/{branch_name}'],
             cwd=repo_path,
             capture_output=True
         )
+
+        if remote_result.returncode == 0:
+            # Remote branch exists - create local tracking branch
+            logger.info(f"Creating local branch {branch_name} from origin/{branch_name}")
+            subprocess.run(
+                ['git', 'checkout', '-b', branch_name, f'origin/{branch_name}'],
+                cwd=repo_path,
+                check=True
+            )
+        else:
+            # Neither local nor remote exists - create orphan
+            logger.info(f"Creating new orphan branch: {branch_name}")
+            subprocess.run(
+                ['git', 'checkout', '--orphan', branch_name],
+                cwd=repo_path,
+                check=True
+            )
+            # Remove all files from index
+            subprocess.run(
+                ['git', 'rm', '-rf', '.'],
+                cwd=repo_path,
+                capture_output=True
+            )
     else:
-        # Branch exists, just checkout
+        # Local branch exists, just checkout
         logger.info(f"Switching to existing branch: {branch_name}")
         subprocess.run(
             ['git', 'checkout', branch_name],
