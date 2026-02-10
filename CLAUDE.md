@@ -142,4 +142,16 @@ This channel is maintained specifically for annextube testing and has:
 - Playlists (for playlist testing)
 - Captions (for caption testing)
 - Predictable content (stable test fixtures)
+
+## Documentation and Working Notes
+
+**DO NOT commit working notes/documentation to the main tree:**
+- Use `.specify/specs/` for design documents and specifications (already tracked)
+- Keep session notes, summaries, and planning docs in external locations or Claude's context
+- Examples of files to NEVER commit:
+  - `CHANGES_SUMMARY.md`, `DEMO_SETUP.md`, `EXAMPLE_*.md` (working notes)
+  - `.duct/logs/` files (duct command logs)
+  - Any scratch/temporary markdown files created during development
+
+These patterns are in `.gitignore` to prevent accidental commits.
 <!-- MANUAL ADDITIONS END -->
