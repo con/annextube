@@ -15,6 +15,36 @@
     }
     return num.toString();
   }
+
+  function formatDuration(seconds: number): string {
+    if (seconds === 0) return '0s';
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m`;
+    }
+    return `${seconds}s`;
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const index = Math.floor(Math.log(bytes) / Math.log(1024));
+    const size = bytes / Math.pow(1024, index);
+    return `${size.toFixed(1)} ${units[index]}`;
+  }
+
+  function formatDate(dateString: string | undefined): string {
+    if (!dateString) return 'Unknown';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return dateString;
+    }
+  }
 </script>
 
 <div class="channel-list">
@@ -39,26 +69,60 @@
           on:keydown={(e) => e.key === 'Enter' && onChannelClick(channel)}
           tabindex="0"
           role="button"
+          title={channel.description || channel.name}
         >
-          <div class="channel-icon">📺</div>
-          <div class="channel-info">
-            <h3 class="channel-name">{channel.name || channel.channel_id}</h3>
-            {#if channel.custom_url}
-              <p class="channel-url">@{channel.custom_url}</p>
+          <div class="channel-header">
+            {#if channel.avatar_url}
+              <img
+                src={channel.avatar_url}
+                alt="{channel.name} avatar"
+                class="channel-avatar"
+                onerror="this.style.display='none'; this.nextElementSibling.style.display='block';"
+              />
+              <div class="channel-icon-fallback" style="display: none;">📺</div>
+            {:else}
+              <div class="channel-icon">📺</div>
             {/if}
-            {#if channel.description}
-              <p class="channel-description">{channel.description}</p>
-            {/if}
+            <div class="channel-info">
+              <h3 class="channel-name">{channel.name || channel.channel_id}</h3>
+              {#if channel.custom_url}
+                <p class="channel-url">@{channel.custom_url}</p>
+              {/if}
+            </div>
           </div>
+
+          {#if channel.description}
+            <p class="channel-description">{channel.description}</p>
+          {/if}
+
           <div class="channel-stats">
             {#if channel.archive_stats}
               <div class="stat">
                 <span class="stat-value">
                   {formatNumber(channel.archive_stats.total_videos_archived)}
                 </span>
-                <span class="stat-label">videos archived</span>
+                <span class="stat-label">videos</span>
               </div>
+
+              {#if channel.archive_stats.total_duration_seconds > 0}
+                <div class="stat">
+                  <span class="stat-value">
+                    {formatDuration(channel.archive_stats.total_duration_seconds)}
+                  </span>
+                  <span class="stat-label">duration</span>
+                </div>
+              {/if}
+
+              {#if channel.archive_stats.total_size_bytes > 0}
+                <div class="stat">
+                  <span class="stat-value">
+                    {formatSize(channel.archive_stats.total_size_bytes)}
+                  </span>
+                  <span class="stat-label">size</span>
+                </div>
+              {/if}
             {/if}
+
             {#if channel.subscriber_count > 0}
               <div class="stat">
                 <span class="stat-value">
@@ -68,6 +132,12 @@
               </div>
             {/if}
           </div>
+
+          {#if channel.archive_stats?.first_video_date || channel.archive_stats?.last_video_date}
+            <div class="channel-date-range">
+              {formatDate(channel.archive_stats.first_video_date)} — {formatDate(channel.archive_stats.last_video_date)}
+            </div>
+          {/if}
         </div>
       {/each}
     </div>
@@ -133,13 +203,35 @@
     outline-offset: 2px;
   }
 
-  .channel-icon {
-    font-size: 48px;
+  .channel-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     margin-bottom: 12px;
   }
 
+  .channel-avatar {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .channel-icon,
+  .channel-icon-fallback {
+    font-size: 48px;
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
   .channel-info {
-    margin-bottom: 16px;
+    flex: 1;
+    min-width: 0;
   }
 
   .channel-name {
@@ -167,8 +259,9 @@
   }
 
   .channel-stats {
-    display: flex;
-    gap: 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    gap: 16px;
     padding-top: 16px;
     border-top: 1px solid #f0f0f0;
   }
@@ -176,17 +269,32 @@
   .stat {
     display: flex;
     flex-direction: column;
+    min-width: 0;
   }
 
   .stat-value {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 500;
     color: #030303;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .stat-label {
+    font-size: 11px;
+    color: #606060;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .channel-date-range {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f0;
     font-size: 12px;
     color: #606060;
+    text-align: center;
   }
 
   @media (max-width: 768px) {

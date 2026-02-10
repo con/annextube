@@ -1,9 +1,19 @@
 """CLI entry point for annextube."""
 
+import os
 import sys
 from pathlib import Path
 
 import click
+
+# Ensure UTF-8 encoding for Click output (fixes Unicode encoding errors)
+# This must be set before any Click commands are executed
+if sys.stdout.encoding != 'utf-8':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr.encoding != 'utf-8':
+    import io
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 from annextube.cli.aggregate import aggregate
 from annextube.cli.backup import backup

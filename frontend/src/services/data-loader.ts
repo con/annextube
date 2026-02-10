@@ -259,8 +259,10 @@ export class DataLoader {
 
   /**
    * Load channels from channels.tsv (for multi-channel collections)
+   *
+   * @param loadFullMetadata - If true, load full channel.json for each channel (includes complete archive_stats)
    */
-  async loadChannels(): Promise<Channel[]> {
+  async loadChannels(loadFullMetadata = true): Promise<Channel[]> {
     const response = await fetch(`${this.baseUrl}/channels.tsv`);
     if (!response.ok) {
       throw new Error(`Failed to load channels.tsv: ${response.statusText}`);
@@ -270,7 +272,85 @@ export class DataLoader {
     const rows = parseTSV(text) as unknown as ChannelTSVRow[];
 
     // Convert TSV rows to Channel objects
-    return rows.map((row) => this.parseTSVChannel(row));
+    const channels = rows.map((row) => this.parseTSVChannel(row));
+
+    // Optionally load full channel.json for complete metadata
+    if (loadFullMetadata) {
+      await Promise.all(
+        channels.map(async (channel) => {
+          try {
+            const fullChannel = await this.loadChannelMetadata(channel.channel_dir!);
+            // Merge full metadata (prioritize channel.json over TSV)
+            Object.assign(channel, fullChannel);
+            // Preserve channel_dir from TSV (not in channel.json)
+            channel.channel_dir = fullChannel.channel_dir || channel.channel_dir;
+          } catch (err) {
+            // If channel.json doesn't exist, keep TSV data
+            console.warn(
+              `Could not load full metadata for channel ${channel.channel_id}:`,
+              err
+            );
+          }
+        })
+      );
+    }
+
+    return channels;
+  }
+
+  /**
+   * Load full channel metadata from channel.json
+   *
+   * @param channelDir - Relative path to channel directory (e.g., 'ch-annextubetesting')
+   * @returns Full Channel object with complete archive_stats
+   */
+  async loadChannelMetadata(channelDir: string): Promise<Channel> {
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/channel.json`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load channel.json for ${channelDir}: ${response.statusText}`
+      );
+    }
+
+    const channel = (await response.json()) as Channel;
+
+    // Preserve channel_dir for navigation
+    channel.channel_dir = channelDir;
+
+    // Check for local avatar file
+    const avatarPath = await this.findChannelAvatar(channelDir);
+    if (avatarPath) {
+      channel.avatar_url = avatarPath;
+    }
+
+    return channel;
+  }
+
+  /**
+   * Find local channel avatar file (channel_avatar.*)
+   *
+   * @param channelDir - Relative path to channel directory
+   * @returns Path to avatar file, or null if not found
+   */
+  async findChannelAvatar(channelDir: string): Promise<string | null> {
+    // Try common image extensions
+    const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+
+    for (const ext of extensions) {
+      const avatarPath = `${this.baseUrl}/${channelDir}/channel_avatar.${ext}`;
+      try {
+        const response = await fetch(avatarPath, { method: 'HEAD' });
+        if (response.ok) {
+          return avatarPath;
+        }
+      } catch {
+        // File doesn't exist, continue
+      }
+    }
+
+    return null;
   }
 
   /**
