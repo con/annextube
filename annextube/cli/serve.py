@@ -9,6 +9,7 @@ from threading import Thread
 
 import click
 
+from annextube.cli.aggregate import discover_channels
 from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.logging_config import get_logger
 from annextube.lib.range_server import RangeHTTPRequestHandler
@@ -179,18 +180,45 @@ def serve(
     is_multi_channel = archive_info.type == "multi-channel"
     web_dir = output_dir / "web"
 
-    # Regenerate if requested (only for single-channel archives)
+    # Regenerate if requested
     if regenerate:
-        if is_multi_channel:
-            click.echo(
-                "Warning: --regenerate is not supported for multi-channel collections. "
-                "Regenerate individual channels instead.",
-                err=True,
-            )
-        else:
-            try:
-                # Regenerate TSV files
-                if regenerate in ['tsv', 'all']:
+        try:
+            # Regenerate TSV files
+            if regenerate in ['tsv', 'all']:
+                if is_multi_channel:
+                    click.echo("Regenerating TSV files for multi-channel collection...")
+
+                    # Discover all channels
+                    channels = discover_channels(output_dir, depth=1)
+                    if not channels:
+                        click.echo("Warning: No channels found", err=True)
+                    else:
+                        click.echo(f"Found {len(channels)} channel(s)")
+
+                        # Regenerate TSV files for each channel
+                        for rel_channel_dir, channel_json_path in channels:
+                            channel_dir = output_dir / rel_channel_dir
+                            click.echo(f"  Regenerating TSVs for {rel_channel_dir}...")
+
+                            try:
+                                export = ExportService(channel_dir)
+                                videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
+                                click.echo(f"    [ok] {rel_channel_dir}/{videos_tsv.name}")
+                                click.echo(f"    [ok] {rel_channel_dir}/{playlists_tsv.name}")
+                                click.echo(f"    [ok] {rel_channel_dir}/{authors_tsv.name}")
+                            except Exception as e:
+                                click.echo(f"    [error] Failed to regenerate {rel_channel_dir}: {e}", err=True)
+                                continue
+
+                        # Regenerate top-level channels.tsv
+                        click.echo("  Regenerating channels.tsv...")
+                        # Import here to avoid circular dependency
+                        from annextube.cli.aggregate import aggregate
+                        ctx.invoke(aggregate, directory=output_dir, depth=1, output=None, force=True)
+                        click.echo("    [ok] channels.tsv")
+
+                else:
+                    # Single-channel mode
                     click.echo("Regenerating TSV files...")
                     export = ExportService(output_dir)
                     videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
@@ -198,28 +226,28 @@ def serve(
                     click.echo(f"  [ok] {playlists_tsv.name}")
                     click.echo(f"  [ok] {authors_tsv.name}")
 
-                # Regenerate web UI
-                if regenerate in ['web', 'all']:
-                    click.echo("Regenerating web UI...")
+            # Regenerate web UI
+            if regenerate in ['web', 'all']:
+                click.echo("Regenerating web UI...")
 
-                    # Check if frontend build exists
-                    if not FRONTEND_BUILD_DIR.exists():
-                        click.echo(
-                            f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
-                            err=True,
-                        )
-                        click.echo("Run 'cd frontend && npm run build' to build the frontend first.")
-                        raise click.Abort()
+                # Check if frontend build exists
+                if not FRONTEND_BUILD_DIR.exists():
+                    click.echo(
+                        f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
+                        err=True,
+                    )
+                    click.echo("Run 'cd frontend && npm run build' to build the frontend first.")
+                    raise click.Abort()
 
-                    # Copy frontend to web directory
-                    if web_dir.exists():
-                        shutil.rmtree(web_dir)
-                    shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
-                    click.echo("  [ok] web/")
+                # Copy frontend to web directory
+                if web_dir.exists():
+                    shutil.rmtree(web_dir)
+                shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
+                click.echo("  [ok] web/")
 
-            except Exception as e:
-                click.echo(f"Error regenerating: {e}", err=True)
-                raise click.Abort() from e
+        except Exception as e:
+            click.echo(f"Error regenerating: {e}", err=True)
+            raise click.Abort() from e
 
     # Check if web directory exists after regeneration
     if not web_dir.exists():
