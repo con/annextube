@@ -20,7 +20,7 @@
     // Load full metadata (with tags, description, etc.)
     try {
       loadingMetadata = true;
-      fullMetadata = await dataLoader.loadVideoMetadata(video.video_id);
+      fullMetadata = await dataLoader.loadVideoMetadata(video.video_id, channelDir);
     } catch (err) {
       console.warn('Could not load full metadata, using TSV data:', err);
       fullMetadata = video;
@@ -31,7 +31,7 @@
     // Load comments
     try {
       loadingComments = true;
-      comments = await dataLoader.loadComments(video.video_id);
+      comments = await dataLoader.loadComments(video.video_id, channelDir);
     } catch (err) {
       console.warn('Could not load comments:', err);
       comments = [];

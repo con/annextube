@@ -5,7 +5,7 @@
   Updates URL hash to preserve filter state (mykrok pattern).
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { Video, Playlist } from '@/types/models';
   import { searchService } from '@/services/search';
   import { filterService } from '@/services/filter';
@@ -27,18 +27,18 @@
   let sortField: SortField = 'date';
   let sortDirection: SortDirection = 'desc';
 
-  // Restore filter state from URL on mount
-  onMount(() => {
+  // Restore filter state from URL
+  function restoreFromURL() {
     const urlState = urlStateManager.getCurrentState();
 
-    if (urlState.search) searchQuery = urlState.search;
-    if (urlState.dateFrom) dateFrom = urlState.dateFrom;
-    if (urlState.dateTo) dateTo = urlState.dateTo;
-    if (urlState.channels) selectedChannels = urlState.channels;
-    if (urlState.tags) selectedTags = urlState.tags;
-    if (urlState.playlists) selectedPlaylists = urlState.playlists;
-    if (urlState.sortField) sortField = urlState.sortField;
-    if (urlState.sortDirection) sortDirection = urlState.sortDirection;
+    searchQuery = urlState.search || '';
+    dateFrom = urlState.dateFrom || '';
+    dateTo = urlState.dateTo || '';
+    selectedChannels = urlState.channels || [];
+    selectedTags = urlState.tags || [];
+    selectedPlaylists = urlState.playlists || [];
+    sortField = urlState.sortField || 'date';
+    sortDirection = urlState.sortDirection || 'desc';
 
     // Convert downloadStatus array to dropdown value
     if (urlState.downloadStatus) {
@@ -46,11 +46,38 @@
         selectedStatusFilter = 'downloaded';
       } else if (urlState.downloadStatus.includes('metadata_only')) {
         selectedStatusFilter = 'metadata_only';
+      } else {
+        selectedStatusFilter = 'all';
       }
+    } else {
+      selectedStatusFilter = 'all';
     }
+  }
+
+  // Handle browser back/forward navigation
+  function handleHashChange() {
+    // Temporarily disable URL updates while restoring state
+    isInitializing = true;
+    restoreFromURL();
+    isInitializing = false;
+    // Re-apply filters with restored state
+    applyFilters();
+  }
+
+  // Restore filter state from URL on mount and listen for hash changes
+  onMount(() => {
+    restoreFromURL();
+
+    // Listen for hash changes (browser back/forward)
+    window.addEventListener('hashchange', handleHashChange);
 
     // Allow URL updates after initialization
     isInitializing = false;
+  });
+
+  // Clean up event listener on destroy
+  onDestroy(() => {
+    window.removeEventListener('hashchange', handleHashChange);
   });
 
   // UI state

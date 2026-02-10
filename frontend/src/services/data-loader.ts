@@ -102,21 +102,28 @@ export class DataLoader {
    * Load full video metadata from JSON (on-demand, mykrok pattern)
    *
    * @param videoId - YouTube video ID
+   * @param channelDir - Optional channel directory for multi-channel mode
    * @returns Full Video object with all metadata
    */
-  async loadVideoMetadata(videoId: string): Promise<Video> {
+  async loadVideoMetadata(videoId: string, channelDir?: string): Promise<Video> {
+    // Cache key includes channel context
+    const cacheKey = channelDir ? `${channelDir}:${videoId}` : videoId;
+
     // Check cache first
-    if (this.metadataCache.has(videoId)) {
-      return this.metadataCache.get(videoId)!;
+    if (this.metadataCache.has(cacheKey)) {
+      return this.metadataCache.get(cacheKey)!;
     }
 
     // Get file_path from videos cache (use path if available, otherwise video_id)
     const filePath = this.getVideoPath(videoId);
 
+    // Build URL with or without channel prefix
+    const metadataUrl = channelDir
+      ? `${this.baseUrl}/${channelDir}/videos/${filePath}/metadata.json`
+      : `${this.baseUrl}/videos/${filePath}/metadata.json`;
+
     // Fetch from JSON file
-    const response = await fetch(
-      `${this.baseUrl}/videos/${filePath}/metadata.json`
-    );
+    const response = await fetch(metadataUrl);
     if (!response.ok) {
       throw new Error(
         `Failed to load metadata for ${videoId}: ${response.statusText}`
@@ -136,7 +143,7 @@ export class DataLoader {
     }
 
     // Cache for future requests
-    this.metadataCache.set(videoId, metadata);
+    this.metadataCache.set(cacheKey, metadata);
 
     return metadata;
   }
@@ -145,21 +152,28 @@ export class DataLoader {
    * Load comments for a video (on-demand, mykrok pattern)
    *
    * @param videoId - YouTube video ID
+   * @param channelDir - Optional channel directory for multi-channel mode
    * @returns Array of Comment objects (may include nested replies)
    */
-  async loadComments(videoId: string): Promise<Comment[]> {
+  async loadComments(videoId: string, channelDir?: string): Promise<Comment[]> {
+    // Cache key includes channel context
+    const cacheKey = channelDir ? `${channelDir}:${videoId}` : videoId;
+
     // Check cache first
-    if (this.commentsCache.has(videoId)) {
-      return this.commentsCache.get(videoId)!;
+    if (this.commentsCache.has(cacheKey)) {
+      return this.commentsCache.get(cacheKey)!;
     }
 
     // Get file_path from videos cache
     const filePath = this.getVideoPath(videoId);
 
+    // Build URL with or without channel prefix
+    const commentsUrl = channelDir
+      ? `${this.baseUrl}/${channelDir}/videos/${filePath}/comments.json`
+      : `${this.baseUrl}/videos/${filePath}/comments.json`;
+
     // Fetch from JSON file
-    const response = await fetch(
-      `${this.baseUrl}/videos/${filePath}/comments.json`
-    );
+    const response = await fetch(commentsUrl);
     if (!response.ok) {
       // Comments may not exist for some videos
       if (response.status === 404) {
@@ -173,7 +187,7 @@ export class DataLoader {
     const comments = (await response.json()) as Comment[];
 
     // Cache for future requests
-    this.commentsCache.set(videoId, comments);
+    this.commentsCache.set(cacheKey, comments);
 
     return comments;
   }
