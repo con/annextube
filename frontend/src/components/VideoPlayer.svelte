@@ -37,8 +37,13 @@
     return path;
   }
 
-  // Get local thumbnail path (use local file instead of YouTube CDN to avoid CORS issues)
+  // Get thumbnail path - use local file if video is downloaded, otherwise YouTube CDN
   function getThumbnailPath(): string {
+    // If video isn't downloaded locally, use YouTube thumbnail URL
+    if (video.download_status !== 'downloaded') {
+      return video.thumbnail_url;
+    }
+
     const filePath = video.file_path || video.video_id;
     // Use absolute path from server root, include channel directory in multi-channel mode
     return channelDir
