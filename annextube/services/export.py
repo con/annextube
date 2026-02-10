@@ -209,6 +209,9 @@ class ExportService:
     def generate_channel_json(self) -> Path:
         """Generate channel.json with channel metadata and archive statistics.
 
+        Idempotent operation that (re)gathers all information from underlying
+        TSV files and actual video files.
+
         Returns:
             Path to generated channel.json
         """
@@ -252,9 +255,6 @@ class ExportService:
         # (We'll use the first video's channel metadata)
         videos_dir = self.repo_path / "videos"
         channel_name = ""
-        channel_desc = ""
-        subscriber_count = 0
-        video_count = 0
 
         if videos_dir.exists():
             # Find first video metadata.json
@@ -268,7 +268,7 @@ class ExportService:
                 except Exception:
                     continue
 
-        # Compute archive stats from videos.tsv
+        # Compute archive stats from videos.tsv and actual files
         videos_tsv = self.repo_path / "videos" / "videos.tsv"
         total_videos = 0
         first_date: str | None = None
@@ -293,18 +293,36 @@ class ExportService:
                             first_date = min(dates)
                             last_date = max(dates)
 
+                        # Calculate duration from TSV and size from actual files
                         for row in rows:
                             try:
                                 total_duration += int(row.get('duration', 0))
                             except (ValueError, TypeError):
                                 pass
 
-                            try:
-                                total_size += int(row.get('file_size', 0))
-                            except (ValueError, TypeError):
-                                pass
+                            # Calculate actual file size from video.mkv
+                            video_path_str = row.get('path', '')
+                            if video_path_str:
+                                video_file = videos_dir / video_path_str / "video.mkv"
+                                if video_file.exists():
+                                    try:
+                                        if video_file.is_symlink():
+                                            target_path = video_file.resolve()
+                                            if target_path.exists():
+                                                total_size += target_path.stat().st_size
+                                        else:
+                                            total_size += video_file.stat().st_size
+                                    except (OSError, RuntimeError):
+                                        pass
             except Exception as e:
                 logger.warning(f"Error reading videos.tsv: {e}")
+
+        # Count playlists from playlists directory
+        playlist_count = 0
+        playlists_dir = self.repo_path / "playlists"
+        if playlists_dir.exists():
+            playlist_count = sum(1 for item in playlists_dir.iterdir()
+                                 if item.is_dir() and (item / "playlist.json").exists())
 
         archive_stats: dict[str, int | str | None] = {
             "total_videos_archived": total_videos,
@@ -320,15 +338,16 @@ class ExportService:
         channel_data = {
             "channel_id": channel_id or "",
             "name": channel_name,
-            "description": channel_desc,
+            "description": "",
             "custom_url": custom_url or "",
-            "subscriber_count": subscriber_count,
-            "video_count": video_count,
+            "subscriber_count": 0,  # Not tracked in archive
+            "video_count": total_videos,  # Use actual count from archive
             "avatar_url": "",
             "banner_url": "",
             "country": "",
             "videos": [],
             "playlists": [],
+            "playlist_count": playlist_count,  # Add playlist count
             "last_sync": now,
             "created_at": "",
             "fetched_at": now,
@@ -340,7 +359,11 @@ class ExportService:
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(channel_data, f, indent=2)
 
-        logger.info(f"Generated channel.json with {archive_stats['total_videos_archived']} videos")
+        logger.info(
+            f"Generated channel.json: {total_videos} videos, "
+            f"{playlist_count} playlists, "
+            f"{total_size / (1024**3):.2f} GB total"
+        )
         return output_path
 
     def _calculate_playlist_duration(self, playlist_dir: Path) -> int:
