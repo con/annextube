@@ -5,8 +5,11 @@
   export let video: Video;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
-  // Check if local video is available (metadata says downloaded)
-  $: metadataHasLocalVideo = video.download_status === 'downloaded';
+  // Check if local video might be available (tracked or downloaded)
+  // 'tracked' = git annex addurl was called (symlink exists)
+  // 'downloaded' = git annex get was called (content retrieved)
+  // Actual availability is checked via HEAD request in onMount
+  $: metadataHasLocalVideo = video.download_status === 'downloaded' || video.download_status === 'tracked';
 
   // Actually available after checking file existence
   let hasLocalVideo = metadataHasLocalVideo;
@@ -37,10 +40,10 @@
     return path;
   }
 
-  // Get thumbnail path - use local file if video is downloaded, otherwise YouTube CDN
+  // Get thumbnail path - use local file if video is tracked/downloaded, otherwise YouTube CDN
   function getThumbnailPath(): string {
-    // If video isn't downloaded locally, use YouTube thumbnail URL
-    if (video.download_status !== 'downloaded') {
+    // If video isn't tracked locally, use YouTube thumbnail URL
+    if (video.download_status !== 'downloaded' && video.download_status !== 'tracked') {
       return video.thumbnail_url;
     }
 
