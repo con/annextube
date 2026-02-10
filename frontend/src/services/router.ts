@@ -68,14 +68,33 @@ export class Router {
   }
 
   /**
-   * Parse hash and notify listeners
+   * Parse hash and notify listeners (only on actual route changes)
    */
   private handleHashChange(): void {
     const hash = window.location.hash.slice(1); // Remove leading #
     const route = this.parseHash(hash);
 
+    // Only notify if route actually changed (ignore query parameter changes)
+    if (this.isSameRoute(this.currentRoute, route)) {
+      return;
+    }
+
     this.currentRoute = route;
     this.notifyListeners(route);
+  }
+
+  /**
+   * Compare two routes for equality (name and params only, ignores query params)
+   */
+  private isSameRoute(a: Route, b: Route): boolean {
+    if (a.name !== b.name) return false;
+
+    const aKeys = Object.keys(a.params);
+    const bKeys = Object.keys(b.params);
+
+    if (aKeys.length !== bKeys.length) return false;
+
+    return aKeys.every((key) => a.params[key] === b.params[key]);
   }
 
   /**

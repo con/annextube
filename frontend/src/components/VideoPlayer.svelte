@@ -3,6 +3,7 @@
   import type { Video } from '@/types/models';
 
   export let video: Video;
+  export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
   // Check if local video is available (metadata says downloaded)
   $: metadataHasLocalVideo = video.download_status === 'downloaded';
@@ -24,18 +25,25 @@
     // Use path from videos.tsv (supports hierarchical structure like 2026/01/video_dir)
     // Fall back to video_id for older archives
     const filePath = video.file_path || video.video_id;
+
     // Video files are named video.mkv (git-annex symlinked to actual content)
     // Use absolute path from server root to avoid relative path issues with hash routing
-    const path = `/videos/${filePath}/video.mkv`;
-    console.log('[VideoPlayer] Video path:', path, 'download_status:', video.download_status);
+    // In multi-channel mode, include channel directory prefix
+    const path = channelDir
+      ? `/${channelDir}/videos/${filePath}/video.mkv`
+      : `/videos/${filePath}/video.mkv`;
+
+    console.log('[VideoPlayer] Video path:', path, 'channelDir:', channelDir, 'download_status:', video.download_status);
     return path;
   }
 
   // Get local thumbnail path (use local file instead of YouTube CDN to avoid CORS issues)
   function getThumbnailPath(): string {
     const filePath = video.file_path || video.video_id;
-    // Use absolute path from server root
-    return `/videos/${filePath}/thumbnail.jpg`;
+    // Use absolute path from server root, include channel directory in multi-channel mode
+    return channelDir
+      ? `/${channelDir}/videos/${filePath}/thumbnail.jpg`
+      : `/videos/${filePath}/thumbnail.jpg`;
   }
 
   // Get YouTube embed URL
@@ -45,6 +53,14 @@
 
   // Get caption tracks
   $: captionTracks = video.captions_available || [];
+
+  // Get caption file path for a language
+  function getCaptionPath(lang: string): string {
+    const filePath = video.file_path || video.video_id;
+    return channelDir
+      ? `/${channelDir}/videos/${filePath}/video.${lang}.vtt`
+      : `/videos/${filePath}/video.${lang}.vtt`;
+  }
 
   // Handle video loading error
   function handleVideoError(event: Event) {
@@ -221,7 +237,7 @@
             {#each captionTracks as lang}
               <track
                 kind="subtitles"
-                src={`/videos/${video.file_path || video.video_id}/video.${lang}.vtt`}
+                src={getCaptionPath(lang)}
                 srclang={lang}
                 label={lang.toUpperCase()}
               />

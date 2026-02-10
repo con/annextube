@@ -48,11 +48,15 @@
         selectedStatusFilter = 'metadata_only';
       }
     }
+
+    // Allow URL updates after initialization
+    isInitializing = false;
   });
 
   // UI state
   let filtersExpanded = true;
   let activeDatePreset: string | null = null;
+  let isInitializing = true; // Prevent URL updates during mount
 
   // Convert dropdown selection to filter array
   $: selectedStatuses = selectedStatusFilter === 'all'
@@ -133,9 +137,14 @@
 
   let urlDebounceTimer: number;
   function updateURL() {
+    // Don't update URL during initialization to avoid extra history entries
+    if (isInitializing) {
+      return;
+    }
+
     clearTimeout(urlDebounceTimer);
     urlDebounceTimer = setTimeout(() => {
-      urlStateManager.updateHash({
+      const newState = {
         search: searchQuery || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
@@ -145,8 +154,40 @@
         playlists: selectedPlaylists.length > 0 ? selectedPlaylists : undefined,
         sortField,
         sortDirection,
-      });
+      };
+
+      // Only update if state differs from current URL
+      const currentState = urlStateManager.getCurrentState();
+      if (!statesEqual(currentState, newState)) {
+        urlStateManager.updateHash(newState);
+      }
     }, 500);
+  }
+
+  // Compare two URL states for equality
+  function statesEqual(a: any, b: any): boolean {
+    return (
+      a.search === b.search &&
+      a.dateFrom === b.dateFrom &&
+      a.dateTo === b.dateTo &&
+      arrayEqual(a.channels, b.channels) &&
+      arrayEqual(a.tags, b.tags) &&
+      arrayEqual(a.downloadStatus, b.downloadStatus) &&
+      arrayEqual(a.playlists, b.playlists) &&
+      a.sortField === b.sortField &&
+      a.sortDirection === b.sortDirection
+    );
+  }
+
+  // Compare two arrays for equality
+  function arrayEqual(a: any[] | undefined, b: any[] | undefined): boolean {
+    if (a === b) return true;
+    if (a == null || b == null) return a === b;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
   }
 
   function clearFilters() {

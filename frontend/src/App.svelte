@@ -180,7 +180,7 @@
 
   <div class="container">
     {#if selectedVideo}
-      <VideoDetail video={selectedVideo} onBack={handleBackToList} />
+      <VideoDetail video={selectedVideo} onBack={handleBackToList} channelDir={selectedChannel?.channel_dir} />
     {:else if isMultiChannel && !selectedChannel}
       <!-- Multi-channel mode: show channels overview -->
       <ChannelList

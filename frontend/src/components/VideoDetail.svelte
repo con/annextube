@@ -8,6 +8,7 @@
 
   export let video: Video;
   export let onBack: () => void;
+  export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
   let fullMetadata: Video = video;
   let comments: Comment[] = [];
@@ -57,7 +58,7 @@
   </button>
 
   <div class="player-container">
-    <VideoPlayer video={fullMetadata} />
+    <VideoPlayer video={fullMetadata} {channelDir} />
   </div>
 
   <div class="video-info">
