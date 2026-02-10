@@ -167,7 +167,7 @@
           ← Back to channels
         </button>
       {/if}
-      <h1>📹 YouTube Archive Browser</h1>
+      <h1>📹 YouTube Archive Browser <span class="version">v{__APP_VERSION__}</span></h1>
       <p class="subtitle">
         {#if isMultiChannel && !selectedChannel}
           {channels.length} channel{channels.length !== 1 ? 's' : ''} in collection
@@ -257,6 +257,13 @@
     color: #030303;
     font-size: 24px;
     font-weight: 500;
+  }
+
+  .version {
+    font-size: 12px;
+    font-weight: 400;
+    color: #909090;
+    vertical-align: middle;
   }
 
   .subtitle {
