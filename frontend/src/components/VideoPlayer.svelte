@@ -1,13 +1,18 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Video } from '@/types/models';
 
   export let video: Video;
 
-  // Active tab: 'local' or 'youtube'
-  let activeTab: 'local' | 'youtube' = video.download_status === 'downloaded' ? 'local' : 'youtube';
+  // Check if local video is available (metadata says downloaded)
+  $: metadataHasLocalVideo = video.download_status === 'downloaded';
 
-  // Check if local video is available
-  $: hasLocalVideo = video.download_status === 'downloaded';
+  // Actually available after checking file existence
+  let hasLocalVideo = metadataHasLocalVideo;
+  let localVideoCheckComplete = false;
+
+  // Active tab: 'local' or 'youtube'
+  let activeTab: 'local' | 'youtube' = metadataHasLocalVideo ? 'local' : 'youtube';
 
   // Error and loading states
   let videoError = false;
@@ -105,21 +110,52 @@
       youtubeLoading = true;
     }
   }
+
+  // Check if video file actually exists on mount
+  onMount(async () => {
+    if (metadataHasLocalVideo) {
+      const videoPath = getVideoPath();
+      try {
+        // Use HEAD request to check file existence without downloading
+        const response = await fetch(videoPath, { method: 'HEAD' });
+
+        if (!response.ok) {
+          // File doesn't exist or is not accessible
+          console.warn('[VideoPlayer] Local video not available:', videoPath, 'status:', response.status);
+          hasLocalVideo = false;
+          activeTab = 'youtube';
+          videoError = true;
+          videoErrorMessage = 'Video file not found in archive. The file may not have been downloaded yet (git-annex symlink without content).';
+        } else {
+          console.log('[VideoPlayer] Local video available:', videoPath);
+        }
+      } catch (error) {
+        // Network error or CORS issue
+        console.warn('[VideoPlayer] Failed to check video availability:', error);
+        // Assume video is available and let the video element handle errors
+      }
+      localVideoCheckComplete = true;
+    } else {
+      localVideoCheckComplete = true;
+    }
+  });
 </script>
 
 <div class="video-player">
-  <!-- Tab Navigation (hide if only one tab) -->
-  {#if hasLocalVideo}
+  <!-- Tab Navigation (show if metadata says video is downloaded) -->
+  {#if metadataHasLocalVideo}
     <div class="tabs" role="tablist">
       <button
         class="tab"
         class:active={activeTab === 'local'}
+        class:warning={!hasLocalVideo}
         role="tab"
         aria-selected={activeTab === 'local'}
         aria-controls="local-player-panel"
         on:click={() => switchTab('local')}
+        title={hasLocalVideo ? '' : 'Video file not available'}
       >
-        Play from Archive
+        Play from Archive{#if !hasLocalVideo && localVideoCheckComplete} ⚠️{/if}
       </button>
       <button
         class="tab"
@@ -142,12 +178,18 @@
       id={activeTab === 'local' ? 'local-player-panel' : 'youtube-player-panel'}
       aria-labelledby={activeTab === 'local' ? 'local-tab' : 'youtube-tab'}
     >
-      {#if activeTab === 'local' && hasLocalVideo}
+      {#if activeTab === 'local' && metadataHasLocalVideo}
         <!-- Local Video Player -->
-        {#if videoError}
+        {#if !hasLocalVideo || videoError}
           <div class="video-error-message">
-            <p class="error-title">⚠️ Video Playback Error</p>
+            <p class="error-title">⚠️ {hasLocalVideo ? 'Video Playback Error' : 'Video File Not Available'}</p>
             <p class="error-details">{videoErrorMessage}</p>
+            {#if !hasLocalVideo}
+              <p class="error-hint">
+                The video metadata indicates this file should be downloaded, but the actual file is not available.
+                This usually means the git-annex symlink exists but the content hasn't been retrieved with <code>git annex get</code>.
+              </p>
+            {/if}
             <div class="error-actions">
               <button
                 class="error-button"
@@ -264,6 +306,14 @@
     background: white;
   }
 
+  .tab.warning {
+    color: #ff6b00;
+  }
+
+  .tab.warning.active {
+    border-bottom-color: #ff6b00;
+  }
+
   .tab-content-wrapper {
     background: #000;
     position: relative;
@@ -351,6 +401,25 @@
     margin-bottom: 24px;
     max-width: 500px;
     line-height: 1.6;
+  }
+
+  .error-hint {
+    font-size: 13px;
+    color: #aaa;
+    margin-bottom: 24px;
+    max-width: 600px;
+    line-height: 1.5;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 12px 16px;
+    border-radius: 4px;
+  }
+
+  .error-hint code {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: monospace;
+    font-size: 12px;
   }
 
   .error-actions {
