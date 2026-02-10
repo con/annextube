@@ -1,15 +1,41 @@
 """Generate web command for annextube."""
 
+import re
 import shutil
 from pathlib import Path
 
 import click
 
+from annextube._version import __version__
 from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.logging_config import get_logger
 from annextube.services.export import ExportService
 
 logger = get_logger(__name__)
+
+# Placeholder version in built frontend (from package.json)
+FRONTEND_VERSION_PLACEHOLDER = "0.2.2"
+
+
+def _inject_version(web_dir: Path, version: str) -> None:
+    """Replace placeholder version in built JS files with actual annextube version."""
+    assets_dir = web_dir / "assets"
+    if not assets_dir.exists():
+        return
+
+    for js_file in assets_dir.glob("*.js"):
+        content = js_file.read_text()
+        # Replace the placeholder version string (quoted in JS)
+        # The template has "v{__APP_VERSION__}" so Vite inlines it as "v0.2.2"
+        # Match patterns like "v0.2.2" or 'v0.2.2'
+        new_content = re.sub(
+            rf'(["\'])v{re.escape(FRONTEND_VERSION_PLACEHOLDER)}(["\'])',
+            rf'\g<1>v{version}\g<2>',
+            content,
+        )
+        if new_content != content:
+            js_file.write_text(new_content)
+            logger.debug(f"Injected version into {js_file.name}")
 
 # Path to frontend build (relative to this file)
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "web"
@@ -111,6 +137,10 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
         if web_dir.exists():
             shutil.rmtree(web_dir)
         shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
+
+        # Inject actual annextube version into the built JS
+        _inject_version(web_dir, __version__)
+        click.echo(f"  Version: {__version__}")
 
         click.echo()
         click.echo("[ok] Web browser generated successfully!")
