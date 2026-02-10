@@ -53,26 +53,44 @@
     }
 
     // Subscribe to route changes
-    router.subscribe((route) => {
+    router.subscribe(async (route) => {
       currentRoute = route;
       if (route.name === 'video') {
         // Find video by ID and set as selected
         const videoId = route.params.video_id;
         selectedVideo = allVideos.find((v) => v.video_id === videoId) || null;
+      } else if (route.name === 'channel' && isMultiChannel) {
+        // Load channel videos from URL
+        const channelDir = route.params.channel_dir;
+        const channel = channels.find((c) => c.channel_dir === channelDir);
+        if (channel) {
+          await loadChannelData(channel);
+        }
+        selectedVideo = null;
       } else {
+        // Home route
         selectedVideo = null;
       }
     });
   });
 
-  async function handleChannelClick(channel: Channel) {
-    // Load videos for this channel
+  async function loadChannelData(channel: Channel) {
+    // Load videos and playlists for this channel
     loading = true;
     selectedChannel = channel;
     try {
       allVideos = await dataLoader.loadChannelVideos(channel.channel_dir!);
       filteredVideos = allVideos;
       searchService.initialize(allVideos);
+
+      // Load playlists for this channel (non-blocking, failure is OK)
+      try {
+        playlists = await dataLoader.loadChannelPlaylists(channel.channel_dir!);
+      } catch (err) {
+        console.warn('Could not load playlists for channel:', err);
+        playlists = [];
+      }
+
       loading = false;
     } catch (err) {
       error = err instanceof Error ? err.message : 'Unknown error loading channel';
@@ -80,10 +98,18 @@
     }
   }
 
+  function handleChannelClick(channel: Channel) {
+    // Navigate to channel URL (router will handle loading)
+    router.navigate('channel', { channel_dir: channel.channel_dir! });
+  }
+
   function handleBackToChannels() {
+    // Navigate back to home (router will handle state reset)
+    router.navigate('home');
     selectedChannel = null;
     allVideos = [];
     filteredVideos = [];
+    playlists = [];
     error = null;
   }
 

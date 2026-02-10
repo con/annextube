@@ -376,6 +376,81 @@ export class DataLoader {
   }
 
   /**
+   * Load playlists for a specific channel directory
+   *
+   * @param channelDir - Relative path to channel directory (from channels.tsv)
+   */
+  async loadChannelPlaylists(channelDir: string): Promise<Playlist[]> {
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/playlists/playlists.tsv`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load playlists for channel ${channelDir}: ${response.statusText}`
+      );
+    }
+
+    const text = await response.text();
+    const rows = parseTSV(text) as unknown as PlaylistTSVRow[];
+
+    // Convert TSV rows to Playlist objects
+    const playlists = rows.map((row) => this.parseTSVPlaylist(row));
+
+    // Load video_ids from playlist.json files
+    await Promise.all(
+      playlists.map(async (playlist) => {
+        try {
+          const fullPlaylist = await this.loadChannelPlaylistMetadata(
+            channelDir,
+            playlist.playlist_id,
+            playlist.path
+          );
+          playlist.video_ids = fullPlaylist.video_ids;
+        } catch (err) {
+          // If playlist.json doesn't exist, keep empty array
+          console.warn(
+            `Could not load video_ids for playlist ${playlist.playlist_id}:`,
+            err
+          );
+        }
+      })
+    );
+
+    return playlists;
+  }
+
+  /**
+   * Load full playlist metadata from channel-specific playlist.json
+   *
+   * @param channelDir - Channel directory
+   * @param playlistId - YouTube playlist ID
+   * @param path - Playlist directory name
+   */
+  async loadChannelPlaylistMetadata(
+    channelDir: string,
+    playlistId: string,
+    path?: string
+  ): Promise<Playlist> {
+    if (!path) {
+      throw new Error(
+        `Cannot load playlist metadata for ${playlistId}: path not provided`
+      );
+    }
+
+    // Fetch playlist.json from the channel's playlist directory
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/playlists/${path}/playlist.json`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load playlist metadata for ${playlistId}: ${response.statusText}`
+      );
+    }
+
+    return (await response.json()) as Playlist;
+  }
+
+  /**
    * Clear all caches (useful for testing or manual refresh)
    */
   clearCache(): void {

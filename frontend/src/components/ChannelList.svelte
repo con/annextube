@@ -63,12 +63,10 @@
   {:else}
     <div class="channels-grid">
       {#each channels as channel (channel.channel_id)}
-        <div
+        <a
+          href="#/channel/{channel.channel_dir}"
           class="channel-card"
-          on:click={() => onChannelClick(channel)}
-          on:keydown={(e) => e.key === 'Enter' && onChannelClick(channel)}
-          tabindex="0"
-          role="button"
+          on:click|preventDefault={() => onChannelClick(channel)}
           title={channel.description || channel.name}
         >
           <div class="channel-header">
@@ -138,7 +136,7 @@
               {formatDate(channel.archive_stats.first_video_date)} — {formatDate(channel.archive_stats.last_video_date)}
             </div>
           {/if}
-        </div>
+        </a>
       {/each}
     </div>
   {/if}
@@ -184,12 +182,15 @@
   }
 
   .channel-card {
+    display: block;
     background: white;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
     padding: 20px;
     cursor: pointer;
     transition: all 0.2s ease;
+    text-decoration: none;
+    color: inherit;
   }
 
   .channel-card:hover {

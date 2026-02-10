@@ -2,12 +2,13 @@
  * Simple hash-based router for file:// protocol compatibility
  *
  * Routes:
- * - #/ or empty → Home (video list)
+ * - #/ or empty → Home (video list or multi-channel overview)
+ * - #/channel/{channel_dir} → Channel view in multi-channel mode
  * - #/video/{video_id} → Video detail
  */
 
 export interface Route {
-  name: 'home' | 'video';
+  name: 'home' | 'channel' | 'video';
   params: Record<string, string>;
 }
 
@@ -42,9 +43,11 @@ export class Router {
   /**
    * Navigate to a route
    */
-  navigate(name: 'home' | 'video', params: Record<string, string> = {}): void {
+  navigate(name: 'home' | 'channel' | 'video', params: Record<string, string> = {}): void {
     if (name === 'home') {
       window.location.hash = '#/';
+    } else if (name === 'channel') {
+      window.location.hash = `#/channel/${params.channel_dir}`;
     } else if (name === 'video') {
       window.location.hash = `#/video/${params.video_id}`;
     }
@@ -80,8 +83,17 @@ export class Router {
       return { name: 'home', params: {} };
     }
 
+    // /channel/{channel_dir}
+    const channelMatch = path.match(/^channel\/([^/?]+)/);
+    if (channelMatch) {
+      return {
+        name: 'channel',
+        params: { channel_dir: channelMatch[1] },
+      };
+    }
+
     // /video/{video_id}
-    const videoMatch = path.match(/^video\/([^/]+)$/);
+    const videoMatch = path.match(/^video\/([^/?]+)/);
     if (videoMatch) {
       return {
         name: 'video',
