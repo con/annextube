@@ -210,7 +210,7 @@ class ExportService:
         """Generate channel.json with channel metadata and archive statistics.
 
         Idempotent operation that:
-        1. Extracts fresh channel metadata from YouTube (description, avatar, etc.)
+        1. Extracts fresh channel metadata from YouTube API (preferred) or yt-dlp (fallback)
         2. Calculates archive stats from TSV files and actual video files
 
         Returns:
@@ -220,7 +220,6 @@ class ExportService:
         from datetime import datetime
 
         from annextube.lib.config import load_config
-        from annextube.services.youtube import YouTubeService
 
         logger.info(f"Generating channel.json at {self.repo_path}")
 
@@ -240,48 +239,12 @@ class ExportService:
         if not channel_source:
             raise ValueError("No channel sources found in config.")
 
-        # Extract fresh channel metadata from YouTube
-        youtube = YouTubeService()
-        channel_meta = youtube.get_channel_metadata(channel_source.url)
-
-        # Fallback to parsing from URL and videos if extraction fails
-        if not channel_meta or not channel_meta.get("channel_id"):
-            logger.warning("Failed to extract channel metadata from YouTube, using fallback")
-            url = channel_source.url
-            custom_url = None
-            channel_id = None
-            channel_name = ""
-
-            if "@" in url:
-                custom_url = url.split("@")[-1].split("/")[0].split("?")[0]
-            elif "/channel/" in url:
-                channel_id = url.split("/channel/")[-1].split("/")[0].split("?")[0]
-
-            # Try to get channel name from existing video
-            videos_dir = self.repo_path / "videos"
-            if videos_dir.exists():
-                for metadata_file in videos_dir.rglob("metadata.json"):
-                    try:
-                        with open(metadata_file, encoding='utf-8') as f:
-                            video_data = json.load(f)
-                            channel_id = channel_id or video_data.get("channel_id", "")
-                            channel_name = video_data.get("channel_name", "")
-                            break
-                    except Exception:
-                        continue
-
-            channel_meta = {
-                "channel_id": channel_id or "",
-                "channel_name": channel_name,
-                "description": "",
-                "custom_url": custom_url or "",
-                "avatar_url": "",
-                "subscriber_count": 0,
-                "video_count": 0,
-            }
+        # Extract channel metadata - try YouTube API first, then yt-dlp
+        channel_meta = self._extract_channel_metadata(channel_source.url)
 
         # Compute archive stats from videos.tsv and actual files
-        videos_tsv = self.repo_path / "videos" / "videos.tsv"
+        videos_dir = self.repo_path / "videos"
+        videos_tsv = videos_dir / "videos.tsv"
         total_videos = 0
         first_date: str | None = None
         last_date: str | None = None
@@ -354,14 +317,12 @@ class ExportService:
             "custom_url": channel_meta.get("custom_url", ""),
             "subscriber_count": channel_meta.get("subscriber_count", 0),
             "video_count": total_videos,  # Use actual count from archive, not YouTube's count
-            "avatar_url": channel_meta.get("avatar_url", ""),
-            "banner_url": "",  # Not available from yt-dlp
-            "country": "",  # Not available from yt-dlp
-            "videos": [],
-            "playlists": [],
             "playlist_count": playlist_count,
+            "avatar_url": channel_meta.get("avatar_url", ""),
+            "banner_url": channel_meta.get("banner_url", ""),
+            "country": channel_meta.get("country", ""),
+            "created_at": channel_meta.get("created_at", ""),
             "last_sync": now,
-            "created_at": "",
             "fetched_at": now,
             "archive_stats": archive_stats,
         }
@@ -487,3 +448,122 @@ class ExportService:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("playlist_id\ttitle\tchannel_id\tchannel_name\tvideo_count\t"
                     "total_duration\tprivacy_status\tcreated_at\tlast_sync\tpath\n")
+
+    def _extract_channel_metadata(self, channel_url: str) -> dict[str, str | int]:
+        """Extract channel metadata from YouTube API or yt-dlp (fallback).
+
+        Tries YouTube API first (complete metadata), falls back to yt-dlp
+        if no API key or API fails, then falls back to parsing URL and videos.
+
+        Args:
+            channel_url: YouTube channel URL
+
+        Returns:
+            Dictionary with channel metadata fields
+        """
+        import os
+
+        from annextube.services.youtube import YouTubeService
+        from annextube.services.youtube_api import create_api_client
+
+        # Step 1: Try YouTube API (most complete metadata)
+        api_key = os.environ.get("YOUTUBE_API_KEY")
+        if api_key:
+            try:
+                api_client = create_api_client(api_key)
+                if api_client:
+                    # Extract channel ID from URL
+                    channel_id = self._parse_channel_id_from_url(channel_url)
+                    if channel_id:
+                        channel_meta = api_client.get_channel_details(channel_id)
+                        if channel_meta:
+                            logger.info("Using YouTube API for channel metadata (complete data)")
+                            return channel_meta
+            except Exception as e:
+                logger.warning(f"YouTube API extraction failed, falling back to yt-dlp: {e}")
+
+        # Step 2: Try yt-dlp (partial metadata)
+        try:
+            youtube = YouTubeService()
+            channel_meta = youtube.get_channel_metadata(channel_url)
+            if channel_meta and channel_meta.get("channel_id"):
+                logger.info("Using yt-dlp for channel metadata (partial data)")
+                return channel_meta
+        except Exception as e:
+            logger.warning(f"yt-dlp extraction failed, using fallback: {e}")
+
+        # Step 3: Fallback - parse from URL and videos
+        logger.warning("Using fallback method for channel metadata (minimal data)")
+
+        # Parse custom URL from channel URL
+        custom_url = ""
+        if "@" in channel_url:
+            custom_url = channel_url.split("@")[-1].split("/")[0].split("?")[0]
+
+        # Get channel ID and name from helper
+        channel_id = self._parse_channel_id_from_url(channel_url)
+        channel_name = self._get_channel_name_from_videos()
+
+        return {
+            "channel_id": channel_id or "",
+            "channel_name": channel_name,
+            "description": "",
+            "custom_url": custom_url,
+            "avatar_url": "",
+            "banner_url": "",
+            "country": "",
+            "subscriber_count": 0,
+            "video_count": 0,
+            "created_at": "",
+        }
+
+    def _parse_channel_id_from_url(self, channel_url: str) -> str | None:
+        """Parse channel ID from URL or archive.
+
+        Handles both @username and /channel/ID formats.
+        For @username URLs, resolves by checking existing video metadata.
+
+        Args:
+            channel_url: YouTube channel URL
+
+        Returns:
+            Channel ID or None if not found
+        """
+        # Try to extract from /channel/ format
+        if "/channel/" in channel_url:
+            channel_id = channel_url.split("/channel/")[-1].split("/")[0].split("?")[0]
+            return channel_id
+
+        # For @username format, need to resolve - check existing videos
+        videos_dir = self.repo_path / "videos"
+        if videos_dir.exists():
+            for metadata_file in videos_dir.rglob("metadata.json"):
+                try:
+                    with open(metadata_file, encoding='utf-8') as f:
+                        video_data = json.load(f)
+                        channel_id = video_data.get("channel_id")
+                        if channel_id:
+                            return str(channel_id)
+                except Exception:
+                    continue
+
+        return None
+
+    def _get_channel_name_from_videos(self) -> str:
+        """Get channel name from existing video metadata.
+
+        Returns:
+            Channel name or empty string if not found
+        """
+        videos_dir = self.repo_path / "videos"
+        if videos_dir.exists():
+            for metadata_file in videos_dir.rglob("metadata.json"):
+                try:
+                    with open(metadata_file, encoding='utf-8') as f:
+                        video_data = json.load(f)
+                        channel_name = video_data.get("channel_name")
+                        if channel_name:
+                            return str(channel_name)
+                except Exception:
+                    continue
+        return ""

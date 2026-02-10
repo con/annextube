@@ -1,0 +1,31 @@
+.pkg: _optional_hooks> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+.pkg: get_requires_for_build_sdist> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+.pkg: build_sdist> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+py310: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/50/annextube-0.2.1.post53+g55debf93b.tar.gz
+py310: commands[0]> pytest --ignore=tests/e2e/test_web_ui.py tests/
+============================= test session starts ==============================
+platform linux -- Python 3.10.19, pytest-9.0.2, pluggy-1.6.0
+cachedir: .tox/py310/.pytest_cache
+rootdir: /home/yoh/proj/annextube
+configfile: pyproject.toml
+plugins: asyncio-1.3.0, timeout-2.4.0, cov-7.0.0
+asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 170 items
+
+tests/e2e/test_multi_channel.py ROOT: [3955823] KeyboardInterrupt - teardown started
+ROOT: interrupt tox environment: py310
+ROOT: requested interrupt of 3958198 from 3955823, activate in 0.00
+ROOT: send signal SIGINT(2) to 3958198 from 3955823 with timeout 0.30
+ROOT: send signal SIGTERM(15) to 3958198 from 3955823 with timeout 0.20
+ROOT: interrupt finished with success
+.pkg: interrupt tox environment: .pkg
+py310: exit -15 (35.66 seconds) /home/yoh/proj/annextube> pytest --ignore=tests/e2e/test_web_ui.py tests/ pid=3958198
+  py310: FAIL code -15 (68.03=setup[32.37]+cmd[35.66] seconds)
+  py311: FAIL code -3 (0.01 seconds)
+  py312: FAIL code -3 (0.01 seconds)
+  py313: FAIL code -3 (0.01 seconds)
+  py314: FAIL code -3 (0.01 seconds)
+  lint: FAIL code -3 (0.01 seconds)
+  type: FAIL code -3 (0.01 seconds)
+  e2e: FAIL code -3 (0.01 seconds)
+  evaluation failed :( (68.18 seconds)

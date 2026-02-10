@@ -1,0 +1,51 @@
+2:36:17 PM [vite-plugin-svelte] /home/yoh/proj/annextube/frontend/src/components/FilterPanel.svelte:167:6 A11y: A form label must be associated with a control.
+165:     <!-- Date Range -->
+166:     <div class="filter-group">
+167:       <label class="filter-label">Date Range</label>
+           ^
+168:       <div class="date-presets">
+169:         <button type="button" class="preset-btn" class:active={activeDatePreset === 'week'} on:click={() => setDateRange('week')}>Last Week</button>
+2:36:17 PM [vite-plugin-svelte] /home/yoh/proj/annextube/frontend/src/components/FilterPanel.svelte:184:6 A11y: A form label must be associated with a control.
+182:     <!-- Channels -->
+183:     <div class="filter-group">
+184:       <label class="filter-label">
+           ^
+185:         Channels
+186:         {#if selectedChannels.length > 0}
+2:36:17 PM [vite-plugin-svelte] /home/yoh/proj/annextube/frontend/src/components/FilterPanel.svelte:200:8 A11y: A form label must be associated with a control.
+198:     {#if playlists.length > 0}
+199:       <div class="filter-group">
+200:         <label class="filter-label">
+             ^
+201:           Playlists
+202:           {#if selectedPlaylists.length > 0}
+2:36:17 PM [vite-plugin-svelte] /home/yoh/proj/annextube/frontend/src/components/FilterPanel.svelte:219:8 A11y: A form label must be associated with a control.
+217:     {#if availableTags.length > 0}
+218:       <div class="filter-group">
+219:         <label class="filter-label">
+             ^
+220:           Tags
+221:           {#if selectedTags.length > 0}
+2:36:17 PM [vite-plugin-svelte] /home/yoh/proj/annextube/frontend/src/components/FilterPanel.svelte:235:6 A11y: A form label must be associated with a control.
+233:     <!-- Download Status -->
+234:     <div class="filter-group">
+235:       <label class="filter-label">Video Availability</label>
+           ^
+236:       <select bind:value={selectedStatusFilter} class="filter-select">
+237:         <option value="all">All Videos</option>
+2:36:17 PM [vite-plugin-svelte] /home/yoh/proj/annextube/frontend/src/components/FilterPanel.svelte:245:6 A11y: A form label must be associated with a control.
+243:     <!-- Sort -->
+244:     <div class="filter-group">
+245:       <label class="filter-label">Sort By</label>
+           ^
+246:       <div class="sort-controls">
+247:         <select bind:value={sortField} class="sort-select">
+2:36:18 PM [vite-plugin-svelte] /home/yoh/proj/annextube/frontend/src/components/VideoPlayer.svelte:127:10 A11y: <video> elements must have a <track kind="captions">
+125:           </div>
+126:         {:else}
+127:           <video
+               ^
+128:             controls
+129:             crossorigin="anonymous"
+[1A[2K[WebServer] Error: /home/yoh/proj/annextube/test-archives/fake-home-hierarchical-test/apopyk-archive is not an annextube archive. Run 'annextube init' first.
+[WebServer] Aborted!

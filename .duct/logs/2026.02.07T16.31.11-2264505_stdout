@@ -1,0 +1,1145 @@
+.pkg: _optional_hooks> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+.pkg: get_requires_for_build_sdist> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+.pkg: build_sdist> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+py312: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/42/annextube-0.2.1.post49+gcc941a0b0.tar.gz
+py312: commands[0]> pytest --ignore=tests/e2e/test_web_ui.py tests/
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+cachedir: .tox/py312/.pytest_cache
+rootdir: /home/yoh/proj/annextube
+configfile: pyproject.toml
+plugins: asyncio-1.3.0, timeout-2.4.0, cov-7.0.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 170 items
+
+tests/e2e/test_multi_channel.py FF                                       [  1%]
+tests/integration/test_api_enhanced_metadata.py .......ss.               [  7%]
+tests/integration/test_checkpoint_commits.py FFFFFF                      [ 10%]
+tests/integration/test_comprehensive_backup.py ..                        [ 11%]
+tests/integration/test_e2e_backup_features.py ..F                        [ 13%]
+tests/integration/test_incremental_backup.py FF                          [ 14%]
+tests/integration/test_new_video_components.py ..                        [ 15%]
+tests/integration/test_no_timestamp_commits.py ...                       [ 17%]
+tests/integration/test_update_annexed_files.py ..                        [ 18%]
+tests/test_component_mode_bug.py ..                                      [ 20%]
+tests/test_date_filtering.py .....                                       [ 22%]
+tests/test_tsv_refactoring.py .....                                      [ 25%]
+tests/unit/test_archive_discovery.py ........................            [ 40%]
+tests/unit/test_atomic_file_write.py ..........                          [ 45%]
+tests/unit/test_git_annex_metadata.py ......                             [ 49%]
+tests/unit/test_git_annex_timestamp_filter.py ......                     [ 52%]
+tests/unit/test_hierarchical_video_paths.py .............                [ 60%]
+tests/unit/test_new_video_detection.py ..                                [ 61%]
+tests/unit/test_playlist_model.py ...                                    [ 63%]
+tests/unit/test_quota_estimator.py .........                             [ 68%]
+tests/unit/test_quota_manager.py .....................                   [ 81%]
+tests/unit/test_video_model.py ...                                       [ 82%]
+tests/unit/test_youtube_api_client.py ...................                [ 94%]
+tests/unit/test_youtube_api_quota_handling.py ..........                 [100%]
+
+=================================== FAILURES ===================================
+____________________ test_multi_channel_collection_workflow ____________________
+
+    @pytest.mark.network
+    @pytest.mark.ai_generated
+    def test_multi_channel_collection_workflow():
+        """Test complete multi-channel collection workflow.
+    
+        Creates a collection with two channels (AnnexTubeTesting and limited apopyk),
+        aggregates metadata, and verifies web UI generation.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            collection_dir = Path(tmpdir) / "collection"
+            collection_dir.mkdir()
+    
+            # Channel 1: AnnexTubeTesting (limit 3 videos)
+            ch1_dir = collection_dir / "ch-annextubetesting"
+            ch1_dir.mkdir()
+    
+            print("\n=== Creating channel 1: AnnexTubeTesting ===")
+>           result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "annextube",
+                    "init",
+                    str(ch1_dir),
+                    "https://www.youtube.com/@AnnexTubeTesting",
+                    "--limit",
+                    "3",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+tests/e2e/test_multi_channel.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpp79m9ben/collection/ch-annextubetesting', 'https://www.youtube.com/@AnnexTubeTesting', ...],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py312/bin/python...>
+stdout = ''
+stderr = "/home/yoh/proj/annextube/.tox/py312/bin/python3: No module named annextube.__main__; 'annextube' is a package and cannot be directly executed\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpp79m9ben/collection/ch-annextubetesting', 'https://www.youtube.com/@AnnexTubeTesting', '--limit', '3', '--comments', '0', '--no-captions', '--no-thumbnails']' returned non-zero exit status 1.
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: CalledProcessError
+----------------------------- Captured stdout call -----------------------------
+
+=== Creating channel 1: AnnexTubeTesting ===
+__________________________ test_aggregate_with_depth ___________________________
+
+    @pytest.mark.network
+    @pytest.mark.ai_generated
+    def test_aggregate_with_depth():
+        """Test aggregate command with different depth levels."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            collection_dir = Path(tmpdir) / "collection"
+            collection_dir.mkdir()
+    
+            # Create nested structure: org/channel/
+            org_dir = collection_dir / "ukraine"
+            org_dir.mkdir()
+            ch_dir = org_dir / "ch-annextubetesting"
+            ch_dir.mkdir()
+    
+            print("\n=== Creating nested channel ===")
+>           result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "init",
+                    str(ch_dir),
+                    "https://www.youtube.com/@AnnexTubeTesting",
+                    "--limit",
+                    "2",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+tests/e2e/test_multi_channel.py:253: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmp0p0oq11s/collection/ukraine/ch-annextubetesting', 'https://www.youtube.com/@AnnexTubeTesting', ...],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py312/bin/python...>
+stdout = ''
+stderr = "/home/yoh/proj/annextube/.tox/py312/bin/python3: No module named annextube.__main__; 'annextube' is a package and cannot be directly executed\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmp0p0oq11s/collection/ukraine/ch-annextubetesting', 'https://www.youtube.com/@AnnexTubeTesting', '--limit', '2', '--comments', '0', '--no-captions', '--no-thumbnails']' returned non-zero exit status 1.
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: CalledProcessError
+----------------------------- Captured stdout call -----------------------------
+
+=== Creating nested channel ===
+______ TestCheckpointCommits.test_checkpoint_creates_intermediate_commits ______
+
+self = <test_checkpoint_commits.TestCheckpointCommits object at 0x7f3436507f20>
+
+    def test_checkpoint_creates_intermediate_commits(self):
+        """Test that checkpoints create commits at specified intervals."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_test_repo(repo_path)
+    
+            # Configure with small checkpoint interval (every 2 videos)
+            config = Config(
+                sources=[SourceConfig(url="test-channel", type="channel")],
+                components=ComponentsConfig(videos=False, metadata=True, captions=False),
+                filters=FiltersConfig(limit=5),
+                backup=BackupConfig(checkpoint_interval=2, checkpoint_enabled=True),
+            )
+    
+            archiver = Archiver(repo_path, config)
+    
+            # Mock YouTube service to return 5 videos
+            mock_videos = [
+                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+                for i in range(1, 6)
+            ]
+    
+            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                    # Mock video objects
+                    def create_mock_video(meta):
+                        video = MagicMock()
+                        video.video_id = meta["id"]
+                        video.title = meta["title"]
+                        video.upload_date = "2026-01-01"
+                        return video
+                    mock_to_video.side_effect = create_mock_video
+    
+                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+                        # Run backup
+>                       archiver.backup_channel("test-channel")
+
+tests/integration/test_checkpoint_commits.py:123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:715: in backup_channel
+    caption_count = self._process_video(video)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1139: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1143: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1204: in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:66: in mock_process_video
+    video_dir = archiver._get_video_path(video)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:445: in _get_video_path
+    'channel_name': sanitize_filename(video.channel_name),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:31: in sanitize_filename
+    text = re.sub(r'[^\w\s-]', '', text)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pattern = '[^\\w\\s-]', repl = ''
+string = <MagicMock name='mock.channel_name' id='139862224098208'>, count = 0
+flags = 0
+
+    def sub(pattern, repl, string, count=0, flags=0):
+        """Return the string obtained by replacing the leftmost
+        non-overlapping occurrences of the pattern in string by the
+        replacement repl.  repl can be either a string or a callable;
+        if a string, backslash escapes in it are processed.  If it is
+        a callable, it's passed the Match object and must return
+        a replacement string to be used."""
+>       return _compile(pattern, flags).sub(repl, string, count)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: expected string or bytes-like object, got 'MagicMock'
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/re/__init__.py:186: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  annextube.services.archiver:archiver.py:432 Failed to parse date from published_at: Invalid isoformat string: "<MagicMock name='mock.published_at' id='139862226270976'>"
+_____ TestCheckpointCommits.test_checkpoint_disabled_creates_single_commit _____
+
+self = <test_checkpoint_commits.TestCheckpointCommits object at 0x7f3436510290>
+
+    def test_checkpoint_disabled_creates_single_commit(self):
+        """Test that disabling checkpoints creates only final commit."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_test_repo(repo_path)
+    
+            # Disable checkpoints
+            config = Config(
+                sources=[SourceConfig(url="test-channel", type="channel")],
+                components=ComponentsConfig(videos=False, metadata=True, captions=False),
+                filters=FiltersConfig(limit=5),
+                backup=BackupConfig(checkpoint_enabled=False),
+            )
+    
+            archiver = Archiver(repo_path, config)
+    
+            # Mock YouTube service
+            mock_videos = [
+                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+                for i in range(1, 6)
+            ]
+    
+            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                    def create_mock_video(meta):
+                        video = MagicMock()
+                        video.video_id = meta["id"]
+                        video.title = meta["title"]
+                        video.upload_date = "2026-01-01"
+                        return video
+                    mock_to_video.side_effect = create_mock_video
+    
+                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+>                       archiver.backup_channel("test-channel")
+
+tests/integration/test_checkpoint_commits.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:715: in backup_channel
+    caption_count = self._process_video(video)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1139: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1143: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1204: in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:66: in mock_process_video
+    video_dir = archiver._get_video_path(video)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:445: in _get_video_path
+    'channel_name': sanitize_filename(video.channel_name),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:31: in sanitize_filename
+    text = re.sub(r'[^\w\s-]', '', text)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pattern = '[^\\w\\s-]', repl = ''
+string = <MagicMock name='mock.channel_name' id='139862224626672'>, count = 0
+flags = 0
+
+    def sub(pattern, repl, string, count=0, flags=0):
+        """Return the string obtained by replacing the leftmost
+        non-overlapping occurrences of the pattern in string by the
+        replacement repl.  repl can be either a string or a callable;
+        if a string, backslash escapes in it are processed.  If it is
+        a callable, it's passed the Match object and must return
+        a replacement string to be used."""
+>       return _compile(pattern, flags).sub(repl, string, count)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: expected string or bytes-like object, got 'MagicMock'
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/re/__init__.py:186: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  annextube.services.archiver:archiver.py:432 Failed to parse date from published_at: Invalid isoformat string: "<MagicMock name='mock.published_at' id='139862224450864'>"
+____________ TestCheckpointCommits.test_checkpoint_regenerates_tsvs ____________
+
+self = <test_checkpoint_commits.TestCheckpointCommits object at 0x7f3436510650>
+
+    def test_checkpoint_regenerates_tsvs(self):
+        """Test that checkpoints regenerate TSV files."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_test_repo(repo_path)
+    
+            config = Config(
+                sources=[SourceConfig(url="test-channel", type="channel")],
+                components=ComponentsConfig(videos=False, metadata=True, captions=False),
+                filters=FiltersConfig(limit=4),
+                backup=BackupConfig(checkpoint_interval=2, checkpoint_enabled=True),
+            )
+    
+            archiver = Archiver(repo_path, config)
+    
+            mock_videos = [
+                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+                for i in range(1, 5)
+            ]
+    
+            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                    def create_mock_video(meta):
+                        video = MagicMock()
+                        video.video_id = meta["id"]
+                        video.title = meta["title"]
+                        video.upload_date = "2026-01-01"
+                        return video
+                    mock_to_video.side_effect = create_mock_video
+    
+                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+                        # Spy on export.generate_all calls
+                        original_generate = archiver.export.generate_all
+                        generate_calls = []
+    
+                        def track_generate():
+                            generate_calls.append(_count_metadata_files(repo_path))
+                            return original_generate()
+    
+                        with patch.object(archiver.export, "generate_all", side_effect=track_generate):
+>                           archiver.backup_channel("test-channel")
+
+tests/integration/test_checkpoint_commits.py:225: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:715: in backup_channel
+    caption_count = self._process_video(video)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1139: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1143: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1204: in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:66: in mock_process_video
+    video_dir = archiver._get_video_path(video)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:445: in _get_video_path
+    'channel_name': sanitize_filename(video.channel_name),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:31: in sanitize_filename
+    text = re.sub(r'[^\w\s-]', '', text)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pattern = '[^\\w\\s-]', repl = ''
+string = <MagicMock name='mock.channel_name' id='139862225744432'>, count = 0
+flags = 0
+
+    def sub(pattern, repl, string, count=0, flags=0):
+        """Return the string obtained by replacing the leftmost
+        non-overlapping occurrences of the pattern in string by the
+        replacement repl.  repl can be either a string or a callable;
+        if a string, backslash escapes in it are processed.  If it is
+        a callable, it's passed the Match object and must return
+        a replacement string to be used."""
+>       return _compile(pattern, flags).sub(repl, string, count)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: expected string or bytes-like object, got 'MagicMock'
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/re/__init__.py:186: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  annextube.services.archiver:archiver.py:432 Failed to parse date from published_at: Invalid isoformat string: "<MagicMock name='mock.published_at' id='139862224683376'>"
+__________ TestCheckpointCommits.test_keyboard_interrupt_auto_commits __________
+
+self = <test_checkpoint_commits.TestCheckpointCommits object at 0x7f3436510980>
+
+    def test_keyboard_interrupt_auto_commits(self):
+        """Test that Ctrl+C triggers auto-commit of partial progress."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_test_repo(repo_path)
+    
+            config = Config(
+                sources=[SourceConfig(url="test-channel", type="channel")],
+                components=ComponentsConfig(videos=False, metadata=True, captions=False),
+                filters=FiltersConfig(limit=5),
+                backup=BackupConfig(
+                    checkpoint_interval=10,  # Won't trigger during test
+                    auto_commit_on_interrupt=True
+                ),
+            )
+    
+            archiver = Archiver(repo_path, config)
+    
+            mock_videos = [
+                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+                for i in range(1, 6)
+            ]
+    
+            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                    def create_mock_video(meta):
+                        video = MagicMock()
+                        video.video_id = meta["id"]
+                        video.title = meta["title"]
+                        video.upload_date = "2026-01-01"
+                        return video
+                    mock_to_video.side_effect = create_mock_video
+    
+                    # Simulate Ctrl+C after processing 3 videos
+                    process_count = [0]
+                    base_mock = _create_process_video_mock(archiver)
+    
+                    def process_with_interrupt(video):
+                        process_count[0] += 1
+                        # Create files for first 2 videos
+                        if process_count[0] < 3:
+                            result = base_mock(video)
+                        if process_count[0] == 3:
+                            raise KeyboardInterrupt("User interrupted")
+                        return 0
+    
+                    with patch.object(archiver, "_process_video", side_effect=process_with_interrupt):
+                        # Should raise KeyboardInterrupt but auto-commit first
+                        with pytest.raises(KeyboardInterrupt):
+>                           archiver.backup_channel("test-channel")
+
+tests/integration/test_checkpoint_commits.py:283: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:715: in backup_channel
+    caption_count = self._process_video(video)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1139: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1143: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1204: in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:275: in process_with_interrupt
+    result = base_mock(video)
+             ^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:66: in mock_process_video
+    video_dir = archiver._get_video_path(video)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:445: in _get_video_path
+    'channel_name': sanitize_filename(video.channel_name),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:31: in sanitize_filename
+    text = re.sub(r'[^\w\s-]', '', text)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pattern = '[^\\w\\s-]', repl = ''
+string = <MagicMock name='mock.channel_name' id='139862225064048'>, count = 0
+flags = 0
+
+    def sub(pattern, repl, string, count=0, flags=0):
+        """Return the string obtained by replacing the leftmost
+        non-overlapping occurrences of the pattern in string by the
+        replacement repl.  repl can be either a string or a callable;
+        if a string, backslash escapes in it are processed.  If it is
+        a callable, it's passed the Match object and must return
+        a replacement string to be used."""
+>       return _compile(pattern, flags).sub(repl, string, count)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: expected string or bytes-like object, got 'MagicMock'
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/re/__init__.py:186: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  annextube.services.archiver:archiver.py:432 Failed to parse date from published_at: Invalid isoformat string: "<MagicMock name='mock.published_at' id='139862225667616'>"
+______ TestCheckpointCommits.test_keyboard_interrupt_without_auto_commit _______
+
+self = <test_checkpoint_commits.TestCheckpointCommits object at 0x7f3436510c80>
+
+    def test_keyboard_interrupt_without_auto_commit(self):
+        """Test that disabling auto-commit leaves changes uncommitted."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_test_repo(repo_path)
+    
+            config = Config(
+                sources=[SourceConfig(url="test-channel", type="channel")],
+                components=ComponentsConfig(videos=False, metadata=True, captions=False),
+                filters=FiltersConfig(limit=5),
+                backup=BackupConfig(auto_commit_on_interrupt=False),
+            )
+    
+            archiver = Archiver(repo_path, config)
+    
+            mock_videos = [
+                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+                for i in range(1, 6)
+            ]
+    
+            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                    def create_mock_video(meta):
+                        video = MagicMock()
+                        video.video_id = meta["id"]
+                        video.title = meta["title"]
+                        video.upload_date = "2026-01-01"
+                        return video
+                    mock_to_video.side_effect = create_mock_video
+    
+                    process_count = [0]
+                    base_mock = _create_process_video_mock(archiver)
+    
+                    def process_with_interrupt(video):
+                        process_count[0] += 1
+                        # Create files for first 2 videos
+                        if process_count[0] < 3:
+                            result = base_mock(video)
+                        if process_count[0] == 3:
+                            raise KeyboardInterrupt("User interrupted")
+                        return 0
+    
+                    with patch.object(archiver, "_process_video", side_effect=process_with_interrupt):
+                        with pytest.raises(KeyboardInterrupt):
+>                           archiver.backup_channel("test-channel")
+
+tests/integration/test_checkpoint_commits.py:339: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:715: in backup_channel
+    caption_count = self._process_video(video)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1139: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1143: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1204: in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:332: in process_with_interrupt
+    result = base_mock(video)
+             ^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:66: in mock_process_video
+    video_dir = archiver._get_video_path(video)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:445: in _get_video_path
+    'channel_name': sanitize_filename(video.channel_name),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:31: in sanitize_filename
+    text = re.sub(r'[^\w\s-]', '', text)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pattern = '[^\\w\\s-]', repl = ''
+string = <MagicMock name='mock.channel_name' id='139862224109440'>, count = 0
+flags = 0
+
+    def sub(pattern, repl, string, count=0, flags=0):
+        """Return the string obtained by replacing the leftmost
+        non-overlapping occurrences of the pattern in string by the
+        replacement repl.  repl can be either a string or a callable;
+        if a string, backslash escapes in it are processed.  If it is
+        a callable, it's passed the Match object and must return
+        a replacement string to be used."""
+>       return _compile(pattern, flags).sub(repl, string, count)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: expected string or bytes-like object, got 'MagicMock'
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/re/__init__.py:186: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  annextube.services.archiver:archiver.py:432 Failed to parse date from published_at: Invalid isoformat string: "<MagicMock name='mock.published_at' id='139862245984688'>"
+______________ test_checkpoint_interval_zero_disables_checkpoints ______________
+
+    @pytest.mark.ai_generated
+    def test_checkpoint_interval_zero_disables_checkpoints():
+        """Test that checkpoint_interval=0 disables checkpoints."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            _init_test_repo(repo_path)
+    
+            config = Config(
+                sources=[SourceConfig(url="test-channel", type="channel")],
+                components=ComponentsConfig(videos=False, metadata=True, captions=False),
+                filters=FiltersConfig(limit=5),
+                backup=BackupConfig(checkpoint_interval=0),  # Disabled
+            )
+    
+            archiver = Archiver(repo_path, config)
+    
+            mock_videos = [
+                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+                for i in range(1, 6)
+            ]
+    
+            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                    def create_mock_video(meta):
+                        video = MagicMock()
+                        video.video_id = meta["id"]
+                        video.title = meta["title"]
+                        video.upload_date = "2026-01-01"
+                        return video
+                    mock_to_video.side_effect = create_mock_video
+    
+                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+>                       archiver.backup_channel("test-channel")
+
+tests/integration/test_checkpoint_commits.py:389: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:715: in backup_channel
+    caption_count = self._process_video(video)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1139: in __call__
+    return self._mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1143: in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/unittest/mock.py:1204: in _execute_mock_call
+    result = effect(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^
+tests/integration/test_checkpoint_commits.py:66: in mock_process_video
+    video_dir = archiver._get_video_path(video)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:445: in _get_video_path
+    'channel_name': sanitize_filename(video.channel_name),
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.tox/py312/lib/python3.12/site-packages/annextube/services/archiver.py:31: in sanitize_filename
+    text = re.sub(r'[^\w\s-]', '', text)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pattern = '[^\\w\\s-]', repl = ''
+string = <MagicMock name='mock.channel_name' id='139862224984912'>, count = 0
+flags = 0
+
+    def sub(pattern, repl, string, count=0, flags=0):
+        """Return the string obtained by replacing the leftmost
+        non-overlapping occurrences of the pattern in string by the
+        replacement repl.  repl can be either a string or a callable;
+        if a string, backslash escapes in it are processed.  If it is
+        a callable, it's passed the Match object and must return
+        a replacement string to be used."""
+>       return _compile(pattern, flags).sub(repl, string, count)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: expected string or bytes-like object, got 'MagicMock'
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/re/__init__.py:186: TypeError
+------------------------------ Captured log call -------------------------------
+WARNING  annextube.services.archiver:archiver.py:432 Failed to parse date from published_at: Invalid isoformat string: "<MagicMock name='mock.published_at' id='139862225817424'>"
+_ TestE2EBackupFeatures.test_default_init_includes_playlists_with_title_paths __
+
+self = <test_e2e_backup_features.TestE2EBackupFeatures object at 0x7f3436510c50>
+
+    def test_default_init_includes_playlists_with_title_paths(self) -> None:
+        """Test that default init config includes playlists and uses title-based paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Use annextube init with default settings (playlists=all, podcasts=all by default)
+            # Using yarikoptic channel which has playlists
+            channel_url = "https://www.youtube.com/@yarikoptic"
+    
+>           subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
+                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                check=True,
+                capture_output=True
+            )
+
+tests/integration/test_e2e_backup_features.py:194: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpt7mos1wc', 'https://www.youtube.com/@yarikoptic', ...],)
+kwargs = {'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py312/bin/python...>
+stdout = b''
+stderr = b"/home/yoh/proj/annextube/.tox/py312/bin/python3: No module named annextube.__main__; 'annextube' is a package and cannot be directly executed\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpt7mos1wc', 'https://www.youtube.com/@yarikoptic', '--no-videos', '--comments', '0', '--no-captions', '--limit', '2']' returned non-zero exit status 1.
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: CalledProcessError
+___________________ test_incremental_backup_no_reprocessing ____________________
+
+    @pytest.mark.ai_generated
+    def test_incremental_backup_no_reprocessing():
+        """Test that running backup twice doesn't reprocess existing videos.
+    
+        This test verifies that the incremental update mode correctly identifies
+        and skips already-downloaded videos, ensuring efficiency.
+        """
+        # Use the dedicated AnnexTube Test Channel (10 known videos)
+        test_channel = "https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA"
+        limit = 3  # Just 3 videos for fast testing
+    
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Initialize repository (disable playlists to test channel-only incremental behavior)
+>           result = subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), test_channel,
+                 "--no-videos", "--comments", "0", "--no-captions",
+                 "--include-playlists", "none"],
+                capture_output=True,
+                text=True,
+                check=True
+            )
+
+tests/integration/test_incremental_backup.py:26: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpeppgja35', 'https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA', ...],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py312/bin/python...>
+stdout = ''
+stderr = "/home/yoh/proj/annextube/.tox/py312/bin/python3: No module named annextube.__main__; 'annextube' is a package and cannot be directly executed\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpeppgja35', 'https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA', '--no-videos', '--comments', '0', '--no-captions', '--include-playlists', 'none']' returned non-zero exit status 1.
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: CalledProcessError
+__________________ test_incremental_backup_detects_new_videos __________________
+
+    @pytest.mark.ai_generated
+    def test_incremental_backup_detects_new_videos():
+        """Test that incremental backup correctly detects and fetches new videos.
+    
+        This test uses a larger limit on the second run to simulate new videos
+        being available.
+        """
+        # Use the dedicated AnnexTube Test Channel (10 known videos)
+        test_channel = "https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA"
+    
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Initialize repository (disable playlists to test channel-only incremental behavior)
+>           subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), test_channel,
+                 "--no-videos", "--comments", "0", "--no-captions",
+                 "--include-playlists", "none"],
+                check=True,
+                capture_output=True
+            )
+
+tests/integration/test_incremental_backup.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpcz0r5038', 'https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA', ...],)
+kwargs = {'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py312/bin/python...>
+stdout = b''
+stderr = b"/home/yoh/proj/annextube/.tox/py312/bin/python3: No module named annextube.__main__; 'annextube' is a package and cannot be directly executed\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'init', '/home/yoh/.tmp/tmpcz0r5038', 'https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA', '--no-videos', '--comments', '0', '--no-captions', '--include-playlists', 'none']' returned non-zero exit status 1.
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: CalledProcessError
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:377: YOUTUBE_API_KEY not set - skipping real API test
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:407: YOUTUBE_API_KEY not set - skipping real API test
+FAILED tests/e2e/test_multi_channel.py::test_multi_channel_collection_workflow
+FAILED tests/e2e/test_multi_channel.py::test_aggregate_with_depth - subproces...
+FAILED tests/integration/test_checkpoint_commits.py::TestCheckpointCommits::test_checkpoint_creates_intermediate_commits
+FAILED tests/integration/test_checkpoint_commits.py::TestCheckpointCommits::test_checkpoint_disabled_creates_single_commit
+FAILED tests/integration/test_checkpoint_commits.py::TestCheckpointCommits::test_checkpoint_regenerates_tsvs
+FAILED tests/integration/test_checkpoint_commits.py::TestCheckpointCommits::test_keyboard_interrupt_auto_commits
+FAILED tests/integration/test_checkpoint_commits.py::TestCheckpointCommits::test_keyboard_interrupt_without_auto_commit
+FAILED tests/integration/test_checkpoint_commits.py::test_checkpoint_interval_zero_disables_checkpoints
+FAILED tests/integration/test_e2e_backup_features.py::TestE2EBackupFeatures::test_default_init_includes_playlists_with_title_paths
+FAILED tests/integration/test_incremental_backup.py::test_incremental_backup_no_reprocessing
+FAILED tests/integration/test_incremental_backup.py::test_incremental_backup_detects_new_videos
+============ 11 failed, 157 passed, 2 skipped in 134.33s (0:02:14) =============
+py312: exit 1 (134.81 seconds) /home/yoh/proj/annextube> pytest --ignore=tests/e2e/test_web_ui.py tests/ pid=2265638
+.pkg: _exit> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+  py312: FAIL code 1 (166.89=setup[32.08]+cmd[134.81] seconds)
+  evaluation failed :( (167.10 seconds)

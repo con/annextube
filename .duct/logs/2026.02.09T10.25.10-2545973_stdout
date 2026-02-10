@@ -1,0 +1,3034 @@
+py310: venv> .venv/bin/uv venv -p cpython3.10 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/py310
+py310: install_deps> .venv/bin/uv pip install '.[test]'
+.pkg: venv> .venv/bin/uv venv -p /home/yoh/proj/annextube/.venv/bin/python3 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/.pkg
+.pkg: install_requires> .venv/bin/uv pip install hatch-vcs hatchling
+.pkg: _optional_hooks> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+.pkg: get_requires_for_build_sdist> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+.pkg: build_sdist> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+py310: install_package_deps> .venv/bin/uv pip install 'click>=8.0.0' 'datasalad>=0.3.0' 'google-api-python-client>=2.0.0' 'jsonschema>=4.0.0' 'platformdirs>=4.0.0' 'tomli>=2.0.0; python_version < "3.11"' 'yt-dlp>=2026.2.0'
+py310: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/1/annextube-0.2.1.post55+g5e8941eb6.tar.gz
+py310: commands[0]> pytest --ignore=tests/e2e/test_web_ui.py tests/
+============================= test session starts ==============================
+platform linux -- Python 3.10.17, pytest-9.0.2, pluggy-1.6.0
+cachedir: .tox/py310/.pytest_cache
+rootdir: /home/yoh/proj/annextube
+configfile: pyproject.toml
+plugins: asyncio-1.3.0, cov-7.0.0, timeout-2.4.0
+asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 176 items
+
+tests/e2e/test_multi_channel.py F.                                       [  1%]
+tests/integration/test_api_enhanced_metadata.py .......ss.               [  6%]
+tests/integration/test_checkpoint_commits.py ......                      [ 10%]
+tests/integration/test_comprehensive_backup.py ..                        [ 11%]
+tests/integration/test_e2e_backup_features.py ..F                        [ 13%]
+tests/integration/test_incremental_backup.py ..                          [ 14%]
+tests/integration/test_new_video_components.py ..                        [ 15%]
+tests/integration/test_no_timestamp_commits.py ...                       [ 17%]
+tests/integration/test_update_annexed_files.py ..                        [ 18%]
+tests/test_component_mode_bug.py ..                                      [ 19%]
+tests/test_date_filtering.py .....                                       [ 22%]
+tests/test_tsv_refactoring.py .....                                      [ 25%]
+tests/unit/test_archive_discovery.py ........................            [ 38%]
+tests/unit/test_atomic_file_write.py ..........                          [ 44%]
+tests/unit/test_git_annex_metadata.py ......                             [ 47%]
+tests/unit/test_git_annex_timestamp_filter.py ......                     [ 51%]
+tests/unit/test_hierarchical_video_paths.py .............                [ 58%]
+tests/unit/test_new_video_detection.py ..                                [ 59%]
+tests/unit/test_playlist_model.py ...                                    [ 61%]
+tests/unit/test_quota_estimator.py .........                             [ 66%]
+tests/unit/test_quota_manager.py .....................                   [ 78%]
+tests/unit/test_unavailable_video_filtering.py ......                    [ 81%]
+tests/unit/test_video_model.py ...                                       [ 83%]
+tests/unit/test_youtube_api_client.py ...................                [ 94%]
+tests/unit/test_youtube_api_quota_handling.py ..........                 [100%]
+
+=================================== FAILURES ===================================
+____________________ test_multi_channel_collection_workflow ____________________
+
+    @pytest.mark.network
+    @pytest.mark.ai_generated
+    def test_multi_channel_collection_workflow():
+        """Test complete multi-channel collection workflow.
+    
+        Creates a collection with two channels (AnnexTubeTesting and limited apopyk),
+        aggregates metadata, and verifies web UI generation.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            collection_dir = Path(tmpdir) / "collection"
+            collection_dir.mkdir()
+    
+            # Channel 1: AnnexTubeTesting (limit 3 videos)
+            ch1_dir = collection_dir / "ch-annextubetesting"
+            ch1_dir.mkdir()
+    
+            print("\n=== Creating channel 1: AnnexTubeTesting ===")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "annextube",
+                    "init",
+                    str(ch1_dir),
+                    "https://www.youtube.com/@AnnexTubeTesting",
+                    "--limit",
+                    "3",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 1
+            print("\n=== Backing up channel 1 ===")
+            result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch1_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Export channel.json for channel 1
+            print("\n=== Exporting channel.json for channel 1 ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "export",
+                    "--output-dir",
+                    str(ch1_dir),
+                    "--channel-json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Channel 2: Andriy Popyk (limit 2 videos)
+            ch2_dir = collection_dir / "ch-apopyk"
+            ch2_dir.mkdir()
+    
+            print("\n=== Creating channel 2: Andriy Popyk ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "init",
+                    str(ch2_dir),
+                    "https://www.youtube.com/@apopyk",
+                    "--limit",
+                    "2",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 2
+            print("\n=== Backing up channel 2 ===")
+>           result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch2_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+tests/e2e/test_multi_channel.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py310/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpstgnlkwf/collection/ch-apopyk'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py310/bin/python...>
+stdout = 'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos per source (most recent)\n\n[1/1] Channel: https://www.youtube.com/@apopyk\n'
+stderr = "/home/yoh/proj/annextube/.tox/py310/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: Futu...in range(256)\nError: 'latin-1' codec can't encode characters in position 74-77: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py310/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpstgnlkwf/collection/ch-apopyk']' returned non-zero exit status 1.
+
+../../.local/share/uv/python/cpython-3.10.17-linux-x86_64-gnu/lib/python3.10/subprocess.py:526: CalledProcessError
+----------------------------- Captured stdout call -----------------------------
+
+=== Creating channel 1: AnnexTubeTesting ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpstgnlkwf/collection/ch-annextubetesting/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpstgnlkwf/collection/ch-annextubetesting/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@AnnexTubeTesting
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 3 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 1 ===
+Update mode: all-incremental
+Default social window: 2026-02-02 to now
+Found 1 enabled source(s)
+Limit: 3 videos per source (most recent)
+
+[1/1] Channel: https://www.youtube.com/@AnnexTubeTesting
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/video.mkv (from web...) 
+
+19%   1 KiB             509 B/s 8s
+100%  5.24 KiB          8 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/video.mkv (from web...) 
+
+22%   1 KiB             457 B/s 8s
+100%  4.62 KiB          8 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/video.mkv (from web...) 
+
+29%   1 KiB             587 B/s 4s
+100%  3.47 KiB        149 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/metadata.json (non-large file; adding content to git repository) ok
+ok
+ok
+(recording state in git...)
+add playlists/Videos-with-Location-Metadata/playlist.json (non-large file; adding content to git repository) add playlists/Videos-with-Location-Metadata/0002_2026-02-05_Test-Video-Recorded-in-London add playlists/Videos-with-Location-Metadata/0001_2026-02-05_Test-Video-Recorded-in-New-York-City ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           160 KiB/s 0sok
+ok
+
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-With-English-Captions/video.mkv (from web...) 
+
+6%    1 KiB             460 B/s 34s
+100%  16.34 KiB         1 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/video.mkv (from web...) 
+
+7%    1 KiB             557 B/s 23s
+100%  13.79 KiB         7 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-With-English-Captions/metadata.json (non-large file; adding content to git repository) add playlists/Videos-with-Captions/playlist.json (non-large file; adding content to git repository) add playlists/Videos-with-Captions/0001_2026-02-05_Test-Video-With-English-Captions add playlists/Videos-with-Captions/0002_2026-02-05_Test-Video-Multi-language-Captions ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add videos/videos.tsv add playlists/playlists.tsv (non-large file; adding content to git repository) (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           415 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-1/video.mkv (from web...) 
+
+27%   1 KiB             366 B/s 7s
+100%  3.72 KiB          4 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-2/video.mkv (from web...) 
+
+29%   1 KiB             751 B/s 3s
+100%  3.48 KiB          4 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-3/video.mkv (from web...) 
+
+22%   1 KiB             438 B/s 8s
+100%  4.63 KiB          7 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add playlists/Mixed-License-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-1/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-2/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-3/metadata.json (non-large file; adding content to git repository) add playlists/Mixed-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 add playlists/Mixed-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 add playlists/Mixed-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 ok
+ok
+ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add videos/videos.tsv (non-large file; adding content to git repository) add playlists/playlists.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           556 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/video.mkv (from web...) 
+
+34%   1 KiB             536 B/s 3s
+100%  2.94 KiB         43 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/video.mkv (from web...) 
+
+16%   1 KiB             420 B/s 12s
+100%  6.08 KiB          2 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/metadata.json (non-large file; adding content to git repository) add playlists/All-Creative-Commons-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/metadata.json (non-large file; adding content to git repository) add playlists/All-Creative-Commons-Videos/0001_2026-02-05_Test-Video-Creative-Commons-1 add playlists/All-Creative-Commons-Videos/0002_2026-02-05_Test-Video-Creative-Commons-2 ok
+add playlists/All-Creative-Commons-Videos/0003_2026-02-05_Test-Video-Creative-Commons-3 ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B           349 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+add playlists/All-Standard-License-Videos/playlist.json (non-large file; adding content to git repository) add playlists/All-Standard-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 ok
+add playlists/All-Standard-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 add playlists/All-Standard-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B           469 KiB/s 0s
+                                  
+ok
+ok
+(recording state in git...)
+add authors.tsv 
+
+100%  219 B           404 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+  Summary:
+    Videos processed: 10
+    Videos tracked: 10
+    Metadata files: 10
+    Captions downloaded: 0
+
+============================================================
+Total Summary:
+  Sources processed: 1
+  Videos tracked: 10
+  Metadata files saved: 10
+
+[ok] Backup complete!
+
+
+=== Exporting channel.json for channel 1 ===
+[ok] Generated /home/yoh/.tmp/tmpstgnlkwf/collection/ch-annextubetesting/videos/videos.tsv
+[ok] Generated /home/yoh/.tmp/tmpstgnlkwf/collection/ch-annextubetesting/playlists/playlists.tsv
+[ok] Generated /home/yoh/.tmp/tmpstgnlkwf/collection/ch-annextubetesting/authors.tsv
+[ok] Generated /home/yoh/.tmp/tmpstgnlkwf/collection/ch-annextubetesting/channel.json
+
+[ok] Export complete!
+
+
+=== Creating channel 2: Andriy Popyk ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpstgnlkwf/collection/ch-apopyk/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpstgnlkwf/collection/ch-apopyk/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@apopyk
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 2 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 2 ===
+_ TestE2EBackupFeatures.test_default_init_includes_playlists_with_title_paths __
+
+self = <test_e2e_backup_features.TestE2EBackupFeatures object at 0x7fe758723ac0>
+
+    def test_default_init_includes_playlists_with_title_paths(self) -> None:
+        """Test that default init config includes playlists and uses title-based paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Use annextube init with default settings (playlists=all, podcasts=all by default)
+            # Using yarikoptic channel which has playlists
+            channel_url = "https://www.youtube.com/@yarikoptic"
+    
+            subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
+                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                check=True,
+                capture_output=True
+            )
+    
+            # Run backup to discover and backup playlists
+>           subprocess.run(
+                [sys.executable, "-m", "annextube", "backup",
+                 "--output-dir", str(repo_path)],
+                check=True,
+                capture_output=True
+            )
+
+tests/integration/test_e2e_backup_features.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py310/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmp0sduont1'],)
+kwargs = {'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py310/bin/python...>
+stdout = b'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos p...nok\n\r                                  \r\r                                  \rok\nok\n(recording state in git...)\n'
+stderr = b"/home/yoh/proj/annextube/.tox/py310/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: Fut...in range(256)\nError: 'latin-1' codec can't encode characters in position 37-39: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py310/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmp0sduont1']' returned non-zero exit status 1.
+
+../../.local/share/uv/python/cpython-3.10.17-linux-x86_64-gnu/lib/python3.10/subprocess.py:526: CalledProcessError
+=============================== warnings summary ===============================
+.tox/py310/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275
+  /home/yoh/proj/annextube/.tox/py310/lib/python3.10/site-packages/google/api_core/_python_version_support.py:275: FutureWarning: You are using a Python version (3.10.17) which Google will stop supporting in new releases of google.api_core once it reaches its end of life (2026-10-04). Please upgrade to the latest Python version, or at least Python 3.11, to continue receiving updates for google.api_core past that date.
+    warnings.warn(message, FutureWarning)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:377: YOUTUBE_API_KEY not set - skipping real API test
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:407: YOUTUBE_API_KEY not set - skipping real API test
+FAILED tests/e2e/test_multi_channel.py::test_multi_channel_collection_workflow
+FAILED tests/integration/test_e2e_backup_features.py::TestE2EBackupFeatures::test_default_init_includes_playlists_with_title_paths
+======= 2 failed, 172 passed, 2 skipped, 1 warning in 398.94s (0:06:38) ========
+py310: exit 1 (401.94 seconds) /home/yoh/proj/annextube> pytest --ignore=tests/e2e/test_web_ui.py tests/ pid=2549225
+py310: FAIL ✖ in 8 minutes 23.25 seconds
+py311: venv> .venv/bin/uv venv -p cpython3.11 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/py311
+py311: install_deps> .venv/bin/uv pip install '.[test]'
+py311: install_package_deps> .venv/bin/uv pip install 'click>=8.0.0' 'datasalad>=0.3.0' 'google-api-python-client>=2.0.0' 'jsonschema>=4.0.0' 'platformdirs>=4.0.0' 'tomli>=2.0.0; python_version < "3.11"' 'yt-dlp>=2026.2.0'
+py311: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/2/annextube-0.2.1.post55+g5e8941eb6.tar.gz
+py311: commands[0]> pytest --ignore=tests/e2e/test_web_ui.py tests/
+============================= test session starts ==============================
+platform linux -- Python 3.11.12, pytest-9.0.2, pluggy-1.6.0
+cachedir: .tox/py311/.pytest_cache
+rootdir: /home/yoh/proj/annextube
+configfile: pyproject.toml
+plugins: cov-7.0.0, asyncio-1.3.0, timeout-2.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 176 items
+
+tests/e2e/test_multi_channel.py F.                                       [  1%]
+tests/integration/test_api_enhanced_metadata.py .......ss.               [  6%]
+tests/integration/test_checkpoint_commits.py ......                      [ 10%]
+tests/integration/test_comprehensive_backup.py ..                        [ 11%]
+tests/integration/test_e2e_backup_features.py ..F                        [ 13%]
+tests/integration/test_incremental_backup.py ..                          [ 14%]
+tests/integration/test_new_video_components.py ..                        [ 15%]
+tests/integration/test_no_timestamp_commits.py ...                       [ 17%]
+tests/integration/test_update_annexed_files.py ..                        [ 18%]
+tests/test_component_mode_bug.py ..                                      [ 19%]
+tests/test_date_filtering.py .....                                       [ 22%]
+tests/test_tsv_refactoring.py .....                                      [ 25%]
+tests/unit/test_archive_discovery.py ........................            [ 38%]
+tests/unit/test_atomic_file_write.py ..........                          [ 44%]
+tests/unit/test_git_annex_metadata.py ......                             [ 47%]
+tests/unit/test_git_annex_timestamp_filter.py ......                     [ 51%]
+tests/unit/test_hierarchical_video_paths.py .............                [ 58%]
+tests/unit/test_new_video_detection.py ..                                [ 59%]
+tests/unit/test_playlist_model.py ...                                    [ 61%]
+tests/unit/test_quota_estimator.py .........                             [ 66%]
+tests/unit/test_quota_manager.py .....................                   [ 78%]
+tests/unit/test_unavailable_video_filtering.py ......                    [ 81%]
+tests/unit/test_video_model.py ...                                       [ 83%]
+tests/unit/test_youtube_api_client.py ...................                [ 94%]
+tests/unit/test_youtube_api_quota_handling.py ..........                 [100%]
+
+=================================== FAILURES ===================================
+____________________ test_multi_channel_collection_workflow ____________________
+
+    @pytest.mark.network
+    @pytest.mark.ai_generated
+    def test_multi_channel_collection_workflow():
+        """Test complete multi-channel collection workflow.
+    
+        Creates a collection with two channels (AnnexTubeTesting and limited apopyk),
+        aggregates metadata, and verifies web UI generation.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            collection_dir = Path(tmpdir) / "collection"
+            collection_dir.mkdir()
+    
+            # Channel 1: AnnexTubeTesting (limit 3 videos)
+            ch1_dir = collection_dir / "ch-annextubetesting"
+            ch1_dir.mkdir()
+    
+            print("\n=== Creating channel 1: AnnexTubeTesting ===")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "annextube",
+                    "init",
+                    str(ch1_dir),
+                    "https://www.youtube.com/@AnnexTubeTesting",
+                    "--limit",
+                    "3",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 1
+            print("\n=== Backing up channel 1 ===")
+            result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch1_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Export channel.json for channel 1
+            print("\n=== Exporting channel.json for channel 1 ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "export",
+                    "--output-dir",
+                    str(ch1_dir),
+                    "--channel-json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Channel 2: Andriy Popyk (limit 2 videos)
+            ch2_dir = collection_dir / "ch-apopyk"
+            ch2_dir.mkdir()
+    
+            print("\n=== Creating channel 2: Andriy Popyk ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "init",
+                    str(ch2_dir),
+                    "https://www.youtube.com/@apopyk",
+                    "--limit",
+                    "2",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 2
+            print("\n=== Backing up channel 2 ===")
+>           result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch2_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+tests/e2e/test_multi_channel.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py311/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpfmb46c3r/collection/ch-apopyk'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py311/bin/python...>
+stdout = 'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos per source (most recent)\n\n[1/1] Channel: https://www.youtube.com/@apopyk\n'
+stderr = "2026-02-09 10:36:15 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-09...in range(256)\nError: 'latin-1' codec can't encode characters in position 74-77: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py311/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpfmb46c3r/collection/ch-apopyk']' returned non-zero exit status 1.
+
+../../.local/share/uv/python/cpython-3.11.12-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+----------------------------- Captured stdout call -----------------------------
+
+=== Creating channel 1: AnnexTubeTesting ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpfmb46c3r/collection/ch-annextubetesting/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpfmb46c3r/collection/ch-annextubetesting/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@AnnexTubeTesting
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 3 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 1 ===
+Update mode: all-incremental
+Default social window: 2026-02-02 to now
+Found 1 enabled source(s)
+Limit: 3 videos per source (most recent)
+
+[1/1] Channel: https://www.youtube.com/@AnnexTubeTesting
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/video.mkv (from web...) 
+
+19%   1 KiB             429 B/s 10s
+100%  5.24 KiB          5 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/video.mkv (from web...) 
+
+22%   1 KiB             548 B/s 6s
+100%  4.62 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/video.mkv (from web...) 
+
+29%   1 KiB             531 B/s 4s
+100%  3.47 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/metadata.json add videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/metadata.json (non-large file; adding content to git repository) (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/metadata.json (non-large file; adding content to git repository) ok
+ok
+ok
+(recording state in git...)
+add playlists/Videos-with-Location-Metadata/playlist.json (non-large file; adding content to git repository) add playlists/Videos-with-Location-Metadata/0002_2026-02-05_Test-Video-Recorded-in-London add playlists/Videos-with-Location-Metadata/0001_2026-02-05_Test-Video-Recorded-in-New-York-City ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           447 KiB/s 0sok
+ok
+
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-With-English-Captions/video.mkv (from web...) 
+
+6%    1 KiB             572 B/s 27s
+100%  16.34 KiB        12 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/video.mkv (from web...) 
+
+7%    1 KiB             439 B/s 29s
+100%  13.79 KiB       479 KiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-With-English-Captions/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/metadata.json (non-large file; adding content to git repository) add playlists/Videos-with-Captions/playlist.json (non-large file; adding content to git repository) add playlists/Videos-with-Captions/0002_2026-02-05_Test-Video-Multi-language-Captions add playlists/Videos-with-Captions/0001_2026-02-05_Test-Video-With-English-Captions ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           417 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-1/video.mkv (from web...) 
+
+27%   1 KiB             466 B/s 5s
+100%  3.72 KiB        108 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-2/video.mkv (from web...) 
+
+29%   1 KiB             556 B/s 4s
+100%  3.48 KiB          3 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-3/video.mkv (from web...) 
+
+22%   1 KiB             568 B/s 6s
+100%  4.63 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add playlists/Mixed-License-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-1/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-2/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-3/metadata.json (non-large file; adding content to git repository) add playlists/Mixed-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 ok
+add playlists/Mixed-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 ok
+add playlists/Mixed-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           462 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/video.mkv (from web...) 
+
+34%   1 KiB             685 B/s 2s
+100%  2.94 KiB        167 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/video.mkv (from web...) 
+
+16%   1 KiB             418 B/s 12s
+100%  6.08 KiB          6 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add playlists/All-Creative-Commons-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/metadata.json add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/metadata.json (non-large file; adding content to git repository) (non-large file; adding content to git repository) add playlists/All-Creative-Commons-Videos/0002_2026-02-05_Test-Video-Creative-Commons-2 add playlists/All-Creative-Commons-Videos/0001_2026-02-05_Test-Video-Creative-Commons-1 ok
+ok
+add playlists/All-Creative-Commons-Videos/0003_2026-02-05_Test-Video-Creative-Commons-3 ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B           202 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+add playlists/All-Standard-License-Videos/playlist.json (non-large file; adding content to git repository) add playlists/All-Standard-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 add playlists/All-Standard-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 add playlists/All-Standard-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B           759 KiB/s 0s
+                                  
+ok
+ok
+(recording state in git...)
+add authors.tsv 
+
+100%  219 B           335 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+  Summary:
+    Videos processed: 10
+    Videos tracked: 10
+    Metadata files: 10
+    Captions downloaded: 0
+
+============================================================
+Total Summary:
+  Sources processed: 1
+  Videos tracked: 10
+  Metadata files saved: 10
+
+[ok] Backup complete!
+
+
+=== Exporting channel.json for channel 1 ===
+[ok] Generated /home/yoh/.tmp/tmpfmb46c3r/collection/ch-annextubetesting/videos/videos.tsv
+[ok] Generated /home/yoh/.tmp/tmpfmb46c3r/collection/ch-annextubetesting/playlists/playlists.tsv
+[ok] Generated /home/yoh/.tmp/tmpfmb46c3r/collection/ch-annextubetesting/authors.tsv
+[ok] Generated /home/yoh/.tmp/tmpfmb46c3r/collection/ch-annextubetesting/channel.json
+
+[ok] Export complete!
+
+
+=== Creating channel 2: Andriy Popyk ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpfmb46c3r/collection/ch-apopyk/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpfmb46c3r/collection/ch-apopyk/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@apopyk
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 2 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 2 ===
+_ TestE2EBackupFeatures.test_default_init_includes_playlists_with_title_paths __
+
+self = <test_e2e_backup_features.TestE2EBackupFeatures object at 0x7fd3e85cbd10>
+
+    def test_default_init_includes_playlists_with_title_paths(self) -> None:
+        """Test that default init config includes playlists and uses title-based paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Use annextube init with default settings (playlists=all, podcasts=all by default)
+            # Using yarikoptic channel which has playlists
+            channel_url = "https://www.youtube.com/@yarikoptic"
+    
+            subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
+                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                check=True,
+                capture_output=True
+            )
+    
+            # Run backup to discover and backup playlists
+>           subprocess.run(
+                [sys.executable, "-m", "annextube", "backup",
+                 "--output-dir", str(repo_path)],
+                check=True,
+                capture_output=True
+            )
+
+tests/integration/test_e2e_backup_features.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py311/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpv_cytbqi'],)
+kwargs = {'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py311/bin/python...>
+stdout = b'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos p...nok\n\r                                  \r\r                                  \rok\nok\n(recording state in git...)\n'
+stderr = b"2026-02-09 10:40:28 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-0...in range(256)\nError: 'latin-1' codec can't encode characters in position 37-39: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout is given, and the process takes too long, a TimeoutExpired
+        exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py311/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpv_cytbqi']' returned non-zero exit status 1.
+
+../../.local/share/uv/python/cpython-3.11.12-linux-x86_64-gnu/lib/python3.11/subprocess.py:571: CalledProcessError
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:377: YOUTUBE_API_KEY not set - skipping real API test
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:407: YOUTUBE_API_KEY not set - skipping real API test
+FAILED tests/e2e/test_multi_channel.py::test_multi_channel_collection_workflow
+FAILED tests/integration/test_e2e_backup_features.py::TestE2EBackupFeatures::test_default_init_includes_playlists_with_title_paths
+============= 2 failed, 172 passed, 2 skipped in 438.09s (0:07:18) =============
+py311: exit 1 (440.43 seconds) /home/yoh/proj/annextube> pytest --ignore=tests/e2e/test_web_ui.py tests/ pid=2584035
+py311: FAIL ✖ in 8 minutes 1.31 seconds
+py312: venv> .venv/bin/uv venv -p /home/yoh/proj/annextube/.venv/bin/python3 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/py312
+py312: install_deps> .venv/bin/uv pip install '.[test]'
+py312: install_package_deps> .venv/bin/uv pip install 'click>=8.0.0' 'datasalad>=0.3.0' 'google-api-python-client>=2.0.0' 'jsonschema>=4.0.0' 'platformdirs>=4.0.0' 'tomli>=2.0.0; python_version < "3.11"' 'yt-dlp>=2026.2.0'
+py312: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/3/annextube-0.2.1.post55+g5e8941eb6.tar.gz
+py312: commands[0]> pytest --ignore=tests/e2e/test_web_ui.py tests/
+============================= test session starts ==============================
+platform linux -- Python 3.12.12, pytest-9.0.2, pluggy-1.6.0
+cachedir: .tox/py312/.pytest_cache
+rootdir: /home/yoh/proj/annextube
+configfile: pyproject.toml
+plugins: asyncio-1.3.0, cov-7.0.0, timeout-2.4.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 176 items
+
+tests/e2e/test_multi_channel.py F.                                       [  1%]
+tests/integration/test_api_enhanced_metadata.py .......ss.               [  6%]
+tests/integration/test_checkpoint_commits.py ......                      [ 10%]
+tests/integration/test_comprehensive_backup.py ..                        [ 11%]
+tests/integration/test_e2e_backup_features.py ..F                        [ 13%]
+tests/integration/test_incremental_backup.py ..                          [ 14%]
+tests/integration/test_new_video_components.py ..                        [ 15%]
+tests/integration/test_no_timestamp_commits.py ...                       [ 17%]
+tests/integration/test_update_annexed_files.py ..                        [ 18%]
+tests/test_component_mode_bug.py ..                                      [ 19%]
+tests/test_date_filtering.py .....                                       [ 22%]
+tests/test_tsv_refactoring.py .....                                      [ 25%]
+tests/unit/test_archive_discovery.py ........................            [ 38%]
+tests/unit/test_atomic_file_write.py ..........                          [ 44%]
+tests/unit/test_git_annex_metadata.py ......                             [ 47%]
+tests/unit/test_git_annex_timestamp_filter.py ......                     [ 51%]
+tests/unit/test_hierarchical_video_paths.py .............                [ 58%]
+tests/unit/test_new_video_detection.py ..                                [ 59%]
+tests/unit/test_playlist_model.py ...                                    [ 61%]
+tests/unit/test_quota_estimator.py .........                             [ 66%]
+tests/unit/test_quota_manager.py .....................                   [ 78%]
+tests/unit/test_unavailable_video_filtering.py ......                    [ 81%]
+tests/unit/test_video_model.py ...                                       [ 83%]
+tests/unit/test_youtube_api_client.py ...................                [ 94%]
+tests/unit/test_youtube_api_quota_handling.py ..........                 [100%]
+
+=================================== FAILURES ===================================
+____________________ test_multi_channel_collection_workflow ____________________
+
+    @pytest.mark.network
+    @pytest.mark.ai_generated
+    def test_multi_channel_collection_workflow():
+        """Test complete multi-channel collection workflow.
+    
+        Creates a collection with two channels (AnnexTubeTesting and limited apopyk),
+        aggregates metadata, and verifies web UI generation.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            collection_dir = Path(tmpdir) / "collection"
+            collection_dir.mkdir()
+    
+            # Channel 1: AnnexTubeTesting (limit 3 videos)
+            ch1_dir = collection_dir / "ch-annextubetesting"
+            ch1_dir.mkdir()
+    
+            print("\n=== Creating channel 1: AnnexTubeTesting ===")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "annextube",
+                    "init",
+                    str(ch1_dir),
+                    "https://www.youtube.com/@AnnexTubeTesting",
+                    "--limit",
+                    "3",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 1
+            print("\n=== Backing up channel 1 ===")
+            result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch1_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Export channel.json for channel 1
+            print("\n=== Exporting channel.json for channel 1 ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "export",
+                    "--output-dir",
+                    str(ch1_dir),
+                    "--channel-json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Channel 2: Andriy Popyk (limit 2 videos)
+            ch2_dir = collection_dir / "ch-apopyk"
+            ch2_dir.mkdir()
+    
+            print("\n=== Creating channel 2: Andriy Popyk ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "init",
+                    str(ch2_dir),
+                    "https://www.youtube.com/@apopyk",
+                    "--limit",
+                    "2",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 2
+            print("\n=== Backing up channel 2 ===")
+>           result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch2_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+tests/e2e/test_multi_channel.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpwvoh_avy/collection/ch-apopyk'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py312/bin/python...>
+stdout = 'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos per source (most recent)\n\n[1/1] Channel: https://www.youtube.com/@apopyk\n'
+stderr = "2026-02-09 10:43:09 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-09...in range(256)\nError: 'latin-1' codec can't encode characters in position 74-77: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpwvoh_avy/collection/ch-apopyk']' returned non-zero exit status 1.
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: CalledProcessError
+----------------------------- Captured stdout call -----------------------------
+
+=== Creating channel 1: AnnexTubeTesting ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpwvoh_avy/collection/ch-annextubetesting/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpwvoh_avy/collection/ch-annextubetesting/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@AnnexTubeTesting
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 3 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 1 ===
+Update mode: all-incremental
+Default social window: 2026-02-02 to now
+Found 1 enabled source(s)
+Limit: 3 videos per source (most recent)
+
+[1/1] Channel: https://www.youtube.com/@AnnexTubeTesting
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/video.mkv (from web...) 
+
+19%   1 KiB             870 B/s 4s
+100%  5.24 KiB          4 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/video.mkv (from web...) 
+
+22%   1 KiB             758 B/s 4s
+100%  4.62 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/video.mkv (from web...) 
+
+29%   1 KiB             679 B/s 3s
+100%  3.47 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/metadata.json add videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/metadata.json (non-large file; adding content to git repository) (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/metadata.json (non-large file; adding content to git repository) ok
+ok
+ok
+(recording state in git...)
+add playlists/Videos-with-Location-Metadata/playlist.json (non-large file; adding content to git repository) add playlists/Videos-with-Location-Metadata/0001_2026-02-05_Test-Video-Recorded-in-New-York-City add playlists/Videos-with-Location-Metadata/0002_2026-02-05_Test-Video-Recorded-in-London ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           804 KiB/s 0sok
+ok
+
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-With-English-Captions/video.mkv (from web...) 
+
+6%    1 KiB             859 B/s 18s
+100%  16.34 KiB        10 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/video.mkv (from web...) 
+
+7%    1 KiB             824 B/s 15s
+100%  13.79 KiB         6 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add playlists/Videos-with-Captions/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-With-English-Captions/metadata.json (non-large file; adding content to git repository) add playlists/Videos-with-Captions/0001_2026-02-05_Test-Video-With-English-Captions ok
+add playlists/Videos-with-Captions/0002_2026-02-05_Test-Video-Multi-language-Captions ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           522 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-1/video.mkv (from web...) 
+
+27%   1 KiB             883 B/s 3s
+100%  3.72 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-2/video.mkv (from web...) 
+
+29%   1 KiB             705 B/s 3s
+100%  3.48 KiB          5 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-3/video.mkv (from web...) 
+
+22%   1 KiB             868 B/s 4s
+100%  4.63 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Standard-License-1/metadata.json add playlists/Mixed-License-Videos/playlist.json (non-large file; adding content to git repository) (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-2/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-3/metadata.json (non-large file; adding content to git repository) add playlists/Mixed-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 add playlists/Mixed-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 add playlists/Mixed-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 ok
+ok
+ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add videos/videos.tsv (non-large file; adding content to git repository) add playlists/playlists.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           988 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/video.mkv (from web...) 
+
+34%   1 KiB             849 B/s 2s
+100%  2.94 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/video.mkv (from web...) 
+
+16%   1 KiB             814 B/s 6s
+100%  6.08 KiB          5 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/metadata.json add playlists/All-Creative-Commons-Videos/playlist.json (non-large file; adding content to git repository) (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/metadata.json (non-large file; adding content to git repository) add playlists/All-Creative-Commons-Videos/0002_2026-02-05_Test-Video-Creative-Commons-2 ok
+add playlists/All-Creative-Commons-Videos/0001_2026-02-05_Test-Video-Creative-Commons-1 add playlists/All-Creative-Commons-Videos/0003_2026-02-05_Test-Video-Creative-Commons-3 ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B           474 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+add playlists/All-Standard-License-Videos/playlist.json (non-large file; adding content to git repository) add playlists/All-Standard-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 ok
+add playlists/All-Standard-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 add playlists/All-Standard-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 ok
+ok
+ok
+(recording state in git...)
+add authors.tsv 
+
+100%  219 B           805 KiB/s 0s
+                                  
+ok
+add playlists/playlists.tsv (non-large file; adding content to git repository) ok
+(recording state in git...)
+add authors.tsv 
+
+100%  219 B           318 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+  Summary:
+    Videos processed: 10
+    Videos tracked: 10
+    Metadata files: 10
+    Captions downloaded: 0
+
+============================================================
+Total Summary:
+  Sources processed: 1
+  Videos tracked: 10
+  Metadata files saved: 10
+
+[ok] Backup complete!
+
+
+=== Exporting channel.json for channel 1 ===
+[ok] Generated /home/yoh/.tmp/tmpwvoh_avy/collection/ch-annextubetesting/videos/videos.tsv
+[ok] Generated /home/yoh/.tmp/tmpwvoh_avy/collection/ch-annextubetesting/playlists/playlists.tsv
+[ok] Generated /home/yoh/.tmp/tmpwvoh_avy/collection/ch-annextubetesting/authors.tsv
+[ok] Generated /home/yoh/.tmp/tmpwvoh_avy/collection/ch-annextubetesting/channel.json
+
+[ok] Export complete!
+
+
+=== Creating channel 2: Andriy Popyk ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpwvoh_avy/collection/ch-apopyk/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpwvoh_avy/collection/ch-apopyk/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@apopyk
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 2 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 2 ===
+_ TestE2EBackupFeatures.test_default_init_includes_playlists_with_title_paths __
+
+self = <test_e2e_backup_features.TestE2EBackupFeatures object at 0x7fb3dea13800>
+
+    def test_default_init_includes_playlists_with_title_paths(self) -> None:
+        """Test that default init config includes playlists and uses title-based paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Use annextube init with default settings (playlists=all, podcasts=all by default)
+            # Using yarikoptic channel which has playlists
+            channel_url = "https://www.youtube.com/@yarikoptic"
+    
+            subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
+                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                check=True,
+                capture_output=True
+            )
+    
+            # Run backup to discover and backup playlists
+>           subprocess.run(
+                [sys.executable, "-m", "annextube", "backup",
+                 "--output-dir", str(repo_path)],
+                check=True,
+                capture_output=True
+            )
+
+tests/integration/test_e2e_backup_features.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmp7zilu5qt'],)
+kwargs = {'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py312/bin/python...>
+stdout = b'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos p...nok\n\r                                  \r\r                                  \rok\nok\n(recording state in git...)\n'
+stderr = b"2026-02-09 10:45:25 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-0...in range(256)\nError: 'latin-1' codec can't encode characters in position 37-39: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py312/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmp7zilu5qt']' returned non-zero exit status 1.
+
+.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/subprocess.py:571: CalledProcessError
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:377: YOUTUBE_API_KEY not set - skipping real API test
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:407: YOUTUBE_API_KEY not set - skipping real API test
+FAILED tests/e2e/test_multi_channel.py::test_multi_channel_collection_workflow
+FAILED tests/integration/test_e2e_backup_features.py::TestE2EBackupFeatures::test_default_init_includes_playlists_with_title_paths
+============= 2 failed, 172 passed, 2 skipped in 263.00s (0:04:22) =============
+py312: exit 1 (263.91 seconds) /home/yoh/proj/annextube> pytest --ignore=tests/e2e/test_web_ui.py tests/ pid=2617498
+py312: FAIL ✖ in 4 minutes 47.14 seconds
+py313: venv> .venv/bin/uv venv -p cpython3.13 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/py313
+py313: install_deps> .venv/bin/uv pip install '.[test]'
+py313: install_package_deps> .venv/bin/uv pip install 'click>=8.0.0' 'datasalad>=0.3.0' 'google-api-python-client>=2.0.0' 'jsonschema>=4.0.0' 'platformdirs>=4.0.0' 'tomli>=2.0.0; python_version < "3.11"' 'yt-dlp>=2026.2.0'
+py313: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/4/annextube-0.2.1.post55+g5e8941eb6.tar.gz
+py313: commands[0]> pytest --ignore=tests/e2e/test_web_ui.py tests/
+============================= test session starts ==============================
+platform linux -- Python 3.13.11, pytest-9.0.2, pluggy-1.6.0
+cachedir: .tox/py313/.pytest_cache
+rootdir: /home/yoh/proj/annextube
+configfile: pyproject.toml
+plugins: cov-7.0.0, timeout-2.4.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 176 items
+
+tests/e2e/test_multi_channel.py F.                                       [  1%]
+tests/integration/test_api_enhanced_metadata.py .......ss.               [  6%]
+tests/integration/test_checkpoint_commits.py ......                      [ 10%]
+tests/integration/test_comprehensive_backup.py ..                        [ 11%]
+tests/integration/test_e2e_backup_features.py ..F                        [ 13%]
+tests/integration/test_incremental_backup.py ..                          [ 14%]
+tests/integration/test_new_video_components.py ..                        [ 15%]
+tests/integration/test_no_timestamp_commits.py ...                       [ 17%]
+tests/integration/test_update_annexed_files.py ..                        [ 18%]
+tests/test_component_mode_bug.py ..                                      [ 19%]
+tests/test_date_filtering.py .....                                       [ 22%]
+tests/test_tsv_refactoring.py .....                                      [ 25%]
+tests/unit/test_archive_discovery.py ........................            [ 38%]
+tests/unit/test_atomic_file_write.py ..........                          [ 44%]
+tests/unit/test_git_annex_metadata.py ......                             [ 47%]
+tests/unit/test_git_annex_timestamp_filter.py ......                     [ 51%]
+tests/unit/test_hierarchical_video_paths.py .............                [ 58%]
+tests/unit/test_new_video_detection.py ..                                [ 59%]
+tests/unit/test_playlist_model.py ...                                    [ 61%]
+tests/unit/test_quota_estimator.py .........                             [ 66%]
+tests/unit/test_quota_manager.py .....................                   [ 78%]
+tests/unit/test_unavailable_video_filtering.py ......                    [ 81%]
+tests/unit/test_video_model.py ...                                       [ 83%]
+tests/unit/test_youtube_api_client.py ...................                [ 94%]
+tests/unit/test_youtube_api_quota_handling.py ..........                 [100%]
+
+=================================== FAILURES ===================================
+____________________ test_multi_channel_collection_workflow ____________________
+
+    @pytest.mark.network
+    @pytest.mark.ai_generated
+    def test_multi_channel_collection_workflow():
+        """Test complete multi-channel collection workflow.
+    
+        Creates a collection with two channels (AnnexTubeTesting and limited apopyk),
+        aggregates metadata, and verifies web UI generation.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            collection_dir = Path(tmpdir) / "collection"
+            collection_dir.mkdir()
+    
+            # Channel 1: AnnexTubeTesting (limit 3 videos)
+            ch1_dir = collection_dir / "ch-annextubetesting"
+            ch1_dir.mkdir()
+    
+            print("\n=== Creating channel 1: AnnexTubeTesting ===")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "annextube",
+                    "init",
+                    str(ch1_dir),
+                    "https://www.youtube.com/@AnnexTubeTesting",
+                    "--limit",
+                    "3",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 1
+            print("\n=== Backing up channel 1 ===")
+            result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch1_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Export channel.json for channel 1
+            print("\n=== Exporting channel.json for channel 1 ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "export",
+                    "--output-dir",
+                    str(ch1_dir),
+                    "--channel-json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Channel 2: Andriy Popyk (limit 2 videos)
+            ch2_dir = collection_dir / "ch-apopyk"
+            ch2_dir.mkdir()
+    
+            print("\n=== Creating channel 2: Andriy Popyk ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "init",
+                    str(ch2_dir),
+                    "https://www.youtube.com/@apopyk",
+                    "--limit",
+                    "2",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 2
+            print("\n=== Backing up channel 2 ===")
+>           result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch2_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+tests/e2e/test_multi_channel.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py313/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpqivfqaqq/collection/ch-apopyk'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py313/bin/python...>
+stdout = 'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos per source (most recent)\n\n[1/1] Channel: https://www.youtube.com/@apopyk\n'
+stderr = "2026-02-09 10:48:12 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-09...in range(256)\nError: 'latin-1' codec can't encode characters in position 74-77: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py313/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpqivfqaqq/collection/ch-apopyk']' returned non-zero exit status 1.
+
+/usr/lib/python3.13/subprocess.py:577: CalledProcessError
+----------------------------- Captured stdout call -----------------------------
+
+=== Creating channel 1: AnnexTubeTesting ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpqivfqaqq/collection/ch-annextubetesting/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpqivfqaqq/collection/ch-annextubetesting/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@AnnexTubeTesting
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 3 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 1 ===
+Update mode: all-incremental
+Default social window: 2026-02-02 to now
+Found 1 enabled source(s)
+Limit: 3 videos per source (most recent)
+
+[1/1] Channel: https://www.youtube.com/@AnnexTubeTesting
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/video.mkv (from web...) 
+
+19%   1 KiB             643 B/s 6s
+100%  5.24 KiB       1016 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/video.mkv (from web...) 
+
+22%   1 KiB             650 B/s 5s
+100%  4.62 KiB          5 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/video.mkv (from web...) 
+
+29%   1 KiB             925 B/s 2s
+100%  3.47 KiB          3 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/metadata.json add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/metadata.json (non-large file; adding content to git repository) (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/metadata.json (non-large file; adding content to git repository) ok
+ok
+ok
+(recording state in git...)
+add playlists/Videos-with-Location-Metadata/playlist.json (non-large file; adding content to git repository) add playlists/Videos-with-Location-Metadata/0002_2026-02-05_Test-Video-Recorded-in-London ok
+add playlists/Videos-with-Location-Metadata/0001_2026-02-05_Test-Video-Recorded-in-New-York-City ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           335 KiB/s 0sok
+ok
+
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-With-English-Captions/video.mkv (from web...) 
+
+6%    1 KiB             647 B/s 24s
+100%  16.34 KiB         8 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/video.mkv (from web...) 
+
+7%    1 KiB             589 B/s 22s
+100%  13.79 KiB         1 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add playlists/Videos-with-Captions/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-With-English-Captions/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/metadata.json (non-large file; adding content to git repository) add playlists/Videos-with-Captions/0001_2026-02-05_Test-Video-With-English-Captions ok
+add playlists/Videos-with-Captions/0002_2026-02-05_Test-Video-Multi-language-Captions ok
+ok
+ok
+ok
+(recording state in git...)
+add videos/videos.tsv (non-large file; adding content to git repository) add playlists/playlists.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           510 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-1/video.mkv (from web...) 
+
+27%   1 KiB             730 B/s 3s
+100%  3.72 KiB          4 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-2/video.mkv (from web...) 
+
+29%   1 KiB             532 B/s 4s
+100%  3.48 KiB          5 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-3/video.mkv (from web...) 
+
+22%   1 KiB             596 B/s 6s
+100%  4.63 KiB          2 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add playlists/Mixed-License-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-2/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-1/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-3/metadata.json (non-large file; adding content to git repository) add playlists/Mixed-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 ok
+add playlists/Mixed-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 add playlists/Mixed-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 ok
+ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           579 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/video.mkv (from web...) 
+
+34%   1 KiB             651 B/s 3s
+100%  2.94 KiB        906 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/video.mkv (from web...) 
+
+16%   1 KiB             521 B/s 9s
+100%  6.08 KiB        645 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/metadata.json (non-large file; adding content to git repository) add playlists/All-Creative-Commons-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/metadata.json (non-large file; adding content to git repository) add playlists/All-Creative-Commons-Videos/0003_2026-02-05_Test-Video-Creative-Commons-3 add playlists/All-Creative-Commons-Videos/0001_2026-02-05_Test-Video-Creative-Commons-1 ok
+ok
+add playlists/All-Creative-Commons-Videos/0002_2026-02-05_Test-Video-Creative-Commons-2 ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B           602 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+add playlists/All-Standard-License-Videos/playlist.json (non-large file; adding content to git repository) add playlists/All-Standard-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 ok
+add playlists/All-Standard-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 add playlists/All-Standard-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 ok
+ok
+ok
+(recording state in git...)
+add authors.tsv 
+
+100%  219 B           508 KiB/s 0s
+                                  
+ok
+add playlists/playlists.tsv (non-large file; adding content to git repository) ok
+(recording state in git...)
+add authors.tsv 
+
+100%  219 B           358 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+  Summary:
+    Videos processed: 10
+    Videos tracked: 10
+    Metadata files: 10
+    Captions downloaded: 0
+
+============================================================
+Total Summary:
+  Sources processed: 1
+  Videos tracked: 10
+  Metadata files saved: 10
+
+[ok] Backup complete!
+
+
+=== Exporting channel.json for channel 1 ===
+[ok] Generated /home/yoh/.tmp/tmpqivfqaqq/collection/ch-annextubetesting/videos/videos.tsv
+[ok] Generated /home/yoh/.tmp/tmpqivfqaqq/collection/ch-annextubetesting/playlists/playlists.tsv
+[ok] Generated /home/yoh/.tmp/tmpqivfqaqq/collection/ch-annextubetesting/authors.tsv
+[ok] Generated /home/yoh/.tmp/tmpqivfqaqq/collection/ch-annextubetesting/channel.json
+
+[ok] Export complete!
+
+
+=== Creating channel 2: Andriy Popyk ===
+Initialized empty Git repository in /home/yoh/.tmp/tmpqivfqaqq/collection/ch-apopyk/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmpqivfqaqq/collection/ch-apopyk/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@apopyk
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 2 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 2 ===
+_ TestE2EBackupFeatures.test_default_init_includes_playlists_with_title_paths __
+
+self = <test_e2e_backup_features.TestE2EBackupFeatures object at 0x7f2c24411ba0>
+
+    def test_default_init_includes_playlists_with_title_paths(self) -> None:
+        """Test that default init config includes playlists and uses title-based paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Use annextube init with default settings (playlists=all, podcasts=all by default)
+            # Using yarikoptic channel which has playlists
+            channel_url = "https://www.youtube.com/@yarikoptic"
+    
+            subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
+                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                check=True,
+                capture_output=True
+            )
+    
+            # Run backup to discover and backup playlists
+>           subprocess.run(
+                [sys.executable, "-m", "annextube", "backup",
+                 "--output-dir", str(repo_path)],
+                check=True,
+                capture_output=True
+            )
+
+tests/integration/test_e2e_backup_features.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py313/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpcs0_wmx3'],)
+kwargs = {'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py313/bin/python...>
+stdout = b'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos p...nok\n\r                                  \r\r                                  \rok\nok\n(recording state in git...)\n'
+stderr = b"2026-02-09 10:51:51 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-0...in range(256)\nError: 'latin-1' codec can't encode characters in position 37-39: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py313/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmpcs0_wmx3']' returned non-zero exit status 1.
+
+/usr/lib/python3.13/subprocess.py:577: CalledProcessError
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:377: YOUTUBE_API_KEY not set - skipping real API test
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:407: YOUTUBE_API_KEY not set - skipping real API test
+FAILED tests/e2e/test_multi_channel.py::test_multi_channel_collection_workflow
+FAILED tests/integration/test_e2e_backup_features.py::TestE2EBackupFeatures::test_default_init_includes_playlists_with_title_paths
+============= 2 failed, 172 passed, 2 skipped in 391.93s (0:06:31) =============
+py313: exit 1 (393.79 seconds) /home/yoh/proj/annextube> pytest --ignore=tests/e2e/test_web_ui.py tests/ pid=2647386
+py313: FAIL ✖ in 6 minutes 58.27 seconds
+py314: venv> .venv/bin/uv venv -p cpython3.14 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/py314
+py314: install_deps> .venv/bin/uv pip install '.[test]'
+py314: install_package_deps> .venv/bin/uv pip install 'click>=8.0.0' 'datasalad>=0.3.0' 'google-api-python-client>=2.0.0' 'jsonschema>=4.0.0' 'platformdirs>=4.0.0' 'tomli>=2.0.0; python_version < "3.11"' 'yt-dlp>=2026.2.0'
+py314: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/5/annextube-0.2.1.post55+g5e8941eb6.tar.gz
+py314: commands[0]> pytest --ignore=tests/e2e/test_web_ui.py tests/
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
+cachedir: .tox/py314/.pytest_cache
+rootdir: /home/yoh/proj/annextube
+configfile: pyproject.toml
+plugins: timeout-2.4.0, cov-7.0.0, asyncio-1.3.0
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 176 items
+
+tests/e2e/test_multi_channel.py F.                                       [  1%]
+tests/integration/test_api_enhanced_metadata.py .......ss.               [  6%]
+tests/integration/test_checkpoint_commits.py ......                      [ 10%]
+tests/integration/test_comprehensive_backup.py ..                        [ 11%]
+tests/integration/test_e2e_backup_features.py ..F                        [ 13%]
+tests/integration/test_incremental_backup.py ..                          [ 14%]
+tests/integration/test_new_video_components.py ..                        [ 15%]
+tests/integration/test_no_timestamp_commits.py ...                       [ 17%]
+tests/integration/test_update_annexed_files.py ..                        [ 18%]
+tests/test_component_mode_bug.py ..                                      [ 19%]
+tests/test_date_filtering.py .....                                       [ 22%]
+tests/test_tsv_refactoring.py .....                                      [ 25%]
+tests/unit/test_archive_discovery.py ........................            [ 38%]
+tests/unit/test_atomic_file_write.py ..........                          [ 44%]
+tests/unit/test_git_annex_metadata.py ......                             [ 47%]
+tests/unit/test_git_annex_timestamp_filter.py ......                     [ 51%]
+tests/unit/test_hierarchical_video_paths.py .............                [ 58%]
+tests/unit/test_new_video_detection.py ..                                [ 59%]
+tests/unit/test_playlist_model.py ...                                    [ 61%]
+tests/unit/test_quota_estimator.py .........                             [ 66%]
+tests/unit/test_quota_manager.py .....................                   [ 78%]
+tests/unit/test_unavailable_video_filtering.py ......                    [ 81%]
+tests/unit/test_video_model.py ...                                       [ 83%]
+tests/unit/test_youtube_api_client.py ...................                [ 94%]
+tests/unit/test_youtube_api_quota_handling.py ..........                 [100%]
+
+=================================== FAILURES ===================================
+____________________ test_multi_channel_collection_workflow ____________________
+
+    @pytest.mark.network
+    @pytest.mark.ai_generated
+    def test_multi_channel_collection_workflow():
+        """Test complete multi-channel collection workflow.
+    
+        Creates a collection with two channels (AnnexTubeTesting and limited apopyk),
+        aggregates metadata, and verifies web UI generation.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            collection_dir = Path(tmpdir) / "collection"
+            collection_dir.mkdir()
+    
+            # Channel 1: AnnexTubeTesting (limit 3 videos)
+            ch1_dir = collection_dir / "ch-annextubetesting"
+            ch1_dir.mkdir()
+    
+            print("\n=== Creating channel 1: AnnexTubeTesting ===")
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "annextube",
+                    "init",
+                    str(ch1_dir),
+                    "https://www.youtube.com/@AnnexTubeTesting",
+                    "--limit",
+                    "3",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 1
+            print("\n=== Backing up channel 1 ===")
+            result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch1_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Export channel.json for channel 1
+            print("\n=== Exporting channel.json for channel 1 ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "export",
+                    "--output-dir",
+                    str(ch1_dir),
+                    "--channel-json",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Channel 2: Andriy Popyk (limit 2 videos)
+            ch2_dir = collection_dir / "ch-apopyk"
+            ch2_dir.mkdir()
+    
+            print("\n=== Creating channel 2: Andriy Popyk ===")
+            result = subprocess.run(
+                [
+                    sys.executable, "-m", "annextube",
+                    "init",
+                    str(ch2_dir),
+                    "https://www.youtube.com/@apopyk",
+                    "--limit",
+                    "2",
+                    "--comments",
+                    "0",
+                    "--no-captions",
+                    "--no-thumbnails",
+                ],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            print(result.stdout)
+    
+            # Backup channel 2
+            print("\n=== Backing up channel 2 ===")
+>           result = subprocess.run(
+                [sys.executable, "-m", "annextube", "backup", "--output-dir", str(ch2_dir)],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+
+tests/e2e/test_multi_channel.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py314/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmppw2tfdj3/collection/ch-apopyk'],)
+kwargs = {'stderr': -1, 'stdout': -1, 'text': True}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py314/bin/python...>
+stdout = 'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos per source (most recent)\n\n[1/1] Channel: https://www.youtube.com/@apopyk\n'
+stderr = "2026-02-09 10:56:25 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-09...in range(256)\nError: 'latin-1' codec can't encode characters in position 74-77: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py314/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmppw2tfdj3/collection/ch-apopyk']' returned non-zero exit status 1.
+
+/usr/lib/python3.14/subprocess.py:577: CalledProcessError
+----------------------------- Captured stdout call -----------------------------
+
+=== Creating channel 1: AnnexTubeTesting ===
+Initialized empty Git repository in /home/yoh/.tmp/tmppw2tfdj3/collection/ch-annextubetesting/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmppw2tfdj3/collection/ch-annextubetesting/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@AnnexTubeTesting
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 3 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 1 ===
+Update mode: all-incremental
+Default social window: 2026-02-02 to now
+Found 1 enabled source(s)
+Limit: 3 videos per source (most recent)
+
+[1/1] Channel: https://www.youtube.com/@AnnexTubeTesting
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/video.mkv (from web...) 
+
+19%   1 KiB             576 B/s 7s
+100%  5.24 KiB        448 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/video.mkv (from web...) 
+
+22%   1 KiB             534 B/s 6s
+100%  4.62 KiB          6 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/video.mkv (from web...) 
+
+29%   1 KiB             424 B/s 5s
+100%  3.47 KiB          1 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-2/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Recorded-in-New-York-City/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Recorded-in-London/metadata.json (non-large file; adding content to git repository) ok
+ok
+ok
+(recording state in git...)
+add playlists/Videos-with-Location-Metadata/playlist.json (non-large file; adding content to git repository) add playlists/Videos-with-Location-Metadata/0002_2026-02-05_Test-Video-Recorded-in-London ok
+add playlists/Videos-with-Location-Metadata/0001_2026-02-05_Test-Video-Recorded-in-New-York-City ok
+ok
+(recording state in git...)
+add videos/videos.tsv (non-large file; adding content to git repository) add playlists/playlists.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           296 KiB/s 0sok
+ok
+
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-With-English-Captions/video.mkv (from web...) 
+
+6%    1 KiB             537 B/s 29s
+100%  16.34 KiB         9 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/video.mkv (from web...) 
+
+7%    1 KiB             433 B/s 30s
+100%  13.79 KiB         7 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add playlists/Videos-with-Captions/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-With-English-Captions/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Multi-language-Captions/metadata.json (non-large file; adding content to git repository) add playlists/Videos-with-Captions/0001_2026-02-05_Test-Video-With-English-Captions ok
+add playlists/Videos-with-Captions/0002_2026-02-05_Test-Video-Multi-language-Captions ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           219 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-1/video.mkv (from web...) 
+
+27%   1 KiB             400 B/s 6s
+100%  3.72 KiB          3 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-2/video.mkv (from web...) 
+
+29%   1 KiB             512 B/s 4s
+100%  3.48 KiB          3 MiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Standard-License-3/video.mkv (from web...) 
+
+22%   1 KiB             416 B/s 8s
+100%  4.63 KiB        420 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+add playlists/Mixed-License-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-2/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-1/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Standard-License-3/metadata.json (non-large file; adding content to git repository) add playlists/Mixed-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 add playlists/Mixed-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 add playlists/Mixed-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 ok
+ok
+ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  218 B           267 KiB/s 0s
+                                  
+
+                                  
+ok
+ok
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/video.mkv (from web...) 
+
+34%   1 KiB             420 B/s 4s
+100%  2.94 KiB        336 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+get videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/video.mkv (from web...) 
+
+16%   1 KiB             422 B/s 12s
+100%  6.08 KiB          5 MiB/s 0s 
+                                   
+ok
+(recording state in git...)
+add playlists/All-Creative-Commons-Videos/playlist.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-1/metadata.json (non-large file; adding content to git repository) add videos/2026/02/2026-02-05_Test-Video-Creative-Commons-3/metadata.json (non-large file; adding content to git repository) add playlists/All-Creative-Commons-Videos/0001_2026-02-05_Test-Video-Creative-Commons-1 ok
+add playlists/All-Creative-Commons-Videos/0003_2026-02-05_Test-Video-Creative-Commons-3 add playlists/All-Creative-Commons-Videos/0002_2026-02-05_Test-Video-Creative-Commons-2 ok
+ok
+ok
+ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add videos/videos.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B            46 KiB/s 0s
+                                  
+ok
+ok
+
+                                  
+ok
+(recording state in git...)
+add playlists/All-Standard-License-Videos/playlist.json (non-large file; adding content to git repository) add playlists/All-Standard-License-Videos/0002_2026-02-05_Test-Video-Standard-License-2 add playlists/All-Standard-License-Videos/0001_2026-02-05_Test-Video-Standard-License-1 ok
+ok
+add playlists/All-Standard-License-Videos/0003_2026-02-05_Test-Video-Standard-License-3 ok
+ok
+(recording state in git...)
+add playlists/playlists.tsv (non-large file; adding content to git repository) add authors.tsv 
+
+100%  219 B           330 KiB/s 0s
+                                  
+ok
+ok
+(recording state in git...)
+add authors.tsv 
+
+100%  219 B           426 KiB/s 0s
+                                  
+ok
+(recording state in git...)
+  Summary:
+    Videos processed: 10
+    Videos tracked: 10
+    Metadata files: 10
+    Captions downloaded: 0
+
+============================================================
+Total Summary:
+  Sources processed: 1
+  Videos tracked: 10
+  Metadata files saved: 10
+
+[ok] Backup complete!
+
+
+=== Exporting channel.json for channel 1 ===
+[ok] Generated /home/yoh/.tmp/tmppw2tfdj3/collection/ch-annextubetesting/videos/videos.tsv
+[ok] Generated /home/yoh/.tmp/tmppw2tfdj3/collection/ch-annextubetesting/playlists/playlists.tsv
+[ok] Generated /home/yoh/.tmp/tmppw2tfdj3/collection/ch-annextubetesting/authors.tsv
+[ok] Generated /home/yoh/.tmp/tmppw2tfdj3/collection/ch-annextubetesting/channel.json
+
+[ok] Export complete!
+
+
+=== Creating channel 2: Andriy Popyk ===
+Initialized empty Git repository in /home/yoh/.tmp/tmppw2tfdj3/collection/ch-apopyk/.git/
+init annextube YouTube archive ok
+(recording state in git...)
+add .gitattributes (dotfile; adding content to git repository) add .annextube/config.toml (dotfile; adding content to git repository) ok
+ok
+(recording state in git...)
+Initialized YouTube archive repository in current directory
+Git-annex backend: URL (for video URLs)
+Tracking configuration:
+  - *.json, *.tsv, *.md, *.vtt -> git
+  - *.mp4, *.webm, *.jpg, *.png -> git-annex
+
+Configuration created: /home/yoh/.tmp/tmppw2tfdj3/collection/ch-apopyk/.annextube/config.toml
+Added 1 source(s):
+  - https://www.youtube.com/@apopyk
+
+Component settings:
+  - Videos: enabled
+  - Comments: disabled
+  - Captions: disabled
+  - Thumbnails: disabled
+  - Limit: 2 most recent videos
+  - Playlists: all
+  - Podcasts: all
+
+Next steps:
+  Run: annextube backup
+
+
+=== Backing up channel 2 ===
+_ TestE2EBackupFeatures.test_default_init_includes_playlists_with_title_paths __
+
+self = <test_e2e_backup_features.TestE2EBackupFeatures object at 0x7ff419e61940>
+
+    def test_default_init_includes_playlists_with_title_paths(self) -> None:
+        """Test that default init config includes playlists and uses title-based paths."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+    
+            # Use annextube init with default settings (playlists=all, podcasts=all by default)
+            # Using yarikoptic channel which has playlists
+            channel_url = "https://www.youtube.com/@yarikoptic"
+    
+            subprocess.run(
+                [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
+                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                check=True,
+                capture_output=True
+            )
+    
+            # Run backup to discover and backup playlists
+>           subprocess.run(
+                [sys.executable, "-m", "annextube", "backup",
+                 "--output-dir", str(repo_path)],
+                check=True,
+                capture_output=True
+            )
+
+tests/integration/test_e2e_backup_features.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+input = None, capture_output = True, timeout = None, check = True
+popenargs = (['/home/yoh/proj/annextube/.tox/py314/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmp5h3q_ind'],)
+kwargs = {'stderr': -1, 'stdout': -1}
+process = <Popen: returncode: 1 args: ['/home/yoh/proj/annextube/.tox/py314/bin/python...>
+stdout = b'Update mode: all-incremental\nDefault social window: 2026-02-02 to now\nFound 1 enabled source(s)\nLimit: 2 videos p...nok\n\r                                  \r\r                                  \rok\nok\n(recording state in git...)\n'
+stderr = b"2026-02-09 10:59:44 [INFO] annextube.cli.backup: annextube 0.2.1.post55+g5e8941eb6 with yt-dlp 2026.02.04\n2026-02-0...in range(256)\nError: 'latin-1' codec can't encode characters in position 37-39: ordinal not in range(256)\nAborted!\n"
+retcode = 1
+
+    def run(*popenargs,
+            input=None, capture_output=False, timeout=None, check=False, **kwargs):
+        """Run command with arguments and return a CompletedProcess instance.
+    
+        The returned instance will have attributes args, returncode, stdout and
+        stderr. By default, stdout and stderr are not captured, and those attributes
+        will be None. Pass stdout=PIPE and/or stderr=PIPE in order to capture them,
+        or pass capture_output=True to capture both.
+    
+        If check is True and the exit code was non-zero, it raises a
+        CalledProcessError. The CalledProcessError object will have the return code
+        in the returncode attribute, and output & stderr attributes if those streams
+        were captured.
+    
+        If timeout (seconds) is given and the process takes too long,
+         a TimeoutExpired exception will be raised.
+    
+        There is an optional argument "input", allowing you to
+        pass bytes or a string to the subprocess's stdin.  If you use this argument
+        you may not also use the Popen constructor's "stdin" argument, as
+        it will be used internally.
+    
+        By default, all communication is in bytes, and therefore any "input" should
+        be bytes, and the stdout and stderr will be bytes. If in text mode, any
+        "input" should be a string, and stdout and stderr will be strings decoded
+        according to locale encoding, or by "encoding" if set. Text mode is
+        triggered by setting any of text, encoding, errors or universal_newlines.
+    
+        The other arguments are the same as for the Popen constructor.
+        """
+        if input is not None:
+            if kwargs.get('stdin') is not None:
+                raise ValueError('stdin and input arguments may not both be used.')
+            kwargs['stdin'] = PIPE
+    
+        if capture_output:
+            if kwargs.get('stdout') is not None or kwargs.get('stderr') is not None:
+                raise ValueError('stdout and stderr arguments may not be used '
+                                 'with capture_output.')
+            kwargs['stdout'] = PIPE
+            kwargs['stderr'] = PIPE
+    
+        with Popen(*popenargs, **kwargs) as process:
+            try:
+                stdout, stderr = process.communicate(input, timeout=timeout)
+            except TimeoutExpired as exc:
+                process.kill()
+                if _mswindows:
+                    # Windows accumulates the output in a single blocking
+                    # read() call run on child threads, with the timeout
+                    # being done in a join() on those threads.  communicate()
+                    # _after_ kill() is required to collect that and add it
+                    # to the exception.
+                    exc.stdout, exc.stderr = process.communicate()
+                else:
+                    # POSIX _communicate already populated the output so
+                    # far into the TimeoutExpired exception.
+                    process.wait()
+                raise
+            except:  # Including KeyboardInterrupt, communicate handled that.
+                process.kill()
+                # We don't call process.wait() as .__exit__ does that for us.
+                raise
+            retcode = process.poll()
+            if check and retcode:
+>               raise CalledProcessError(retcode, process.args,
+                                         output=stdout, stderr=stderr)
+E               subprocess.CalledProcessError: Command '['/home/yoh/proj/annextube/.tox/py314/bin/python3', '-m', 'annextube', 'backup', '--output-dir', '/home/yoh/.tmp/tmp5h3q_ind']' returned non-zero exit status 1.
+
+/usr/lib/python3.14/subprocess.py:577: CalledProcessError
+=========================== short test summary info ============================
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:377: YOUTUBE_API_KEY not set - skipping real API test
+SKIPPED [1] tests/integration/test_api_enhanced_metadata.py:407: YOUTUBE_API_KEY not set - skipping real API test
+FAILED tests/e2e/test_multi_channel.py::test_multi_channel_collection_workflow
+FAILED tests/integration/test_e2e_backup_features.py::TestE2EBackupFeatures::test_default_init_includes_playlists_with_title_paths
+============= 2 failed, 172 passed, 2 skipped in 481.55s (0:08:01) =============
+py314: exit 1 (484.63 seconds) /home/yoh/proj/annextube> pytest --ignore=tests/e2e/test_web_ui.py tests/ pid=2681811
+py314: FAIL ✖ in 8 minutes 53.29 seconds
+lint: venv> .venv/bin/uv venv -p /home/yoh/proj/annextube/.venv/bin/python3 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/lint
+lint: install_deps> .venv/bin/uv pip install '.[devel]'
+lint: commands[0]> ruff check annextube/ tests/
+All checks passed!
+lint: OK ✔ in 15.83 seconds
+type: venv> .venv/bin/uv venv -p /home/yoh/proj/annextube/.venv/bin/python3 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/type
+type: install_deps> .venv/bin/uv pip install '.[devel]'
+type: commands[0]> mypy --ignore-missing-imports annextube/
+annextube/models/channel.py:36: error: Incompatible types in assignment (expression has type "dict[Never, Never]", variable has type "ArchiveStats")  [assignment]
+annextube/cli/aggregate.py:79: error: Value of type variable "SupportsRichComparisonT" of "min" cannot be "str | Any | None"  [type-var]
+annextube/cli/aggregate.py:79: error: Incompatible types in assignment (expression has type "str | Any | None", target has type "int | None")  [assignment]
+annextube/cli/aggregate.py:80: error: Value of type variable "SupportsRichComparisonT" of "max" cannot be "str | Any | None"  [type-var]
+annextube/cli/aggregate.py:80: error: Incompatible types in assignment (expression has type "str | Any | None", target has type "int | None")  [assignment]
+annextube/cli/aggregate.py:86: error: Unsupported operand types for + ("None" and "int")  [operator]
+annextube/cli/aggregate.py:86: note: Left operand is of type "int | None"
+annextube/cli/aggregate.py:94: error: Unsupported operand types for + ("None" and "int")  [operator]
+annextube/cli/aggregate.py:94: note: Left operand is of type "int | None"
+annextube/cli/export.py:96: error: Value of type variable "SupportsRichComparisonT" of "min" cannot be "str | Any | None"  [type-var]
+annextube/cli/export.py:96: error: Incompatible types in assignment (expression has type "str | Any | None", target has type "int | None")  [assignment]
+annextube/cli/export.py:97: error: Value of type variable "SupportsRichComparisonT" of "max" cannot be "str | Any | None"  [type-var]
+annextube/cli/export.py:97: error: Incompatible types in assignment (expression has type "str | Any | None", target has type "int | None")  [assignment]
+annextube/cli/export.py:101: error: Unsupported operand types for + ("None" and "int")  [operator]
+annextube/cli/export.py:101: note: Left operand is of type "int | None"
+annextube/cli/export.py:106: error: Unsupported operand types for + ("None" and "int")  [operator]
+annextube/cli/export.py:106: note: Left operand is of type "int | None"
+Found 13 errors in 3 files (checked 35 source files)
+type: exit 1 (2.85 seconds) /home/yoh/proj/annextube> mypy --ignore-missing-imports annextube/ pid=2717800
+type: FAIL ✖ in 15.69 seconds
+e2e: venv> .venv/bin/uv venv -p /home/yoh/proj/annextube/.venv/bin/python3 --allow-existing --python-preference system /home/yoh/proj/annextube/.tox/e2e
+e2e: install_deps> .venv/bin/uv pip install '.[test]'
+e2e: install_package_deps> .venv/bin/uv pip install 'click>=8.0.0' 'datasalad>=0.3.0' 'google-api-python-client>=2.0.0' 'jsonschema>=4.0.0' 'platformdirs>=4.0.0' 'tomli>=2.0.0; python_version < "3.11"' 'yt-dlp>=2026.2.0'
+e2e: install_package> .venv/bin/uv pip install --reinstall --no-deps annextube@/home/yoh/proj/annextube/.tox/.tmp/package/6/annextube-0.2.1.post55+g5e8941eb6.tar.gz
+e2e: commands[0] /home/yoh/proj/annextube/frontend> npm install
+
+up to date, audited 671 packages in 7s
+
+137 packages are looking for funding
+  run `npm fund` for details
+
+8 moderate severity vulnerabilities
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+e2e: commands[1] /home/yoh/proj/annextube/frontend> npm run build
+
+> annextube-frontend@0.1.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 53 modules transformed.
+rendering chunks...
+computing gzip size...
+../web/index.html                  0.49 kB │ gzip:  0.31 kB
+../web/assets/index-zXhaaQLs.css  18.13 kB │ gzip:  3.51 kB
+../web/assets/index-Fj-wER0D.js   85.42 kB │ gzip: 27.44 kB
+✓ built in 4.28s
+e2e: commands[2] /home/yoh/proj/annextube/frontend> bash scripts/ensure-playwright-browsers.sh chromium
+Checking if Playwright chromium is already installed...
+FOUND: /home/yoh/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome
+Playwright chromium is already installed, skipping download.
+e2e: commands[3] /home/yoh/proj/annextube/frontend> npm run test:e2e -- archive-workflow.spec.ts --project=archive-chromium
+
+> annextube-frontend@0.1.0 test:e2e
+> playwright test archive-workflow.spec.ts --project=archive-chromium
+
+
+
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+[1A[2K
+To open last HTML report run:
+
+  npx playwright show-report
+
+e2e: exit 1 (15.99 seconds) /home/yoh/proj/annextube/frontend> npm run test:e2e -- archive-workflow.spec.ts --project=archive-chromium pid=2720730
+.pkg: _exit> python /home/yoh/proj/annextube/.venv/lib/python3.12/site-packages/pyproject_api/_backend.py True hatchling.build
+  py310: FAIL code 1 (503.25=setup[101.30]+cmd[401.94] seconds)
+  py311: FAIL code 1 (481.30=setup[40.87]+cmd[440.43] seconds)
+  py312: FAIL code 1 (287.14=setup[23.24]+cmd[263.91] seconds)
+  py313: FAIL code 1 (418.27=setup[24.48]+cmd[393.79] seconds)
+  py314: FAIL code 1 (533.29=setup[48.66]+cmd[484.63] seconds)
+  lint: OK (15.83=setup[15.53]+cmd[0.29] seconds)
+  type: FAIL code 1 (15.69=setup[12.84]+cmd[2.85] seconds)
+  e2e: FAIL code 1 (103.15=setup[65.86]+cmd[8.72,8.95,3.62,15.99] seconds)
+  evaluation failed :( (2358.15 seconds)

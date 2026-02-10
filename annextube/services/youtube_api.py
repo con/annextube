@@ -483,6 +483,100 @@ class YouTubeAPIMetadataClient:
 
         return result
 
+    def get_channel_details(self, channel_id: str) -> dict | None:
+        """Fetch channel metadata from YouTube API.
+
+        Args:
+            channel_id: YouTube channel ID (e.g., "UCxxxxxx")
+
+        Returns:
+            Dictionary with channel metadata:
+            {
+                'channel_id': str,
+                'channel_name': str,
+                'description': str,
+                'custom_url': str,
+                'avatar_url': str,
+                'banner_url': str,
+                'country': str,
+                'subscriber_count': int,
+                'video_count': int,
+                'created_at': str (ISO format),
+            }
+            Returns None if API call fails or channel not found.
+
+        Quota cost: 3 units (snippet + statistics + brandingSettings)
+        """
+        try:
+            # Request channel details
+            request = self.youtube.channels().list(
+                part="snippet,statistics,brandingSettings",
+                id=channel_id,
+                maxResults=1,
+            )
+
+            logger.info(f"Fetching channel metadata from YouTube API for {channel_id}")
+            response = request.execute()
+
+            items = response.get("items", [])
+            if not items:
+                logger.warning(f"Channel not found: {channel_id}")
+                return None
+
+            item = items[0]
+            snippet = item.get("snippet", {})
+            statistics = item.get("statistics", {})
+            branding = item.get("brandingSettings", {}).get("image", {})
+
+            # Extract avatar URL (use highest resolution)
+            thumbnails = snippet.get("thumbnails", {})
+            avatar_url = ""
+            if "high" in thumbnails:
+                avatar_url = thumbnails["high"]["url"]
+            elif "medium" in thumbnails:
+                avatar_url = thumbnails["medium"]["url"]
+            elif "default" in thumbnails:
+                avatar_url = thumbnails["default"]["url"]
+
+            # Extract banner URL
+            banner_url = branding.get("bannerExternalUrl", "")
+
+            metadata = {
+                "channel_id": item["id"],
+                "channel_name": snippet.get("title", ""),
+                "description": snippet.get("description", ""),
+                "custom_url": snippet.get("customUrl", ""),
+                "avatar_url": avatar_url,
+                "banner_url": banner_url,
+                "country": snippet.get("country", ""),
+                "subscriber_count": int(statistics.get("subscriberCount", 0)),
+                "video_count": int(statistics.get("videoCount", 0)),
+                "created_at": snippet.get("publishedAt", ""),
+            }
+
+            logger.info(
+                f"Fetched channel metadata: {metadata['channel_name']} "
+                f"({metadata['subscriber_count']} subscribers, {metadata['video_count']} videos)"
+            )
+            return metadata
+
+        except HttpError as e:
+            # Check if this is a quota exceeded error
+            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                self.quota_manager.handle_quota_exceeded(str(e))
+                # If we get here, quota has reset - retry the operation
+                return self.get_channel_details(channel_id)
+
+            logger.error(
+                f"YouTube API HTTP error: {e.resp.status} - {e.content.decode()}",
+                exc_info=True,
+            )
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to fetch channel metadata from YouTube API: {e}", exc_info=True)
+            return None
+
 
 def create_api_client(api_key: str | None) -> YouTubeAPIMetadataClient | None:
     """Create YouTube API metadata client if API key is provided.
