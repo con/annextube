@@ -337,3 +337,81 @@ def test_get_channel_name_from_videos_empty(tmp_path):
     channel_name = service._get_channel_name_from_videos()
 
     assert channel_name == ""
+
+
+@pytest.mark.ai_generated
+def test_download_channel_avatar(mock_archive):
+    """Test downloading channel avatar."""
+    service = ExportService(mock_archive)
+
+    # Mock urllib and magic
+    fake_image_data = b'\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00'  # PNG header
+
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_response = MagicMock()
+        mock_response.__enter__ = MagicMock(return_value=mock_response)
+        mock_response.__exit__ = MagicMock(return_value=False)
+        mock_response.read.return_value = fake_image_data
+        mock_urlopen.return_value = mock_response
+
+        with patch('magic.Magic') as mock_magic_class:
+            mock_magic = MagicMock()
+            mock_magic.from_buffer.return_value = 'image/png'
+            mock_magic_class.return_value = mock_magic
+
+            with patch.object(service, '_download_channel_avatar', wraps=service._download_channel_avatar) as mock_download:
+                # Download avatar
+                avatar_path = service._download_channel_avatar("https://example.com/avatar.png")
+
+                assert avatar_path is not None
+                assert avatar_path.name == "channel_avatar.png"
+                assert avatar_path.exists()
+
+                # Verify content
+                with open(avatar_path, 'rb') as f:
+                    assert f.read() == fake_image_data
+
+
+@pytest.mark.ai_generated
+def test_download_channel_avatar_already_exists(mock_archive):
+    """Test that avatar download is skipped if file already exists."""
+    service = ExportService(mock_archive)
+
+    # Create existing avatar
+    existing_avatar = mock_archive / "channel_avatar.jpg"
+    existing_avatar.write_bytes(b"existing")
+
+    # Try to download (should skip)
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        avatar_path = service._download_channel_avatar("https://example.com/avatar.jpg")
+
+        # Should return existing file without downloading
+        assert avatar_path == existing_avatar
+        assert avatar_path.read_bytes() == b"existing"
+        mock_urlopen.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_download_channel_avatar_download_failure(mock_archive):
+    """Test graceful handling of download failure."""
+    service = ExportService(mock_archive)
+
+    with patch('urllib.request.urlopen') as mock_urlopen:
+        mock_urlopen.side_effect = Exception("Network error")
+
+        avatar_path = service._download_channel_avatar("https://example.com/avatar.jpg")
+
+        assert avatar_path is None
+
+
+@pytest.mark.ai_generated
+def test_mime_to_extension():
+    """Test MIME type to extension mapping."""
+    service = ExportService(Path("/tmp"))
+
+    assert service._mime_to_extension("image/jpeg") == "jpg"
+    assert service._mime_to_extension("image/png") == "png"
+    assert service._mime_to_extension("image/gif") == "gif"
+    assert service._mime_to_extension("image/webp") == "webp"
+    assert service._mime_to_extension("image/svg+xml") == "svg"
+    assert service._mime_to_extension("unknown/type") is None

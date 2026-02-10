@@ -1,7 +1,10 @@
 """Export service for generating TSV metadata files."""
 
 import json
+import urllib.request
 from pathlib import Path
+
+import magic
 
 from annextube.lib.logging_config import get_logger
 
@@ -337,6 +340,12 @@ class ExportService:
             f"{playlist_count} playlists, "
             f"{total_size / (1024**3):.2f} GB total"
         )
+
+        # Download channel avatar if available and not already present
+        avatar_url = channel_meta.get("avatar_url", "")
+        if avatar_url and isinstance(avatar_url, str):
+            self._download_channel_avatar(avatar_url)
+
         return output_path
 
     def _calculate_playlist_duration(self, playlist_dir: Path) -> int:
@@ -567,3 +576,90 @@ class ExportService:
                 except Exception:
                     continue
         return ""
+
+    def _download_channel_avatar(self, avatar_url: str) -> Path | None:
+        """Download channel avatar and add to git-annex.
+
+        Downloads avatar image, detects MIME type, saves with proper extension,
+        and adds to git-annex for non-redistributable content tracking.
+
+        Args:
+            avatar_url: URL to channel avatar image
+
+        Returns:
+            Path to downloaded avatar file, or None if download failed
+        """
+        if not avatar_url:
+            logger.debug("No avatar URL provided, skipping download")
+            return None
+
+        # Check if avatar already exists
+        existing_avatars = list(self.repo_path.glob("channel_avatar.*"))
+        if existing_avatars:
+            logger.debug(f"Channel avatar already exists: {existing_avatars[0]}")
+            return existing_avatars[0]
+
+        try:
+            # Download avatar
+            logger.info(f"Downloading channel avatar from {avatar_url}")
+            with urllib.request.urlopen(avatar_url, timeout=30) as response:
+                avatar_data = response.read()
+
+            # Detect MIME type using libmagic
+            mime = magic.Magic(mime=True)
+            mime_type = mime.from_buffer(avatar_data)
+            logger.debug(f"Detected MIME type: {mime_type}")
+
+            # Determine file extension from MIME type
+            extension = self._mime_to_extension(mime_type)
+            if not extension:
+                logger.warning(f"Unknown MIME type: {mime_type}, using .bin")
+                extension = "bin"
+
+            # Save avatar
+            avatar_path = self.repo_path / f"channel_avatar.{extension}"
+            with open(avatar_path, 'wb') as f:
+                f.write(avatar_data)
+
+            logger.info(f"Saved channel avatar: {avatar_path} ({len(avatar_data)} bytes)")
+
+            # Add to git-annex (like other binary content)
+            from annextube.services.git_annex import GitAnnexService
+            git_annex = GitAnnexService(self.repo_path)
+            try:
+                git_annex.add_and_commit(f"Add channel avatar ({extension})")
+                logger.debug("Added channel avatar to git-annex")
+            except Exception as e:
+                logger.warning(f"Could not add avatar to git-annex: {e}")
+
+            return avatar_path
+
+        except urllib.error.URLError as e:
+            logger.warning(f"Failed to download channel avatar: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Error downloading channel avatar: {e}", exc_info=True)
+            return None
+
+    def _mime_to_extension(self, mime_type: str) -> str | None:
+        """Map MIME type to file extension.
+
+        Args:
+            mime_type: MIME type string (e.g., 'image/jpeg')
+
+        Returns:
+            File extension without dot (e.g., 'jpg'), or None if unknown
+        """
+        # Common image MIME types for channel avatars
+        mime_map = {
+            "image/jpeg": "jpg",
+            "image/jpg": "jpg",
+            "image/png": "png",
+            "image/gif": "gif",
+            "image/webp": "webp",
+            "image/svg+xml": "svg",
+            "image/x-icon": "ico",
+            "image/vnd.microsoft.icon": "ico",
+        }
+
+        return mime_map.get(mime_type.lower())
