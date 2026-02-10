@@ -50,6 +50,51 @@ class GitAnnexService:
 
         logger.info("Git-annex repository initialized")
 
+    def init_datalad_dataset(self, description: str = "annextube archive") -> None:
+        """Initialize DataLad dataset (alternative to manual git/git-annex init).
+
+        Uses DataLad's create() API to initialize the dataset, which creates:
+        - Git repository
+        - Git-annex repository
+        - .datalad/ directory with configuration
+
+        Args:
+            description: Repository description
+        """
+        try:
+            from datalad.api import create
+        except ImportError as e:
+            raise ImportError(
+                "DataLad is not installed. Install with: pip install annextube[datalad]"
+            ) from e
+
+        logger.info(f"Creating DataLad dataset at {self.repo_path}")
+
+        # Create DataLad dataset
+        # annex=True initializes git-annex (default behavior)
+        # force=False ensures we don't overwrite existing repos
+        # description sets git-annex description
+        try:
+            create(
+                path=str(self.repo_path),
+                annex=True,
+                description=description,
+                force=False,
+                result_renderer='disabled',  # Disable DataLad's result output
+            )
+        except Exception as e:
+            logger.error(f"DataLad dataset creation failed: {e}")
+            raise
+
+        # Configure git-annex security settings (same as init_repo)
+        subprocess.run(
+            ["git", "config", "annex.security.allowed-ip-addresses", "all"],
+            cwd=self.repo_path,
+            check=True,
+        )
+
+        logger.info("DataLad dataset initialized")
+
     def configure_ytdlp_options(
         self,
         cookies_file: str | None = None,

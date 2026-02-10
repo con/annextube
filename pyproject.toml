@@ -39,6 +39,9 @@ test = [
     "pytest-timeout>=2.0",
     "pytest-asyncio>=0.21.0",
 ]
+datalad = [
+    "datalad>=1.0.0",  # For DataLad dataset creation
+]
 devel = [
     "annextube[test]",
     "ruff>=0.1.0",

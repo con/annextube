@@ -29,12 +29,16 @@ logger = get_logger(__name__)
 @click.option("--include-podcasts", default="all", show_default=True, help="Podcast inclusion: 'all', 'none', or regex pattern")
 @click.option("--video-path-pattern", default="{year}/{month}/{date}_{sanitized_title}", show_default=True, help="Path pattern for video directories")
 @click.option("--all-to-git", is_flag=True, default=False, help="Keep all files in git (no annexing). Use for demos/GitHub Pages.")
+@click.option("--datalad", is_flag=True, default=False, help="Create a DataLad dataset (requires: pip install annextube[datalad])")
 @click.pass_context
-def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool):
+def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool, datalad: bool):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
     configures file tracking rules, and generates configuration template.
+
+    With --datalad flag, creates a DataLad dataset instead of manual git/git-annex init.
+    This creates .datalad/ directory with DataLad configuration.
 
     Arguments:
         DIRECTORY: Directory to initialize (default: current directory)
@@ -74,10 +78,14 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
     git_annex = GitAnnexService(output_dir)
 
     try:
-        # Initialize git-annex
-        git_annex.init_repo(description="annextube YouTube archive")
+        # Initialize git-annex or DataLad dataset
+        if datalad:
+            logger.info("Initializing DataLad dataset")
+            git_annex.init_datalad_dataset(description="annextube YouTube archive")
+        else:
+            git_annex.init_repo(description="annextube YouTube archive")
 
-        # Configure .gitattributes
+        # Configure .gitattributes (works for both git-annex and DataLad)
         git_annex.configure_gitattributes(all_to_git=all_to_git)
 
         # Create config directory and template
@@ -101,7 +109,10 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         git_annex.add_and_commit("Initial annextube repository setup")
 
         # Success message
-        click.echo("Initialized YouTube archive repository in current directory")
+        if datalad:
+            click.echo("Initialized DataLad dataset in current directory")
+        else:
+            click.echo("Initialized YouTube archive repository in current directory")
         click.echo("Git-annex backend: URL (for video URLs)")
         if all_to_git:
             click.echo("Tracking configuration: ALL FILES IN GIT (demo mode)")
