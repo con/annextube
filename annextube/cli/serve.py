@@ -178,12 +178,6 @@ def serve(
 
     is_multi_channel = archive_info.type == "multi-channel"
     web_dir = output_dir / "web"
-    if not web_dir.exists():
-        click.echo(
-            f"Error: Web UI not found at {web_dir}. Run 'annextube generate-web' first.",
-            err=True,
-        )
-        raise click.Abort()
 
     # Regenerate if requested (only for single-channel archives)
     if regenerate:
@@ -226,6 +220,14 @@ def serve(
             except Exception as e:
                 click.echo(f"Error regenerating: {e}", err=True)
                 raise click.Abort() from e
+
+    # Check if web directory exists after regeneration
+    if not web_dir.exists():
+        click.echo(
+            f"Error: Web UI not found at {web_dir}. Run 'annextube generate-web' first.",
+            err=True,
+        )
+        raise click.Abort()
 
     # Start watcher thread if enabled (only for single-channel archives)
     watcher_thread = None
