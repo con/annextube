@@ -65,53 +65,17 @@ class ExportService:
                 # Get relative path from videos/ directory (supports hierarchical layouts)
                 relative_path = video_dir.relative_to(videos_dir)
 
-                # Determine download status by checking git-annex state
-                # video.mkv states:
-                # 1. Missing: metadata_only (no video file)
-                # 2. Symlink exists but target missing: metadata_only (broken link)
-                # 3. Symlink target exists and small (<1MB): tracked (URL-only, can stream from YouTube)
-                # 4. Symlink target exists and large (>1MB): downloaded (actual video content)
-                video_file = video_dir / "video.mkv"
-                if not video_file.exists():
+                # Use download_status from metadata.json - reflects ACTION taken, not current availability
+                # Availability (whether content is present) is git-annex's domain.
+                # Frontend checks actual file availability via HEAD request.
+                # Map spec values to frontend-friendly values:
+                #   not_downloaded/failed → metadata_only (for display purposes)
+                #   tracked/downloaded → as-is
+                raw_status = metadata.get("download_status", "not_downloaded")
+                if raw_status in ("not_downloaded", "failed"):
                     download_status = "metadata_only"
-                elif video_file.is_symlink():
-                    try:
-                        # Check if symlink target actually exists
-                        target_path = video_file.resolve()
-                        if not target_path.exists():
-                            download_status = "metadata_only"
-                        else:
-                            # Check file size to distinguish URL-only vs actual content
-                            # URL-only: typically < 1KB
-                            # Video content: typically > 1MB
-                            file_size = target_path.stat().st_size
-                            if file_size > 1024 * 1024:  # > 1MB
-                                download_status = "downloaded"
-                            else:
-                                download_status = "tracked"
-                    except (OSError, RuntimeError):
-                        # Broken symlink or error reading
-                        download_status = "metadata_only"
                 else:
-                    # Regular file (not symlink) - definitely downloaded
-                    download_status = "downloaded"
-
-                # Update metadata.json if download_status or file_path changed
-                metadata_needs_update = False
-                if metadata.get("download_status") != download_status:
-                    metadata["download_status"] = download_status
-                    metadata_needs_update = True
-                if metadata.get("file_path") != str(relative_path):
-                    metadata["file_path"] = str(relative_path)
-                    metadata_needs_update = True
-
-                if metadata_needs_update:
-                    try:
-                        with open(metadata_path, "w", encoding="utf-8") as f:
-                            json.dump(metadata, f, indent=2)
-                        logger.debug(f"Updated metadata.json for {video_id}: download_status={download_status}, file_path={relative_path}")
-                    except OSError as e:
-                        logger.warning(f"Failed to update metadata.json for {video_id}: {e}")
+                    download_status = raw_status  # tracked or downloaded
 
                 video_entry = {
                     "video_id": video_id,

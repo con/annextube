@@ -1098,12 +1098,9 @@ class Archiver:
         video_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Video directory: {video_dir}")
 
-        # Save metadata
-        metadata_path = video_dir / "metadata.json"
-        with AtomicFileWriter(metadata_path) as f:
-            json.dump(video.to_dict(), f, indent=2)
-
-        logger.debug(f"Saved metadata: {metadata_path}")
+        # Set file_path to relative path (for consistency with TSV export)
+        relative_path = video_dir.relative_to(self.repo_path / "videos")
+        video.file_path = str(relative_path)
 
         # Track video URL with git-annex
         # Always track URL (even if videos=false), download only if videos=true
@@ -1119,6 +1116,9 @@ class Archiver:
                     url=video_url, file_path=video_file, relaxed=True, fast=True, no_raw=True
                 )
                 logger.debug(f"Tracked video URL: {video_file}")
+
+                # Update download_status to reflect action taken
+                video.download_status = "tracked"
 
                 # Set git-annex metadata for the video file
                 metadata = {
@@ -1140,6 +1140,7 @@ class Archiver:
 
                     # Verify downloaded file is actually a video, not HTML/text error page
                     if not self._verify_video_file(video_file):
+                        video.download_status = "failed"
                         error_msg = (
                             f"Downloaded file is not a valid video (likely HTML error page): {video_file}\n\n"
                             f"This usually means yt-dlp failed to download the video.\n"
@@ -1155,8 +1156,20 @@ class Archiver:
                         logger.error(error_msg)
                         raise ValueError(f"Invalid video file: {video_file}")
 
+                    # Successfully downloaded
+                    video.download_status = "downloaded"
+
             except Exception as e:
+                if video.download_status not in ("tracked", "downloaded"):
+                    video.download_status = "failed"
                 logger.warning(f"Failed to track video URL: {e}")
+
+        # Save metadata (after tracking so download_status and file_path are set correctly)
+        metadata_path = video_dir / "metadata.json"
+        with AtomicFileWriter(metadata_path) as f:
+            json.dump(video.to_dict(), f, indent=2)
+
+        logger.debug(f"Saved metadata: {metadata_path}")
 
         # Download thumbnail (if enabled and mode allows)
         # For NEW videos: always fetch if configured, regardless of mode
