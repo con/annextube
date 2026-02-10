@@ -11,12 +11,20 @@
   // Actual availability is checked via HEAD request in onMount
   $: metadataHasLocalVideo = video.download_status === 'downloaded' || video.download_status === 'tracked';
 
-  // Actually available after checking file existence
-  let hasLocalVideo = metadataHasLocalVideo;
+  // Actually available after checking file existence (reset when video changes)
+  let hasLocalVideo = false;
   let localVideoCheckComplete = false;
 
-  // Active tab: 'local' or 'youtube'
-  let activeTab: 'local' | 'youtube' = metadataHasLocalVideo ? 'local' : 'youtube';
+  // Reset state when video changes
+  $: if (video) {
+    hasLocalVideo = metadataHasLocalVideo;
+    localVideoCheckComplete = false;
+    videoError = false;
+    videoErrorMessage = '';
+  }
+
+  // Active tab: 'local' or 'youtube' (reactive to video changes)
+  $: activeTab = metadataHasLocalVideo ? 'local' : 'youtube';
 
   // Error and loading states
   let videoError = false;
