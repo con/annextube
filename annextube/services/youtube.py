@@ -802,6 +802,70 @@ class YouTubeService:
             logger.debug(f"Failed to fetch channel podcasts (may not have podcasts): {e}")
             return []
 
+    def get_channel_metadata(self, channel_url: str) -> dict[str, Any]:
+        """Extract channel-level metadata (description, avatar, subscribers).
+
+        Args:
+            channel_url: YouTube channel URL (e.g., https://www.youtube.com/@channel)
+
+        Returns:
+            Dictionary with channel metadata: {
+                channel_id, channel_name, description, custom_url,
+                avatar_url, subscriber_count, video_count
+            }
+        """
+        logger.debug(f"Extracting channel metadata from: {channel_url}")
+
+        ydl_opts = self._get_ydl_opts(download=False)
+        ydl_opts["extract_flat"] = True  # Fast extraction
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(channel_url, download=False)
+
+                if not info:
+                    logger.warning(f"No information found for channel: {channel_url}")
+                    return {}
+
+                # Extract avatar URL (use highest resolution available)
+                avatar_url = ""
+                thumbnails = info.get("thumbnails", [])
+                if thumbnails:
+                    # Sort by resolution and pick highest
+                    sorted_thumbs = sorted(
+                        thumbnails,
+                        key=lambda t: t.get("width", 0) * t.get("height", 0),
+                        reverse=True
+                    )
+                    avatar_url = sorted_thumbs[0].get("url", "")
+
+                # Parse custom URL from original_url or channel_url
+                custom_url = ""
+                original_url = info.get("original_url", channel_url)
+                if "@" in original_url:
+                    custom_url = original_url.split("@")[-1].split("/")[0].split("?")[0]
+
+                metadata = {
+                    "channel_id": info.get("channel_id") or info.get("uploader_id", ""),
+                    "channel_name": info.get("channel") or info.get("uploader", ""),
+                    "description": info.get("description", ""),
+                    "custom_url": custom_url,
+                    "avatar_url": avatar_url,
+                    "subscriber_count": info.get("channel_follower_count") or 0,
+                    "video_count": info.get("playlist_count", 0),  # Total videos on channel
+                }
+
+                logger.info(
+                    f"Extracted channel metadata: {metadata['channel_name']} "
+                    f"({metadata['subscriber_count']} subscribers, "
+                    f"{metadata['video_count']} videos)"
+                )
+                return metadata
+
+            except Exception as e:
+                logger.error(f"Failed to extract channel metadata: {e}")
+                return {}
+
     def get_video_metadata(self, video_url: str) -> dict[str, Any] | None:
         """Get metadata for a single video.
 

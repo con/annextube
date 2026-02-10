@@ -209,8 +209,9 @@ class ExportService:
     def generate_channel_json(self) -> Path:
         """Generate channel.json with channel metadata and archive statistics.
 
-        Idempotent operation that (re)gathers all information from underlying
-        TSV files and actual video files.
+        Idempotent operation that:
+        1. Extracts fresh channel metadata from YouTube (description, avatar, etc.)
+        2. Calculates archive stats from TSV files and actual video files
 
         Returns:
             Path to generated channel.json
@@ -219,6 +220,7 @@ class ExportService:
         from datetime import datetime
 
         from annextube.lib.config import load_config
+        from annextube.services.youtube import YouTubeService
 
         logger.info(f"Generating channel.json at {self.repo_path}")
 
@@ -238,35 +240,45 @@ class ExportService:
         if not channel_source:
             raise ValueError("No channel sources found in config.")
 
-        # Parse channel ID from URL
-        # Format: https://www.youtube.com/@username or https://www.youtube.com/channel/UCxxxxxx
-        url = channel_source.url
-        custom_url = None
-        channel_id = None
+        # Extract fresh channel metadata from YouTube
+        youtube = YouTubeService()
+        channel_meta = youtube.get_channel_metadata(channel_source.url)
 
-        if "@" in url:
-            # Custom URL format
-            custom_url = url.split("@")[-1].split("/")[0].split("?")[0]
-        elif "/channel/" in url:
-            # Channel ID format
-            channel_id = url.split("/channel/")[-1].split("/")[0].split("?")[0]
+        # Fallback to parsing from URL and videos if extraction fails
+        if not channel_meta or not channel_meta.get("channel_id"):
+            logger.warning("Failed to extract channel metadata from YouTube, using fallback")
+            url = channel_source.url
+            custom_url = None
+            channel_id = None
+            channel_name = ""
 
-        # Try to get channel metadata from existing video
-        # (We'll use the first video's channel metadata)
-        videos_dir = self.repo_path / "videos"
-        channel_name = ""
+            if "@" in url:
+                custom_url = url.split("@")[-1].split("/")[0].split("?")[0]
+            elif "/channel/" in url:
+                channel_id = url.split("/channel/")[-1].split("/")[0].split("?")[0]
 
-        if videos_dir.exists():
-            # Find first video metadata.json
-            for metadata_file in videos_dir.rglob("metadata.json"):
-                try:
-                    with open(metadata_file, encoding='utf-8') as f:
-                        video_data = json.load(f)
-                        channel_id = channel_id or video_data.get("channel_id", "")
-                        channel_name = video_data.get("channel_name", "")
-                        break
-                except Exception:
-                    continue
+            # Try to get channel name from existing video
+            videos_dir = self.repo_path / "videos"
+            if videos_dir.exists():
+                for metadata_file in videos_dir.rglob("metadata.json"):
+                    try:
+                        with open(metadata_file, encoding='utf-8') as f:
+                            video_data = json.load(f)
+                            channel_id = channel_id or video_data.get("channel_id", "")
+                            channel_name = video_data.get("channel_name", "")
+                            break
+                    except Exception:
+                        continue
+
+            channel_meta = {
+                "channel_id": channel_id or "",
+                "channel_name": channel_name,
+                "description": "",
+                "custom_url": custom_url or "",
+                "avatar_url": "",
+                "subscriber_count": 0,
+                "video_count": 0,
+            }
 
         # Compute archive stats from videos.tsv and actual files
         videos_tsv = self.repo_path / "videos" / "videos.tsv"
@@ -332,22 +344,22 @@ class ExportService:
             "total_size_bytes": total_size,
         }
 
-        # Build channel.json
+        # Build channel.json combining fresh metadata and archive stats
         now = datetime.now().isoformat()
 
         channel_data = {
-            "channel_id": channel_id or "",
-            "name": channel_name,
-            "description": "",
-            "custom_url": custom_url or "",
-            "subscriber_count": 0,  # Not tracked in archive
-            "video_count": total_videos,  # Use actual count from archive
-            "avatar_url": "",
-            "banner_url": "",
-            "country": "",
+            "channel_id": channel_meta.get("channel_id", ""),
+            "name": channel_meta.get("channel_name", ""),
+            "description": channel_meta.get("description", ""),
+            "custom_url": channel_meta.get("custom_url", ""),
+            "subscriber_count": channel_meta.get("subscriber_count", 0),
+            "video_count": total_videos,  # Use actual count from archive, not YouTube's count
+            "avatar_url": channel_meta.get("avatar_url", ""),
+            "banner_url": "",  # Not available from yt-dlp
+            "country": "",  # Not available from yt-dlp
             "videos": [],
             "playlists": [],
-            "playlist_count": playlist_count,  # Add playlist count
+            "playlist_count": playlist_count,
             "last_sync": now,
             "created_at": "",
             "fetched_at": now,
