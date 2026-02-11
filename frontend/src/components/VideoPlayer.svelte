@@ -6,26 +6,23 @@
   export let video: Video;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
-  // Check if local video might be available (tracked or downloaded)
-  // 'tracked' = git annex addurl was called (symlink exists)
-  // 'downloaded' = git annex get was called (content retrieved)
-  // Actual availability is checked via HEAD request in onMount
-  $: metadataHasLocalVideo = video.download_status === 'downloaded' || video.download_status === 'tracked';
-
-  // Actually available after checking file existence (reset when video changes)
+  // Actual availability determined by HEAD request, NOT by metadata
+  // TSV's download_status is guidance for filters, not source of truth
   let hasLocalVideo = false;
   let localVideoCheckComplete = false;
 
   // Reset state when video changes
   $: if (video) {
-    hasLocalVideo = metadataHasLocalVideo;
+    hasLocalVideo = false;
     localVideoCheckComplete = false;
     videoError = false;
     videoErrorMessage = '';
+    // Trigger availability check when video changes
+    checkAvailability();
   }
 
-  // Active tab: 'local' or 'youtube' (reactive to video changes)
-  $: activeTab = metadataHasLocalVideo ? 'local' : 'youtube';
+  // Active tab: 'local' if available, otherwise 'youtube'
+  $: activeTab = hasLocalVideo ? 'local' : 'youtube';
 
   // Error and loading states
   let videoError = false;
@@ -144,44 +141,40 @@
     }
   }
 
-  // Check if video file actually exists on mount
-  onMount(async () => {
-    if (metadataHasLocalVideo) {
-      const videoPath = getVideoPath();
-      const available = await checkVideoAvailability(videoPath);
-      hasLocalVideo = available;
+  // Check if video file actually exists via HEAD request
+  async function checkAvailability() {
+    const videoPath = getVideoPath();
+    const available = await checkVideoAvailability(videoPath);
+    hasLocalVideo = available;
 
-      if (!available) {
-        console.warn('[VideoPlayer] Content not available:', videoPath);
-        activeTab = 'youtube';
-        videoError = true;
-        videoErrorMessage = 'Video content not available. Run `git annex get` to download.';
-      } else {
-        console.log('[VideoPlayer] Local video available:', videoPath);
-      }
-
-      localVideoCheckComplete = true;
+    if (available) {
+      console.log('[VideoPlayer] Local video available:', videoPath);
     } else {
-      localVideoCheckComplete = true;
+      console.log('[VideoPlayer] Local video not available:', videoPath);
     }
+
+    localVideoCheckComplete = true;
+  }
+
+  // Check availability on mount
+  onMount(() => {
+    checkAvailability();
   });
 </script>
 
 <div class="video-player">
-  <!-- Tab Navigation (show if metadata says video is downloaded) -->
-  {#if metadataHasLocalVideo}
+  <!-- Tab Navigation (show if local video is available) -->
+  {#if hasLocalVideo}
     <div class="tabs" role="tablist">
       <button
         class="tab"
         class:active={activeTab === 'local'}
-        class:warning={!hasLocalVideo}
         role="tab"
         aria-selected={activeTab === 'local'}
         aria-controls="local-player-panel"
         on:click={() => switchTab('local')}
-        title={hasLocalVideo ? '' : 'Video file not available'}
       >
-        Play from Archive{#if !hasLocalVideo && localVideoCheckComplete} ⚠️{/if}
+        Play from Archive
       </button>
       <button
         class="tab"
@@ -204,18 +197,12 @@
       id={activeTab === 'local' ? 'local-player-panel' : 'youtube-player-panel'}
       aria-labelledby={activeTab === 'local' ? 'local-tab' : 'youtube-tab'}
     >
-      {#if activeTab === 'local' && metadataHasLocalVideo}
+      {#if activeTab === 'local' && hasLocalVideo}
         <!-- Local Video Player -->
-        {#if !hasLocalVideo || videoError}
+        {#if videoError}
           <div class="video-error-message">
-            <p class="error-title">⚠️ {hasLocalVideo ? 'Video Playback Error' : 'Video File Not Available'}</p>
+            <p class="error-title">⚠️ Video Playback Error</p>
             <p class="error-details">{videoErrorMessage}</p>
-            {#if !hasLocalVideo}
-              <p class="error-hint">
-                The video metadata indicates this file should be downloaded, but the actual file is not available.
-                This usually means the git-annex symlink exists but the content hasn't been retrieved with <code>git annex get</code>.
-              </p>
-            {/if}
             <div class="error-actions">
               <button
                 class="error-button"
@@ -332,14 +319,6 @@
     background: white;
   }
 
-  .tab.warning {
-    color: #ff6b00;
-  }
-
-  .tab.warning.active {
-    border-bottom-color: #ff6b00;
-  }
-
   .tab-content-wrapper {
     background: #000;
     position: relative;
@@ -427,25 +406,6 @@
     margin-bottom: 24px;
     max-width: 500px;
     line-height: 1.6;
-  }
-
-  .error-hint {
-    font-size: 13px;
-    color: #aaa;
-    margin-bottom: 24px;
-    max-width: 600px;
-    line-height: 1.5;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 12px 16px;
-    border-radius: 4px;
-  }
-
-  .error-hint code {
-    background: rgba(255, 255, 255, 0.1);
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-family: monospace;
-    font-size: 12px;
   }
 
   .error-actions {
