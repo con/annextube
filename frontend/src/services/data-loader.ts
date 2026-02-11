@@ -7,6 +7,7 @@
  */
 
 import { parseTSV, parseIntField } from '@/utils/tsv-parser';
+import { isFileAvailable } from '@/services/availability';
 import type {
   Video,
   Playlist,
@@ -349,13 +350,8 @@ export class DataLoader {
 
     for (const ext of extensions) {
       const avatarPath = `${this.baseUrl}/${channelDir}/channel_avatar.${ext}`;
-      try {
-        const response = await fetch(avatarPath, { method: 'HEAD' });
-        if (response.ok) {
-          return avatarPath;
-        }
-      } catch {
-        // File doesn't exist, continue
+      if (await isFileAvailable(avatarPath)) {
+        return avatarPath;
       }
     }
 

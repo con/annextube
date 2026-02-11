@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import type { Video } from '@/types/models';
+  import { checkVideoAvailability } from '@/services/availability';
 
   export let video: Video;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
@@ -147,25 +148,18 @@
   onMount(async () => {
     if (metadataHasLocalVideo) {
       const videoPath = getVideoPath();
-      try {
-        // Use HEAD request to check file existence without downloading
-        const response = await fetch(videoPath, { method: 'HEAD' });
+      const available = await checkVideoAvailability(videoPath);
+      hasLocalVideo = available;
 
-        if (!response.ok) {
-          // File doesn't exist or is not accessible
-          console.warn('[VideoPlayer] Local video not available:', videoPath, 'status:', response.status);
-          hasLocalVideo = false;
-          activeTab = 'youtube';
-          videoError = true;
-          videoErrorMessage = 'Video file not found in archive. The file may not have been downloaded yet (git-annex symlink without content).';
-        } else {
-          console.log('[VideoPlayer] Local video available:', videoPath);
-        }
-      } catch (error) {
-        // Network error or CORS issue
-        console.warn('[VideoPlayer] Failed to check video availability:', error);
-        // Assume video is available and let the video element handle errors
+      if (!available) {
+        console.warn('[VideoPlayer] Content not available:', videoPath);
+        activeTab = 'youtube';
+        videoError = true;
+        videoErrorMessage = 'Video content not available. Run `git annex get` to download.';
+      } else {
+        console.log('[VideoPlayer] Local video available:', videoPath);
       }
+
       localVideoCheckComplete = true;
     } else {
       localVideoCheckComplete = true;
