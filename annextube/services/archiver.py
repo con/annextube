@@ -652,16 +652,21 @@ class Archiver:
                 existing_video_ids=existing_video_ids
             )
 
-            # Apply date filter if specified (but NOT on initial backup)
-            # On initial backup, we want ALL videos regardless of date filter
+            # Apply date filter only for non-incremental, non-initial backups.
+            # In incremental mode, the two-pass approach already returns only NEW videos
+            # that need backing up regardless of age. The date_from "social window" is for
+            # refreshing social data on existing videos, not for gating new video discovery.
             is_initial_backup = not existing_video_ids
-            if (self.date_from or self.date_to) and not is_initial_backup:
+            is_incremental = existing_video_ids is not None and len(existing_video_ids) > 0
+            if (self.date_from or self.date_to) and not is_initial_backup and not is_incremental:
                 videos_metadata = [v for v in all_videos if self._should_process_video_by_date(v)]
                 logger.info(f"Filtered {len(all_videos)} videos to {len(videos_metadata)} within date range")
             else:
                 videos_metadata = all_videos
                 if is_initial_backup and (self.date_from or self.date_to):
                     logger.info(f"Skipping date filter on initial backup - processing all {len(all_videos)} videos")
+                elif is_incremental and (self.date_from or self.date_to):
+                    logger.info(f"Skipping date filter in incremental mode - processing all {len(all_videos)} new videos")
 
         # For component-specific modes, load existing videos from TSV
         if skip_video_fetch and not videos_metadata:
