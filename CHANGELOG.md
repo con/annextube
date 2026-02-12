@@ -5,6 +5,39 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-11
+
+### Added
+
+- **Batch YouTube API calls**: Pre-fetch statistics and metadata in bulk instead of per-video API calls
+- **`--comments-depth` CLI option**: Override comments depth at backup time (-1=unlimited, 0=disabled, N=limit)
+- **DataLad dataset support**: `--datalad` flag for `init` command to create DataLad-managed archives
+- **Version display in web UI**: Show annextube version in the header, injected during `generate-web`
+- **Channel permalink routing**: Direct URLs to channels and per-channel playlist support in web UI
+- **TSV regeneration for multi-channel collections**: `--update=tsv_metadata` works across collections
+- **`serve --regenerate=web`**: Allow creating the web directory if it doesn't exist yet
+
+### Fixed
+
+- **Incremental backup discarding new videos**: Social date window filter was incorrectly applied to new video discovery in incremental mode, silently dropping videos published outside the 1-week window
+- **Frontend URL state feedback loop**: Changing any filter caused a hashchange → restoreFromURL → re-render cycle, visibly resetting selections. Fixed with `history.replaceState()` instead of `window.location.hash`
+- **URL defaults pollution**: Default sort params (`sort=date&dir=desc`) no longer appended to clean URLs
+- **Video player paths at subpath deployments**: Absolute `/videos/...` paths replaced with relative `../videos/...` for correct resolution at any deployment subpath
+- **Video player reactivity**: Fixed state not updating when video prop changes
+- **Video availability checking**: Use HEAD requests instead of relying on TSV download_status; include 'tracked' status; centralized checking logic
+- **VideoPlayer thumbnail fallback**: Use YouTube CDN thumbnail when video not downloaded locally
+- **Video metadata/comments loading**: Use file_path from video object instead of reconstructing paths
+- **Browser back/forward navigation**: Fixed multi-channel video metadata loading on history navigation
+- **Page reloads and playlist selection**: Fixed routing to preserve context and support nested routes
+- **TSV field escaping**: Properly escape newlines and special characters in TSV output
+- **Unicode encoding errors**: Fixed encoding issues in channel avatar display
+- **Metadata sync**: Sync metadata.json download_status with actual file system state during TSV generation
+
+### Changed
+
+- **Asset filenames**: Vite build now produces clean filenames (`index.js`, `index.css`) without content hashes
+- **FilterPanel initialization**: Uses Svelte `tick()` for clean reactive cycle during mount
+
 ## [0.2.2] - 2026-02-09
 
 ### Added
@@ -92,6 +125,7 @@ Initial release with core YouTube archival functionality:
 - Comment fetching
 - Basic web UI for browsing archives
 
+[0.3.0]: https://github.com/con/annextube/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/con/annextube/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/con/annextube/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/con/annextube/releases/tag/v0.1.0
