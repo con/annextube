@@ -174,6 +174,24 @@ test.describe('Archive Browser', () => {
     await expect(videoCards).toHaveCount(3);
   });
 
+  test('clean URL does not get default sort params appended', async ({ page }) => {
+    await page.waitForSelector('.video-grid');
+    await page.waitForTimeout(800); // Wait for debounced URL updates
+    expect(page.url()).not.toContain('sort=');
+    expect(page.url()).not.toContain('dir=');
+  });
+
+  test('filter selection persists without reset', async ({ page }) => {
+    await page.waitForSelector('.video-grid');
+    const statusSelect = page.locator('select').filter({
+      has: page.locator('option', { hasText: 'Backup Available' })
+    });
+    await statusSelect.selectOption('downloaded');
+    await page.waitForTimeout(800);
+    // Selection should still be "downloaded" (not reset to "all")
+    await expect(statusSelect).toHaveValue('downloaded');
+  });
+
   test('URL state preserves filters', async ({ page }) => {
     await page.waitForSelector('.video-grid');
 

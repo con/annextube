@@ -6,8 +6,8 @@ from typing import Any
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.logging_config import get_logger
-from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
 
@@ -26,13 +26,15 @@ def info(ctx: click.Context, output_dir: Path):
     Displays statistics about videos, metadata, captions, and thumbnails
     in the current archive.
     """
-    # Check if this is a git-annex repo
-    git_annex = GitAnnexService(output_dir)
-    if not git_annex.is_annex_repo():
-        click.echo(
-            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-            err=True,
+    # Check if this is an annextube archive
+    archive_info = discover_annextube(output_dir)
+    if archive_info is None or archive_info.type == "multi-channel":
+        error_msg = (
+            f"Error: {output_dir} is not a single-channel annextube archive."
+            if archive_info
+            else f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first."
         )
+        click.echo(error_msg, err=True)
         raise click.Abort()
 
     try:

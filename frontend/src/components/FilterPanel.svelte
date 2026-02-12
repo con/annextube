@@ -5,6 +5,7 @@
   Updates URL hash to preserve filter state (mykrok pattern).
 -->
 <script lang="ts">
+  import { onMount, onDestroy, tick } from 'svelte';
   import type { Video, Playlist } from '@/types/models';
   import { searchService } from '@/services/search';
   import { filterService } from '@/services/filter';
@@ -15,7 +16,7 @@
   export let playlists: Playlist[] = [];
   export let onFilterChange: (filtered: Video[]) => void;
 
-  // Filter state
+  // Filter state (initialize with defaults, will be overridden by URL state on mount)
   let searchQuery = '';
   let dateFrom = '';
   let dateTo = '';
@@ -26,9 +27,63 @@
   let sortField: SortField = 'date';
   let sortDirection: SortDirection = 'desc';
 
+  // Restore filter state from URL
+  function restoreFromURL() {
+    const urlState = urlStateManager.getCurrentState();
+
+    searchQuery = urlState.search || '';
+    dateFrom = urlState.dateFrom || '';
+    dateTo = urlState.dateTo || '';
+    selectedChannels = urlState.channels || [];
+    selectedTags = urlState.tags || [];
+    selectedPlaylists = urlState.playlists || [];
+    sortField = urlState.sortField || 'date';
+    sortDirection = urlState.sortDirection || 'desc';
+
+    // Convert downloadStatus array to dropdown value
+    if (urlState.downloadStatus) {
+      if (urlState.downloadStatus.includes('downloaded')) {
+        selectedStatusFilter = 'downloaded';
+      } else if (urlState.downloadStatus.includes('metadata_only')) {
+        selectedStatusFilter = 'metadata_only';
+      } else {
+        selectedStatusFilter = 'all';
+      }
+    } else {
+      selectedStatusFilter = 'all';
+    }
+  }
+
+  // Handle browser back/forward navigation
+  async function handleHashChange() {
+    isInitializing = true;
+    restoreFromURL();
+    applyFilters();
+    await tick();
+    isInitializing = false;
+  }
+
+  // Restore filter state from URL on mount and listen for hash changes
+  onMount(async () => {
+    restoreFromURL();
+
+    // Listen for hash changes (browser back/forward)
+    window.addEventListener('hashchange', handleHashChange);
+
+    applyFilters();
+    await tick();
+    isInitializing = false;
+  });
+
+  // Clean up event listener on destroy
+  onDestroy(() => {
+    window.removeEventListener('hashchange', handleHashChange);
+  });
+
   // UI state
   let filtersExpanded = true;
   let activeDatePreset: string | null = null;
+  let isInitializing = true; // Prevent URL updates during mount
 
   // Convert dropdown selection to filter array
   $: selectedStatuses = selectedStatusFilter === 'all'
@@ -109,9 +164,14 @@
 
   let urlDebounceTimer: number;
   function updateURL() {
+    // Don't update URL during initialization to avoid extra history entries
+    if (isInitializing) {
+      return;
+    }
+
     clearTimeout(urlDebounceTimer);
     urlDebounceTimer = setTimeout(() => {
-      urlStateManager.updateHash({
+      const newState = {
         search: searchQuery || undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
@@ -121,8 +181,40 @@
         playlists: selectedPlaylists.length > 0 ? selectedPlaylists : undefined,
         sortField,
         sortDirection,
-      });
+      };
+
+      // Only update if state differs from current URL
+      const currentState = urlStateManager.getCurrentState();
+      if (!statesEqual(currentState, newState)) {
+        urlStateManager.updateHash(newState);
+      }
     }, 500);
+  }
+
+  // Compare two URL states for equality
+  function statesEqual(a: any, b: any): boolean {
+    return (
+      a.search === b.search &&
+      a.dateFrom === b.dateFrom &&
+      a.dateTo === b.dateTo &&
+      arrayEqual(a.channels, b.channels) &&
+      arrayEqual(a.tags, b.tags) &&
+      arrayEqual(a.downloadStatus, b.downloadStatus) &&
+      arrayEqual(a.playlists, b.playlists) &&
+      a.sortField === b.sortField &&
+      a.sortDirection === b.sortDirection
+    );
+  }
+
+  // Compare two arrays for equality
+  function arrayEqual(a: any[] | undefined, b: any[] | undefined): boolean {
+    if (a === b) return true;
+    if (a == null || b == null) return a === b;
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+    return true;
   }
 
   function clearFilters() {

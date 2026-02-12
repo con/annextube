@@ -304,7 +304,7 @@ class YouTubeService:
                     # Filter to find new video IDs
                     all_entries = list(info.get("entries", []))
                     logger.info(f"Scanning {len(all_entries)} videos for new content...")
-                    new_video_ids = []
+                    new_video_ids: list[str] = []
                     consecutive_existing = 0
 
                     for i, entry in enumerate(all_entries, 1):
@@ -440,22 +440,119 @@ class YouTubeService:
                 return []
 
     def get_playlist_videos(
-        self, playlist_url: str, limit: int | None = None
+        self, playlist_url: str, limit: int | None = None,
+        repo_path: Path | None = None, incremental: bool = False
     ) -> list[dict[str, Any]]:
         """Get videos from a playlist.
+
+        In incremental mode with known unavailable videos, uses two-pass approach:
+        1. First pass: extract_flat to get just video IDs (fast)
+        2. Filter out known unavailable videos
+        3. Second pass: fetch full metadata only for available videos
 
         Args:
             playlist_url: YouTube playlist URL
             limit: Optional limit for number of videos (most recent)
+            repo_path: Optional path to archive repository (for incremental mode)
+            incremental: If True, skip videos known to be unavailable
 
         Returns:
             List of video metadata dictionaries
         """
         logger.info(f"Fetching videos from playlist: {playlist_url}")
 
-        ydl_opts = self._get_ydl_opts(download=False)
+        # In incremental mode, load known unavailable videos first
+        unavailable_videos: set[str] = set()
+        if incremental and repo_path:
+            unavailable_videos = self._load_unavailable_videos(repo_path)
+            if unavailable_videos:
+                logger.info(f"Loaded {len(unavailable_videos)} known unavailable video(s) from archive")
 
-        # Get full metadata directly
+        # Use two-pass approach if we have unavailable videos to filter
+        use_two_pass = incremental and len(unavailable_videos) > 0
+
+        if use_two_pass:
+            # First pass: Get just video IDs with extract_flat (fast, no metadata fetching)
+            flat_opts = self._get_ydl_opts(download=False)
+            flat_opts.update({
+                "extract_flat": "in_playlist",  # Just get video IDs, no metadata
+                "playlistend": limit if limit else None,
+                "ignoreerrors": True,
+            })
+
+            logger.info("First pass: fetching video ID list (fast)...")
+            with yt_dlp.YoutubeDL(flat_opts) as ydl_flat:
+                try:
+                    info = ydl_flat.extract_info(playlist_url, download=False)
+                    if not info or not info.get("entries"):
+                        logger.warning("No videos found in playlist")
+                        return []
+
+                    # Get all video IDs
+                    all_entries = list(info.get("entries", []))
+                    logger.info(f"Found {len(all_entries)} video(s) in playlist")
+
+                    # Filter to find videos to fetch (exclude known unavailable)
+                    video_ids_to_fetch: list[str] = []
+                    skipped_unavailable = 0
+
+                    for entry in all_entries:
+                        if not entry or not entry.get("id"):
+                            continue
+
+                        video_id = entry["id"]
+                        if video_id in unavailable_videos:
+                            logger.debug(f"Skipping known unavailable video: {video_id}")
+                            skipped_unavailable += 1
+                            continue
+
+                        video_ids_to_fetch.append(video_id)
+
+                    if skipped_unavailable > 0:
+                        logger.info(f"Skipped {skipped_unavailable} video(s) known to be unavailable")
+
+                    if not video_ids_to_fetch:
+                        logger.info("No new videos to fetch (all known unavailable)")
+                        return []
+
+                    logger.info(f"Will fetch full metadata for {len(video_ids_to_fetch)} video(s)")
+
+                except Exception as e:
+                    logger.error(f"Failed flat extraction: {e}", exc_info=True)
+                    # Fall back to regular extraction
+                    use_two_pass = False
+
+            # Second pass: Fetch full metadata only for available videos
+            if use_two_pass:
+                full_opts = self._get_ydl_opts(download=False)
+                full_opts.update({
+                    "ignoreerrors": True,
+                    "no_warnings": False,
+                })
+
+                videos = []
+                total_to_fetch = len(video_ids_to_fetch)
+                with yt_dlp.YoutubeDL(full_opts) as ydl_full:
+                    for idx, video_id in enumerate(video_ids_to_fetch, 1):
+                        try:
+                            # Progress indicator
+                            if idx % 100 == 0 or idx == 1 or idx == total_to_fetch:
+                                logger.info(f"Fetching metadata [{idx}/{total_to_fetch}]: {video_id}")
+                            video_url = f"https://www.youtube.com/watch?v={video_id}"
+                            video_info = ydl_full.extract_info(video_url, download=False)
+                            if video_info:
+                                videos.append(video_info)
+                            else:
+                                logger.warning(f"No metadata returned for {video_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+                            # Video might have become unavailable - will be caught on next run
+
+                logger.info(f"Successfully fetched metadata for {len(videos)}/{total_to_fetch} video(s)")
+                return videos
+
+        # Regular extraction (non-incremental or no unavailable videos)
+        ydl_opts = self._get_ydl_opts(download=False)
         ydl_opts.update(
             {
                 "playlistend": limit if limit else None,
@@ -500,7 +597,8 @@ class YouTubeService:
                         continue
 
                     # Some entries might be incomplete, skip them
-                    if not entry.get("id"):
+                    video_id = entry.get("id")
+                    if not video_id:
                         logger.warning(f"Skipping entry without ID: {entry.get('title', 'Unknown')}")
                         continue
 
@@ -512,6 +610,46 @@ class YouTubeService:
             except Exception as e:
                 logger.error(f"Failed to fetch playlist videos: {e}", exc_info=True)
                 return []
+
+    def _load_unavailable_videos(self, repo_path: Path) -> set[str]:
+        """Load video IDs of known unavailable videos from archive.
+
+        Scans all metadata.json files in videos/ directory and returns
+        set of video IDs with non-public availability status.
+
+        Args:
+            repo_path: Path to archive repository
+
+        Returns:
+            Set of video IDs known to be unavailable
+        """
+        unavailable: set[str] = set()
+        videos_dir = repo_path / "videos"
+
+        if not videos_dir.exists():
+            return unavailable
+
+        # Find all metadata.json files
+        metadata_files = list(videos_dir.glob("**/metadata.json"))
+
+        for metadata_file in metadata_files:
+            try:
+                with open(metadata_file, encoding='utf-8') as f:
+                    metadata = json.load(f)
+
+                video_id = metadata.get("video_id")
+                availability = metadata.get("availability", "public")
+
+                # Consider video unavailable if not public
+                # Possible values: 'public', 'private', 'removed', 'unavailable', 'unlisted'
+                if video_id and availability in ['private', 'removed', 'unavailable']:
+                    unavailable.add(video_id)
+                    logger.debug(f"Found unavailable video: {video_id} (status: {availability})")
+            except Exception as e:
+                logger.debug(f"Failed to parse metadata file {metadata_file}: {e}")
+                continue
+
+        return unavailable
 
     def get_playlist_metadata(self, playlist_url: str) -> Playlist | None:
         """Get metadata for a playlist.
@@ -663,6 +801,70 @@ class YouTubeService:
         except Exception as e:
             logger.debug(f"Failed to fetch channel podcasts (may not have podcasts): {e}")
             return []
+
+    def get_channel_metadata(self, channel_url: str) -> dict[str, Any]:
+        """Extract channel-level metadata (description, avatar, subscribers).
+
+        Args:
+            channel_url: YouTube channel URL (e.g., https://www.youtube.com/@channel)
+
+        Returns:
+            Dictionary with channel metadata: {
+                channel_id, channel_name, description, custom_url,
+                avatar_url, subscriber_count, video_count
+            }
+        """
+        logger.debug(f"Extracting channel metadata from: {channel_url}")
+
+        ydl_opts = self._get_ydl_opts(download=False)
+        ydl_opts["extract_flat"] = True  # Fast extraction
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            try:
+                info = ydl.extract_info(channel_url, download=False)
+
+                if not info:
+                    logger.warning(f"No information found for channel: {channel_url}")
+                    return {}
+
+                # Extract avatar URL (use highest resolution available)
+                avatar_url = ""
+                thumbnails = info.get("thumbnails", [])
+                if thumbnails:
+                    # Sort by resolution and pick highest
+                    sorted_thumbs = sorted(
+                        thumbnails,
+                        key=lambda t: t.get("width", 0) * t.get("height", 0),
+                        reverse=True
+                    )
+                    avatar_url = sorted_thumbs[0].get("url", "")
+
+                # Parse custom URL from original_url or channel_url
+                custom_url = ""
+                original_url = info.get("original_url", channel_url)
+                if "@" in original_url:
+                    custom_url = original_url.split("@")[-1].split("/")[0].split("?")[0]
+
+                metadata = {
+                    "channel_id": info.get("channel_id") or info.get("uploader_id", ""),
+                    "channel_name": info.get("channel") or info.get("uploader", ""),
+                    "description": info.get("description", ""),
+                    "custom_url": custom_url,
+                    "avatar_url": avatar_url,
+                    "subscriber_count": info.get("channel_follower_count") or 0,
+                    "video_count": info.get("playlist_count", 0),  # Total videos on channel
+                }
+
+                logger.info(
+                    f"Extracted channel metadata: {metadata['channel_name']} "
+                    f"({metadata['subscriber_count']} subscribers, "
+                    f"{metadata['video_count']} videos)"
+                )
+                return metadata
+
+            except Exception as e:
+                logger.error(f"Failed to extract channel metadata: {e}")
+                return {}
 
     def get_video_metadata(self, video_url: str) -> dict[str, Any] | None:
         """Get metadata for a single video.
@@ -1190,6 +1392,7 @@ class YouTubeService:
         self,
         metadata: dict[str, Any],
         enhance_with_api: bool = True,
+        api_metadata_cache: dict[str, dict] | None = None,
     ) -> Video:
         """Convert metadata to Video model.
 
@@ -1200,6 +1403,9 @@ class YouTubeService:
         Args:
             metadata: yt-dlp metadata dictionary OR stored Video.to_dict() format
             enhance_with_api: Whether to enhance metadata with YouTube API (default: True)
+            api_metadata_cache: Pre-fetched API metadata dict (video_id -> metadata).
+                If provided and video_id is in cache, uses cached data instead of
+                making a per-video API call. Enables batch API efficiency.
 
         Returns:
             Video model instance
@@ -1216,13 +1422,19 @@ class YouTubeService:
         api_metadata = {}
         if enhance_with_api and self.api_client and "video_id" not in metadata:
             # Only enhance for yt-dlp metadata (new videos), not stored metadata
-            try:
-                api_data = self.api_client.enhance_video_metadata(video_id)
-                api_metadata = api_data.get(video_id, {})
+            if api_metadata_cache is not None and video_id in api_metadata_cache:
+                # Use pre-fetched batch data
+                api_metadata = api_metadata_cache[video_id]
                 if api_metadata:
-                    logger.info(f"Enhanced metadata for {video_id} with YouTube API")
-            except Exception as e:
-                logger.warning(f"Failed to enhance metadata with API for {video_id}: {e}")
+                    logger.debug(f"Using cached API metadata for {video_id}")
+            else:
+                try:
+                    api_data = self.api_client.enhance_video_metadata(video_id)
+                    api_metadata = api_data.get(video_id, {})
+                    if api_metadata:
+                        logger.info(f"Enhanced metadata for {video_id} with YouTube API")
+                except Exception as e:
+                    logger.warning(f"Failed to enhance metadata with API for {video_id}: {e}")
 
         # Parse published date - handle both yt-dlp format and stored ISO format
         published_str = metadata.get("upload_date", "") or metadata.get("published_at", "")

@@ -21,24 +21,41 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 from annextube.lib.logging_config import get_logger
+from annextube.lib.quota_manager import QuotaManager
 
 logger = get_logger(__name__)
 
 class YouTubeAPICommentsService:
     """Fetch comments using YouTube Data API v3 (supports replies)."""
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, quota_manager: QuotaManager | None = None):
         """
         Initialize YouTube API client.
 
         Args:
             api_key: YouTube Data API v3 key. If not provided, reads from YOUTUBE_API_KEY env var.
+            quota_manager: QuotaManager instance for handling quota exceeded errors (default: enabled with 48h max wait)
         """
         self.api_key = api_key or os.environ.get('YOUTUBE_API_KEY')
         if not self.api_key:
             raise ValueError("YouTube API key required. Set YOUTUBE_API_KEY environment variable.")
 
         self.youtube = build('youtube', 'v3', developerKey=self.api_key)
+        self.quota_manager = quota_manager or QuotaManager()
+        self._quota_used = 0
+        self._call_counts: dict[str, int] = {}
+
+    def _track_api_call(self, operation: str, units: int = 1) -> None:
+        """Track an API call for quota accounting."""
+        self._quota_used += units
+        self._call_counts[operation] = self._call_counts.get(operation, 0) + 1
+
+    def get_quota_summary(self) -> dict:
+        """Return summary of API quota usage."""
+        return {
+            "total_units": self._quota_used,
+            "calls": dict(self._call_counts),
+        }
 
     def fetch_comments(
         self,
@@ -77,7 +94,7 @@ class YouTubeAPICommentsService:
         Raises:
             HttpError: If API request fails
         """
-        all_comments = []
+        all_comments: list[dict] = []
         next_page_token = None
         fetched_threads = 0
         existing_ids = existing_comment_ids or set()
@@ -96,6 +113,7 @@ class YouTubeAPICommentsService:
                 )
 
                 response = request.execute()
+                self._track_api_call("commentThreads.list")
 
                 for item in response.get('items', []):
                     # Extract top-level comment
@@ -171,7 +189,12 @@ class YouTubeAPICommentsService:
                 # Comments disabled or quota exceeded
                 if 'commentsDisabled' in str(e):
                     return []  # Video has comments disabled
-                raise  # Other 403 error (quota, permissions)
+                elif 'quotaExceeded' in str(e):
+                    # Handle quota exceeded - wait until midnight PT or raise error
+                    self.quota_manager.handle_quota_exceeded(str(e))
+                    # If we get here, quota has reset - retry the operation
+                    return self.fetch_comments(video_id, max_comments, max_replies_per_thread, existing_comment_ids)
+                raise  # Other 403 error (permissions, etc.)
             elif e.resp.status == 404:
                 # Video not found
                 return []
@@ -210,12 +233,9 @@ class YouTubeAPICommentsService:
 class YouTubeAPIMetadataClient:
     """Client for YouTube Data API v3 enhanced video metadata extraction."""
 
-    # API parts to request (total quota cost: 10 units per video)
-    # - snippet: 2 units (title, description, tags, etc.)
-    # - status: 2 units (license, embeddable, madeForKids)
-    # - contentDetails: 2 units (licensedContent, definition, restrictions)
-    # - statistics: 2 units (views, likes, comments)
-    # - recordingDetails: 2 units (location, recording date)
+    # API parts to request (quota cost: 1 unit per request regardless of parts)
+    # YouTube Data API v3 charges 1 read unit per videos.list call,
+    # not per-part. Up to 50 videos can be fetched in a single request.
     DEFAULT_PARTS = [
         "snippet",
         "status",
@@ -224,11 +244,12 @@ class YouTubeAPIMetadataClient:
         "recordingDetails",
     ]
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, quota_manager: QuotaManager | None = None):
         """Initialize YouTube API metadata client.
 
         Args:
             api_key: YouTube Data API v3 key. If not provided, reads from YOUTUBE_API_KEY env var.
+            quota_manager: QuotaManager instance for handling quota exceeded errors (default: enabled with 48h max wait)
 
         Raises:
             ValueError: If API key is not provided
@@ -238,7 +259,22 @@ class YouTubeAPIMetadataClient:
             raise ValueError("YouTube API key required. Set YOUTUBE_API_KEY environment variable.")
 
         self.youtube = build("youtube", "v3", developerKey=self.api_key, cache_discovery=False)
-        logger.info("YouTube API metadata client initialized (quota cost: 10 units/video)")
+        self.quota_manager = quota_manager or QuotaManager()
+        self._quota_used = 0
+        self._call_counts: dict[str, int] = {}
+        logger.info("YouTube API metadata client initialized")
+
+    def _track_api_call(self, operation: str, units: int = 1) -> None:
+        """Track an API call for quota accounting."""
+        self._quota_used += units
+        self._call_counts[operation] = self._call_counts.get(operation, 0) + 1
+
+    def get_quota_summary(self) -> dict:
+        """Return summary of API quota usage."""
+        return {
+            "total_units": self._quota_used,
+            "calls": dict(self._call_counts),
+        }
 
     def get_video_details(
         self,
@@ -286,6 +322,7 @@ class YouTubeAPIMetadataClient:
                 f"(parts: {', '.join(parts)})"
             )
             response = request.execute()
+            self._track_api_call("videos.list")
 
             # Parse response into dict
             result = {}
@@ -309,6 +346,13 @@ class YouTubeAPIMetadataClient:
             return result
 
         except HttpError as e:
+            # Check if this is a quota exceeded error
+            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                # Handle quota exceeded - wait until midnight PT or raise error
+                self.quota_manager.handle_quota_exceeded(str(e))
+                # If we get here, quota has reset - retry the operation
+                return self.get_video_details(video_ids, parts)
+
             logger.error(
                 f"YouTube API HTTP error: {e.resp.status} - {e.content.decode()}",
                 exc_info=True,
@@ -325,8 +369,8 @@ class YouTubeAPIMetadataClient:
     ) -> dict[str, dict[str, int]]:
         """Fetch only statistics for one or more videos (efficient for incremental updates).
 
-        This method fetches only the statistics part (2 quota units per request),
-        making it very efficient for checking if social data has changed.
+        This method fetches only the statistics part (1 quota unit per request,
+        up to 50 videos), making it very efficient for checking if social data has changed.
 
         Args:
             video_ids: Single video ID or list of video IDs (max 50 per request)
@@ -345,7 +389,7 @@ class YouTubeAPIMetadataClient:
                 "video2": {"viewCount": 2000, "likeCount": 100, "commentCount": 20}
             }
         """
-        # Fetch only statistics part (2 quota units total for up to 50 videos)
+        # Fetch only statistics part (1 quota unit per request for up to 50 videos)
         api_data = self.get_video_details(video_ids, parts=["statistics"])
 
         # Extract statistics from response
@@ -466,6 +510,145 @@ class YouTubeAPIMetadataClient:
 
         return result
 
+    def batch_get_video_statistics(self, video_ids: list[str], batch_size: int = 50) -> dict[str, dict[str, int]]:
+        """Fetch statistics for many videos, auto-chunking into batches.
+
+        Args:
+            video_ids: List of video IDs (any length)
+            batch_size: Max IDs per API request (default: 50)
+
+        Returns:
+            Dictionary mapping video_id -> statistics dict
+        """
+        if not video_ids:
+            return {}
+
+        result: dict[str, dict[str, int]] = {}
+        for i in range(0, len(video_ids), batch_size):
+            chunk = video_ids[i:i + batch_size]
+            logger.info(f"Batch statistics: fetching {len(chunk)} video(s) [{i+1}-{i+len(chunk)}/{len(video_ids)}]")
+            chunk_result = self.get_video_statistics(chunk)
+            result.update(chunk_result)
+
+        return result
+
+    def batch_enhance_video_metadata(self, video_ids: list[str], batch_size: int = 50) -> dict[str, dict]:
+        """Fetch enhanced metadata for many videos, auto-chunking into batches.
+
+        Args:
+            video_ids: List of video IDs (any length)
+            batch_size: Max IDs per API request (default: 50)
+
+        Returns:
+            Dictionary mapping video_id -> extracted metadata fields
+        """
+        if not video_ids:
+            return {}
+
+        result: dict[str, dict] = {}
+        for i in range(0, len(video_ids), batch_size):
+            chunk = video_ids[i:i + batch_size]
+            logger.info(f"Batch metadata: fetching {len(chunk)} video(s) [{i+1}-{i+len(chunk)}/{len(video_ids)}]")
+            chunk_result = self.enhance_video_metadata(chunk)
+            result.update(chunk_result)
+
+        return result
+
+    def get_channel_details(self, channel_id: str) -> dict | None:
+        """Fetch channel metadata from YouTube API.
+
+        Args:
+            channel_id: YouTube channel ID (e.g., "UCxxxxxx")
+
+        Returns:
+            Dictionary with channel metadata:
+            {
+                'channel_id': str,
+                'channel_name': str,
+                'description': str,
+                'custom_url': str,
+                'avatar_url': str,
+                'banner_url': str,
+                'country': str,
+                'subscriber_count': int,
+                'video_count': int,
+                'created_at': str (ISO format),
+            }
+            Returns None if API call fails or channel not found.
+
+        Quota cost: 1 unit per request
+        """
+        try:
+            # Request channel details
+            request = self.youtube.channels().list(
+                part="snippet,statistics,brandingSettings",
+                id=channel_id,
+                maxResults=1,
+            )
+
+            logger.info(f"Fetching channel metadata from YouTube API for {channel_id}")
+            response = request.execute()
+            self._track_api_call("channels.list")
+
+            items = response.get("items", [])
+            if not items:
+                logger.warning(f"Channel not found: {channel_id}")
+                return None
+
+            item = items[0]
+            snippet = item.get("snippet", {})
+            statistics = item.get("statistics", {})
+            branding = item.get("brandingSettings", {}).get("image", {})
+
+            # Extract avatar URL (use highest resolution)
+            thumbnails = snippet.get("thumbnails", {})
+            avatar_url = ""
+            if "high" in thumbnails:
+                avatar_url = thumbnails["high"]["url"]
+            elif "medium" in thumbnails:
+                avatar_url = thumbnails["medium"]["url"]
+            elif "default" in thumbnails:
+                avatar_url = thumbnails["default"]["url"]
+
+            # Extract banner URL
+            banner_url = branding.get("bannerExternalUrl", "")
+
+            metadata = {
+                "channel_id": item["id"],
+                "channel_name": snippet.get("title", ""),
+                "description": snippet.get("description", ""),
+                "custom_url": snippet.get("customUrl", ""),
+                "avatar_url": avatar_url,
+                "banner_url": banner_url,
+                "country": snippet.get("country", ""),
+                "subscriber_count": int(statistics.get("subscriberCount", 0)),
+                "video_count": int(statistics.get("videoCount", 0)),
+                "created_at": snippet.get("publishedAt", ""),
+            }
+
+            logger.info(
+                f"Fetched channel metadata: {metadata['channel_name']} "
+                f"({metadata['subscriber_count']} subscribers, {metadata['video_count']} videos)"
+            )
+            return metadata
+
+        except HttpError as e:
+            # Check if this is a quota exceeded error
+            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                self.quota_manager.handle_quota_exceeded(str(e))
+                # If we get here, quota has reset - retry the operation
+                return self.get_channel_details(channel_id)
+
+            logger.error(
+                f"YouTube API HTTP error: {e.resp.status} - {e.content.decode()}",
+                exc_info=True,
+            )
+            return None
+
+        except Exception as e:
+            logger.error(f"Failed to fetch channel metadata from YouTube API: {e}", exc_info=True)
+            return None
+
 
 def create_api_client(api_key: str | None) -> YouTubeAPIMetadataClient | None:
     """Create YouTube API metadata client if API key is provided.
@@ -493,15 +676,19 @@ class QuotaEstimator:
     """Estimate and track YouTube Data API v3 quota usage.
 
     YouTube API Quota Costs:
-    - videos.list (with 5 parts): 10 units per video
-    - commentThreads.list: 1 unit per 100 comments
+    - videos.list: 1 unit per request (up to 50 videos per request)
+    - commentThreads.list: 1 unit per request (up to 100 threads per request)
     - Free tier: 10,000 units/day
     - Paid tier: Additional quota available for purchase
     """
 
     # Quota costs per operation
-    COST_PER_VIDEO_METADATA = 10  # snippet + status + contentDetails + statistics + recordingDetails
-    COST_PER_100_COMMENTS = 1
+    # Each videos.list request costs 1 unit regardless of parts requested.
+    # With batching (50 videos/request), cost = ceil(num_videos / 50).
+    COST_PER_VIDEO_REQUEST = 1
+    COST_PER_COMMENT_REQUEST = 1
+    VIDEOS_PER_REQUEST = 50
+    COMMENTS_PER_REQUEST = 100
 
     # Daily quotas
     FREE_TIER_DAILY_QUOTA = 10_000
@@ -510,26 +697,31 @@ class QuotaEstimator:
     def estimate_video_metadata_cost(cls, num_videos: int) -> int:
         """Estimate quota cost for fetching video metadata.
 
+        With batching, each request handles up to 50 videos for 1 unit.
+
         Args:
             num_videos: Number of videos to fetch metadata for
 
         Returns:
             Estimated quota units required
         """
-        return num_videos * cls.COST_PER_VIDEO_METADATA
+        if num_videos == 0:
+            return 0
+        return (num_videos + cls.VIDEOS_PER_REQUEST - 1) // cls.VIDEOS_PER_REQUEST * cls.COST_PER_VIDEO_REQUEST
 
     @classmethod
-    def estimate_comments_cost(cls, num_comment_threads: int) -> int:
+    def estimate_comments_cost(cls, num_comment_requests: int) -> int:
         """Estimate quota cost for fetching comments.
 
+        Each commentThreads.list request costs 1 unit and returns up to 100 threads.
+
         Args:
-            num_comment_threads: Number of top-level comment threads
+            num_comment_requests: Number of comment API requests needed
 
         Returns:
             Estimated quota units required
         """
-        # 1 unit per 100 comment threads
-        return (num_comment_threads + 99) // 100
+        return num_comment_requests * cls.COST_PER_COMMENT_REQUEST
 
     @classmethod
     def format_cost_report(
@@ -563,15 +755,16 @@ class QuotaEstimator:
             overage = 0
             overage_cost_usd = 0.0
 
+        video_requests = (num_videos + cls.VIDEOS_PER_REQUEST - 1) // cls.VIDEOS_PER_REQUEST if num_videos else 0
         report_lines = [
             "YouTube API Quota Estimation",
             "=" * 50,
-            f"Videos:           {num_videos:,} × 10 units = {video_cost:,} units",
+            f"Videos:           {num_videos:,} ({video_requests} request(s) × {cls.VIDEOS_PER_REQUEST}/req) = {video_cost:,} units",
         ]
 
         if num_comments > 0:
             report_lines.append(
-                f"Comment threads:  {num_comments:,} ÷ 100 = {comment_cost:,} units"
+                f"Comment requests: {num_comments:,} request(s) = {comment_cost:,} units"
             )
             report_lines.append(f"{'':17} {'-' * 30}")
             report_lines.append(f"Total:            {total_cost:,} units")

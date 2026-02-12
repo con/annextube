@@ -9,10 +9,11 @@ from threading import Thread
 
 import click
 
+from annextube.cli.aggregate import discover_channels
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.logging_config import get_logger
 from annextube.lib.range_server import RangeHTTPRequestHandler
 from annextube.services.export import ExportService
-from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
 
@@ -167,34 +168,63 @@ def serve(
         # Regenerate everything before serving
         annextube serve --regenerate=all
     """
-    # Check if this is a git-annex repo
-    git_annex = GitAnnexService(output_dir)
-    if not git_annex.is_annex_repo():
+    # Discover archive type
+    archive_info = discover_annextube(output_dir)
+    if archive_info is None:
         click.echo(
             f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
             err=True,
         )
         raise click.Abort()
 
+    is_multi_channel = archive_info.type == "multi-channel"
     web_dir = output_dir / "web"
-    if not web_dir.exists():
-        click.echo(
-            f"Error: Web UI not found at {web_dir}. Run 'annextube generate-web' first.",
-            err=True,
-        )
-        raise click.Abort()
 
     # Regenerate if requested
     if regenerate:
         try:
             # Regenerate TSV files
             if regenerate in ['tsv', 'all']:
-                click.echo("Regenerating TSV files...")
-                export = ExportService(output_dir)
-                videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
-                click.echo(f"  [ok] {videos_tsv.name}")
-                click.echo(f"  [ok] {playlists_tsv.name}")
-                click.echo(f"  [ok] {authors_tsv.name}")
+                if is_multi_channel:
+                    click.echo("Regenerating TSV files for multi-channel collection...")
+
+                    # Discover all channels
+                    channels = discover_channels(output_dir, depth=1)
+                    if not channels:
+                        click.echo("Warning: No channels found", err=True)
+                    else:
+                        click.echo(f"Found {len(channels)} channel(s)")
+
+                        # Regenerate TSV files for each channel
+                        for rel_channel_dir, channel_json_path in channels:
+                            channel_dir = output_dir / rel_channel_dir
+                            click.echo(f"  Regenerating TSVs for {rel_channel_dir}...")
+
+                            try:
+                                export = ExportService(channel_dir)
+                                videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
+                                click.echo(f"    [ok] {rel_channel_dir}/{videos_tsv.name}")
+                                click.echo(f"    [ok] {rel_channel_dir}/{playlists_tsv.name}")
+                                click.echo(f"    [ok] {rel_channel_dir}/{authors_tsv.name}")
+                            except Exception as e:
+                                click.echo(f"    [error] Failed to regenerate {rel_channel_dir}: {e}", err=True)
+                                continue
+
+                        # Regenerate top-level channels.tsv
+                        click.echo("  Regenerating channels.tsv...")
+                        # Import here to avoid circular dependency
+                        from annextube.cli.aggregate import aggregate
+                        ctx.invoke(aggregate, directory=output_dir, depth=1, output=None, force=True)
+                        click.echo("    [ok] channels.tsv")
+
+                else:
+                    # Single-channel mode
+                    click.echo("Regenerating TSV files...")
+                    export = ExportService(output_dir)
+                    videos_tsv, playlists_tsv, authors_tsv = export.generate_all()
+                    click.echo(f"  [ok] {videos_tsv.name}")
+                    click.echo(f"  [ok] {playlists_tsv.name}")
+                    click.echo(f"  [ok] {authors_tsv.name}")
 
             # Regenerate web UI
             if regenerate in ['web', 'all']:
@@ -219,14 +249,28 @@ def serve(
             click.echo(f"Error regenerating: {e}", err=True)
             raise click.Abort() from e
 
-    # Start watcher thread if enabled
+    # Check if web directory exists after regeneration
+    if not web_dir.exists():
+        click.echo(
+            f"Error: Web UI not found at {web_dir}. Run 'annextube generate-web' first.",
+            err=True,
+        )
+        raise click.Abort()
+
+    # Start watcher thread if enabled (only for single-channel archives)
     watcher_thread = None
     watcher = None
     if watch:
-        watcher = ArchiveWatcher(output_dir, web_dir, watch_interval)
-        watcher_thread = Thread(target=watcher.watch, daemon=True)
-        watcher_thread.start()
-        click.echo(f"[ok] Watching for changes (interval: {watch_interval}s)")
+        if is_multi_channel:
+            click.echo(
+                "Info: Auto-watch disabled for multi-channel collections. "
+                "Watch individual channels instead."
+            )
+        else:
+            watcher = ArchiveWatcher(output_dir, web_dir, watch_interval)
+            watcher_thread = Thread(target=watcher.watch, daemon=True)
+            watcher_thread.start()
+            click.echo(f"[ok] Watching for changes (interval: {watch_interval}s)")
 
     # Change to archive directory
     os.chdir(output_dir)
@@ -237,13 +281,16 @@ def serve(
         socketserver.TCPServer.allow_reuse_address = True
         with socketserver.TCPServer((host, port), RangeHTTPRequestHandler) as httpd:
             click.echo()
-            click.echo(f"Serving annextube archive at http://{host}:{port}/")
+            if is_multi_channel:
+                click.echo(f"Serving multi-channel collection at http://{host}:{port}/")
+            else:
+                click.echo(f"Serving annextube archive at http://{host}:{port}/")
             click.echo(f"Directory: {output_dir}")
             click.echo(f"Web UI: http://{host}:{port}/web/")
             click.echo()
             click.echo("Features:")
             click.echo("  [ok] HTTP Range requests (video seeking enabled)")
-            if watch:
+            if watch and not is_multi_channel:
                 click.echo(f"  [ok] Auto-regenerate TSVs on changes ({watch_interval}s interval)")
             click.echo()
             click.echo("Press Ctrl+C to stop")

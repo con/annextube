@@ -84,6 +84,11 @@ See [docs/how-to/container-deployment.md](docs/content/how-to/container-deployme
 
 - **YouTube Data API v3 key**: For API-based metadata (free from Google Cloud Console)
 - **deno or node**: JavaScript runtime for modern YouTube features
+- **DataLad**: For creating DataLad datasets instead of plain git-annex repos
+  ```bash
+  pip install annextube[datalad]
+  annextube init --datalad  # Creates DataLad dataset with .datalad/ config
+  ```
 
 ## Development
 

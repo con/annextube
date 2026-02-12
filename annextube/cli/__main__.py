@@ -1,10 +1,21 @@
 """CLI entry point for annextube."""
 
+import os
 import sys
 from pathlib import Path
 
 import click
 
+# Ensure UTF-8 encoding for Click output (fixes Unicode encoding errors)
+# This must be set before any Click commands are executed
+if sys.stdout.encoding != 'utf-8':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr.encoding != 'utf-8':
+    import io
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+
+from annextube.cli.aggregate import aggregate
 from annextube.cli.backup import backup
 from annextube.cli.check import check
 from annextube.cli.export import export
@@ -33,8 +44,9 @@ except ImportError:
 )
 @click.option(
     "--log-level",
-    type=click.Choice(["heavy-debug", "debug", "info", "warning", "error", "critical"]),
+    type=click.Choice(["info", "warning", "error", "critical", "debug", "heavy-debug"]),
     default="info",
+    show_default=True,
     help="Log level (heavy-debug includes yt-dlp debug output)",
 )
 @click.option("--json", "json_output", is_flag=True, help="JSON output mode")
@@ -70,6 +82,7 @@ cli.add_command(init)
 cli.add_command(init_user_config)
 cli.add_command(backup)
 cli.add_command(export)
+cli.add_command(aggregate)
 cli.add_command(generate_web)
 cli.add_command(serve)
 cli.add_command(info)

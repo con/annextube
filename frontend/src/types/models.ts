@@ -6,6 +6,14 @@
  * Note: Manually defined for now. Future: auto-generate from schema.
  */
 
+export interface ArchiveStats {
+  total_videos_archived: number;
+  first_video_date?: string; // ISO 8601 date
+  last_video_date?: string; // ISO 8601 date
+  total_duration_seconds: number;
+  total_size_bytes: number;
+}
+
 export interface Channel {
   channel_id: string;
   name: string;
@@ -21,6 +29,8 @@ export interface Channel {
   last_sync: string; // ISO 8601 datetime
   created_at: string; // ISO 8601 datetime
   fetched_at: string; // ISO 8601 datetime
+  archive_stats?: ArchiveStats; // Stats from local archive
+  channel_dir?: string; // Relative path to channel directory (for multi-channel collections)
 }
 
 export interface Video {
@@ -166,6 +176,21 @@ export interface PlaylistTSVRow {
   created_at: string;
   last_sync: string;
   path: string; // directory name for loading playlist.json
+}
+
+export interface ChannelTSVRow {
+  channel_id: string;
+  title: string;
+  custom_url: string;
+  description: string;
+  subscriber_count: string; // number as string
+  video_count: string; // number as string
+  playlist_count: string; // number as string
+  total_videos_archived: string; // number as string
+  first_video_date: string;
+  last_video_date: string;
+  last_sync: string;
+  channel_dir: string; // relative path to channel directory
 }
 
 /**

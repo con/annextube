@@ -83,6 +83,15 @@ class OrganizationConfig:
 
 
 @dataclass
+class BackupConfig:
+    """Configuration for backup operations (checkpoints, interruption handling)."""
+
+    checkpoint_interval: int = 50  # Commit every N videos (0 = disabled)
+    checkpoint_enabled: bool = True  # Enable periodic commits
+    auto_commit_on_interrupt: bool = True  # Auto-commit partial work on Ctrl+C
+
+
+@dataclass
 class UserConfig:
     """User-wide configuration (authentication, network, global preferences).
 
@@ -139,6 +148,7 @@ class Config:
     components: ComponentsConfig = field(default_factory=ComponentsConfig)
     filters: FiltersConfig = field(default_factory=FiltersConfig)
     organization: OrganizationConfig = field(default_factory=OrganizationConfig)
+    backup: BackupConfig = field(default_factory=BackupConfig)
 
     # Convenience properties for backward compatibility
     @property
@@ -619,8 +629,8 @@ def generate_user_config_template() -> str:
 #   - Comment replies with proper threading
 #
 # Get your API key: https://console.cloud.google.com/apis/credentials
-# Free tier: 10,000 units/day (~1,000 videos)
-# Quota cost: 10 units per video
+# Free tier: 10,000 units/day
+# Quota cost: 1 unit per request (up to 50 videos batched per request)
 #
 # RECOMMENDED: Use environment variable instead!
 #   export YOUTUBE_API_KEY="your-key-here"

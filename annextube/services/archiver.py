@@ -250,6 +250,52 @@ class Archiver:
         # Default: process everything
         return True
 
+    def _has_uncommitted_changes(self) -> bool:
+        """Check if there are uncommitted changes in the repository.
+
+        Returns:
+            True if there are staged or unstaged changes
+        """
+        import subprocess
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=self.repo_path,
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return bool(result.stdout.strip())
+
+    def _checkpoint(self, channel_url: str, videos_processed: int, total_videos: int) -> None:
+        """Create a checkpoint by regenerating TSVs and committing progress.
+
+        Args:
+            channel_url: URL of the channel being backed up
+            videos_processed: Number of videos processed so far
+            total_videos: Total number of videos to process
+        """
+        if not self._has_uncommitted_changes():
+            logger.debug("No uncommitted changes, skipping checkpoint")
+            return
+
+        logger.info(f"Checkpoint: {videos_processed}/{total_videos} videos processed")
+
+        # Regenerate TSVs to include newly processed videos
+        try:
+            self.export.generate_all()
+        except Exception as e:
+            logger.warning(f"Failed to regenerate TSVs during checkpoint: {e}")
+            # Continue with commit anyway - TSVs can be regenerated later
+
+        # Commit staged changes
+        try:
+            self.git_annex.add_and_commit(
+                f"Checkpoint: {channel_url} ({videos_processed}/{total_videos} videos)"
+            )
+        except Exception as e:
+            logger.error(f"Failed to commit checkpoint: {e}")
+            raise
+
     def _load_video_paths(self) -> dict[str, str]:
         """Load existing video ID to path mapping from videos.tsv.
 
@@ -606,16 +652,21 @@ class Archiver:
                 existing_video_ids=existing_video_ids
             )
 
-            # Apply date filter if specified (but NOT on initial backup)
-            # On initial backup, we want ALL videos regardless of date filter
+            # Apply date filter only for non-incremental, non-initial backups.
+            # In incremental mode, the two-pass approach already returns only NEW videos
+            # that need backing up regardless of age. The date_from "social window" is for
+            # refreshing social data on existing videos, not for gating new video discovery.
             is_initial_backup = not existing_video_ids
-            if (self.date_from or self.date_to) and not is_initial_backup:
+            is_incremental = existing_video_ids is not None and len(existing_video_ids) > 0
+            if (self.date_from or self.date_to) and not is_initial_backup and not is_incremental:
                 videos_metadata = [v for v in all_videos if self._should_process_video_by_date(v)]
                 logger.info(f"Filtered {len(all_videos)} videos to {len(videos_metadata)} within date range")
             else:
                 videos_metadata = all_videos
                 if is_initial_backup and (self.date_from or self.date_to):
                     logger.info(f"Skipping date filter on initial backup - processing all {len(all_videos)} videos")
+                elif is_incremental and (self.date_from or self.date_to):
+                    logger.info(f"Skipping date filter in incremental mode - processing all {len(all_videos)} new videos")
 
         # For component-specific modes, load existing videos from TSV
         if skip_video_fetch and not videos_metadata:
@@ -659,21 +710,83 @@ class Archiver:
         if self.update_mode != "playlists":
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
-            # Process each video (fail-fast: errors will propagate)
-            for i, video_meta in enumerate(videos_metadata, 1):
-                logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                video = self.youtube.metadata_to_video(video_meta)
-                caption_count = self._process_video(video)
+            # Batch pre-fetch API data for efficiency (instead of per-video API calls)
+            prefetched_stats: dict[str, dict[str, int]] | None = None
+            api_metadata_cache: dict[str, dict] | None = None
 
-                stats["videos_processed"] += 1
-                stats["videos_tracked"] += 1
-                stats["metadata_saved"] += 1
-                stats["captions_downloaded"] += caption_count
+            if self.youtube.api_client:
+                # For all-incremental mode: batch-fetch statistics for existing videos
+                if self.update_mode == "all-incremental":
+                    existing_ids = [
+                        v.get("video_id") or v.get("id")
+                        for v in videos_metadata
+                        if v.get("video_id")  # stored metadata has video_id
+                    ]
+                    if existing_ids:
+                        logger.info(f"Batch-fetching statistics for {len(existing_ids)} existing video(s)")
+                        try:
+                            prefetched_stats = self.youtube.api_client.batch_get_video_statistics(existing_ids)
+                            logger.info(f"Pre-fetched statistics for {len(prefetched_stats)} video(s)")
+                        except Exception as e:
+                            logger.warning(f"Failed to batch-fetch statistics: {e}")
 
-            # Commit changes
-            self.git_annex.add_and_commit(
-                f"Backup channel: {channel_url} ({stats['videos_processed']} videos)"
-            )
+                # For new videos: batch-fetch enhanced API metadata
+                new_video_ids = [
+                    v.get("id")
+                    for v in videos_metadata
+                    if v.get("id") and not v.get("video_id")  # yt-dlp metadata (new videos) uses "id"
+                ]
+                if new_video_ids:
+                    logger.info(f"Batch-fetching API metadata for {len(new_video_ids)} new video(s)")
+                    try:
+                        api_metadata_cache = self.youtube.api_client.batch_enhance_video_metadata(new_video_ids)
+                        logger.info(f"Pre-fetched API metadata for {len(api_metadata_cache)} video(s)")
+                    except Exception as e:
+                        logger.warning(f"Failed to batch-fetch API metadata: {e}")
+
+            # Process each video with checkpoint support
+            checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
+
+            try:
+                for i, video_meta in enumerate(videos_metadata, 1):
+                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
+                    video = self.youtube.metadata_to_video(video_meta, api_metadata_cache=api_metadata_cache)
+                    caption_count = self._process_video(video, prefetched_stats=prefetched_stats)
+
+                    stats["videos_processed"] += 1
+                    stats["videos_tracked"] += 1
+                    stats["metadata_saved"] += 1
+                    stats["captions_downloaded"] += caption_count
+
+                    # Periodic checkpoint
+                    if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
+                        self._checkpoint(channel_url, i, len(videos_metadata))
+
+                # Final commit (if checkpoints disabled or remaining videos after last checkpoint)
+                if self._has_uncommitted_changes():
+                    self.git_annex.add_and_commit(
+                        f"Backup channel: {channel_url} ({stats['videos_processed']} videos)"
+                    )
+
+            except KeyboardInterrupt:
+                logger.warning("Backup interrupted by user (Ctrl+C)")
+
+                # Auto-commit partial progress if enabled
+                if self.config.backup.auto_commit_on_interrupt and self._has_uncommitted_changes():
+                    logger.info(f"Auto-committing partial progress ({stats['videos_processed']} videos processed)...")
+                    try:
+                        # Regenerate TSVs to include all processed videos
+                        self.export.generate_all()
+                        self.git_annex.add_and_commit(
+                            f"Partial backup (interrupted): {channel_url} ({stats['videos_processed']} videos)"
+                        )
+                        logger.info("Partial progress committed successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to commit partial progress: {e}")
+                        logger.info("Uncommitted changes remain. Run 'git status' to inspect.")
+
+                # Re-raise to propagate interruption
+                raise
 
             logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
         else:
@@ -707,6 +820,16 @@ class Archiver:
             self.git_annex.add_and_commit("Update TSV metadata files")
         except Exception as e:
             logger.warning(f"Failed to generate TSV files: {e}")
+
+        # Log API quota usage summary
+        if self.youtube.api_client:
+            summary = self.youtube.api_client.get_quota_summary()
+            if summary["total_units"] > 0:
+                calls_str = ", ".join(f"{k}: {v}" for k, v in summary["calls"].items())
+                logger.info(
+                    f"YouTube API quota used: {summary['total_units']} unit(s) "
+                    f"({calls_str})"
+                )
 
         return stats
 
@@ -745,7 +868,14 @@ class Archiver:
 
         # Get playlist videos
         limit = self.config.filters.limit
-        all_videos = self.youtube.get_playlist_videos(playlist_url, limit=limit)
+        # Enable incremental mode to skip known unavailable videos
+        incremental = self.update_mode in ["videos-incremental", "all-incremental", "playlists"]
+        all_videos = self.youtube.get_playlist_videos(
+            playlist_url,
+            limit=limit,
+            repo_path=self.repo_path,
+            incremental=incremental
+        )
 
         # Apply date filter if specified (but NOT on initial backup)
         # Check if this is initial backup by looking for existing TSV
@@ -795,51 +925,79 @@ class Archiver:
             logger.info("Playlist content unchanged, skipping video processing")
             return stats
 
-        # Process each video and create ordered symlinks (fail-fast)
-        for i, video_meta in enumerate(videos_metadata, 1):
-            video = self.youtube.metadata_to_video(video_meta)
-            video_id = video.video_id
+        # Process each video and create ordered symlinks with checkpoint support
+        checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
 
-            # Check if video was already processed in this run (e.g., from channel backup)
-            if video_id in self._processed_video_ids:
-                logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
-                caption_count = 0
-            else:
-                logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                # Process video (creates video directory with content)
-                caption_count = self._process_video(video)
+        try:
+            for i, video_meta in enumerate(videos_metadata, 1):
+                video = self.youtube.metadata_to_video(video_meta)
+                video_id = video.video_id
 
-                stats["videos_processed"] += 1
-                stats["videos_tracked"] += 1
-                stats["metadata_saved"] += 1
-                stats["captions_downloaded"] += caption_count
+                # Check if video was already processed in this run (e.g., from channel backup)
+                if video_id in self._processed_video_ids:
+                    logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
+                    caption_count = 0
+                else:
+                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
+                    # Process video (creates video directory with content)
+                    caption_count = self._process_video(video)
 
-            # Create ordered symlink in playlist directory (even if already processed)
-            video_dir = self._get_video_path(video)
-            if video_dir.exists():
-                # Generate symlink name: {index:04d}_{video_dir_name}
-                symlink_name = self._get_playlist_symlink_name(video_dir, i)
-                symlink_path = playlist_dir / symlink_name
+                    stats["videos_processed"] += 1
+                    stats["videos_tracked"] += 1
+                    stats["metadata_saved"] += 1
+                    stats["captions_downloaded"] += caption_count
 
-                # Create relative symlink (for repository portability)
-                # From: playlists/{playlist_title}/{symlink}
-                # To:   videos/{year}/{month}/{video_dir_name} (or videos/{video_dir_name} for flat)
-                # Use relative_to() to support both flat and hierarchical layouts
-                relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
+                # Create ordered symlink in playlist directory (even if already processed)
+                video_dir = self._get_video_path(video)
+                if video_dir.exists():
+                    # Generate symlink name: {index:04d}_{video_dir_name}
+                    symlink_name = self._get_playlist_symlink_name(video_dir, i)
+                    symlink_path = playlist_dir / symlink_name
 
-                # Remove existing symlink if present
-                if symlink_path.exists() or symlink_path.is_symlink():
-                    symlink_path.unlink()
+                    # Create relative symlink (for repository portability)
+                    # From: playlists/{playlist_title}/{symlink}
+                    # To:   videos/{year}/{month}/{video_dir_name} (or videos/{video_dir_name} for flat)
+                    # Use relative_to() to support both flat and hierarchical layouts
+                    relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
 
-                symlink_path.symlink_to(relative_target)
-                logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
-            else:
-                logger.warning(f"Video directory not found, skipping symlink: {video_dir}")
+                    # Remove existing symlink if present
+                    if symlink_path.exists() or symlink_path.is_symlink():
+                        symlink_path.unlink()
 
-        # Commit changes
-        self.git_annex.add_and_commit(
-            f"Backup playlist: {playlist.title} ({stats['videos_processed']} videos)"
-        )
+                    symlink_path.symlink_to(relative_target)
+                    logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
+                else:
+                    logger.warning(f"Video directory not found, skipping symlink: {video_dir}")
+
+                # Periodic checkpoint
+                if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
+                    self._checkpoint(playlist_url, i, len(videos_metadata))
+
+            # Final commit (if checkpoints disabled or remaining videos after last checkpoint)
+            if self._has_uncommitted_changes():
+                self.git_annex.add_and_commit(
+                    f"Backup playlist: {playlist.title} ({stats['videos_processed']} videos)"
+                )
+
+        except KeyboardInterrupt:
+            logger.warning("Backup interrupted by user (Ctrl+C)")
+
+            # Auto-commit partial progress if enabled
+            if self.config.backup.auto_commit_on_interrupt and self._has_uncommitted_changes():
+                logger.info(f"Auto-committing partial progress ({stats['videos_processed']} videos processed)...")
+                try:
+                    # Regenerate TSVs to include all processed videos
+                    self.export.generate_all()
+                    self.git_annex.add_and_commit(
+                        f"Partial backup (interrupted): {playlist.title} ({stats['videos_processed']} videos)"
+                    )
+                    logger.info("Partial progress committed successfully")
+                except Exception as e:
+                    logger.error(f"Failed to commit partial progress: {e}")
+                    logger.info("Uncommitted changes remain. Run 'git status' to inspect.")
+
+            # Re-raise to propagate interruption
+            raise
 
         logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
 
@@ -853,11 +1011,13 @@ class Archiver:
 
         return stats
 
-    def _process_video(self, video: Video) -> int:
+    def _process_video(self, video: Video, prefetched_stats: dict[str, dict[str, int]] | None = None) -> int:
         """Process a single video.
 
         Args:
             video: Video model instance
+            prefetched_stats: Pre-fetched statistics dict (video_id -> stats) for batch efficiency.
+                If provided, uses this instead of making per-video API calls.
 
         Returns:
             Number of captions downloaded
@@ -909,14 +1069,18 @@ class Archiver:
                         logger.warning(f"Failed to load existing metadata for {video.video_id}: {e}")
                         return 0
 
-                    # Fetch current statistics from YouTube API (cheap: 2 quota units)
+                    # Use pre-fetched statistics if available, otherwise fetch per-video (1 unit/request)
                     try:
-                        from annextube.services.youtube_api import YouTubeAPIMetadataClient
-                        api_client = YouTubeAPIMetadataClient()
-                        stats = api_client.get_video_statistics(video.video_id)
+                        if prefetched_stats is not None:
+                            video_stats = prefetched_stats
+                        else:
+                            # Fallback: per-video fetch (inefficient, but works without batch)
+                            from annextube.services.youtube_api import YouTubeAPIMetadataClient
+                            api_client = YouTubeAPIMetadataClient()
+                            video_stats = api_client.get_video_statistics(video.video_id)
 
-                        if video.video_id in stats:
-                            current_stats = stats[video.video_id]
+                        if video.video_id in video_stats:
+                            current_stats = video_stats[video.video_id]
                             new_comment_count = current_stats.get('commentCount', 0)
                             new_view_count = current_stats.get('viewCount', 0)
                             new_like_count = current_stats.get('likeCount', 0)
@@ -989,12 +1153,9 @@ class Archiver:
         video_dir.mkdir(parents=True, exist_ok=True)
         logger.debug(f"Video directory: {video_dir}")
 
-        # Save metadata
-        metadata_path = video_dir / "metadata.json"
-        with AtomicFileWriter(metadata_path) as f:
-            json.dump(video.to_dict(), f, indent=2)
-
-        logger.debug(f"Saved metadata: {metadata_path}")
+        # Set file_path to relative path (for consistency with TSV export)
+        relative_path = video_dir.relative_to(self.repo_path / "videos")
+        video.file_path = str(relative_path)
 
         # Track video URL with git-annex
         # Always track URL (even if videos=false), download only if videos=true
@@ -1010,6 +1171,9 @@ class Archiver:
                     url=video_url, file_path=video_file, relaxed=True, fast=True, no_raw=True
                 )
                 logger.debug(f"Tracked video URL: {video_file}")
+
+                # Update download_status to reflect action taken
+                video.download_status = "tracked"
 
                 # Set git-annex metadata for the video file
                 metadata = {
@@ -1031,6 +1195,7 @@ class Archiver:
 
                     # Verify downloaded file is actually a video, not HTML/text error page
                     if not self._verify_video_file(video_file):
+                        video.download_status = "failed"
                         error_msg = (
                             f"Downloaded file is not a valid video (likely HTML error page): {video_file}\n\n"
                             f"This usually means yt-dlp failed to download the video.\n"
@@ -1046,8 +1211,20 @@ class Archiver:
                         logger.error(error_msg)
                         raise ValueError(f"Invalid video file: {video_file}")
 
+                    # Successfully downloaded
+                    video.download_status = "downloaded"
+
             except Exception as e:
+                if video.download_status not in ("tracked", "downloaded"):
+                    video.download_status = "failed"
                 logger.warning(f"Failed to track video URL: {e}")
+
+        # Save metadata (after tracking so download_status and file_path are set correctly)
+        metadata_path = video_dir / "metadata.json"
+        with AtomicFileWriter(metadata_path) as f:
+            json.dump(video.to_dict(), f, indent=2)
+
+        logger.debug(f"Saved metadata: {metadata_path}")
 
         # Download thumbnail (if enabled and mode allows)
         # For NEW videos: always fetch if configured, regardless of mode
@@ -1158,7 +1335,7 @@ class Archiver:
             for sig in html_signatures:
                 if header.startswith(sig) or sig in header[:200]:
                     logger.error(f"File appears to be HTML/text, not video: {video_file}")
-                    logger.debug(f"File header: {header[:100]}")
+                    logger.debug(f"File header: {header[:100]!r}")
                     return False
 
             # Check for common video container signatures

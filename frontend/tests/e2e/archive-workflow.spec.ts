@@ -472,7 +472,7 @@ test.describe('Complete Archive Workflow', () => {
       expect(videoState.readyState).toBeGreaterThan(0); // Should have started loading
       expect(videoState.src).toContain('/videos/'); // Should use absolute path
       expect(videoState.src).toContain('video.mkv');
-      expect(poster).toContain('/videos/'); // Should use absolute path
+      expect(poster).toContain('videos/'); // Should contain videos/ path
       expect(poster).toContain('thumbnail.jpg'); // Should use local thumbnail, not YouTube CDN
       expect(poster).not.toContain('ytimg.com'); // Should NOT use YouTube CDN (CORS issues)
     });

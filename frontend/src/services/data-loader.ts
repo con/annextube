@@ -8,12 +8,15 @@
 
 import { parseTSV, parseIntField } from '@/utils/tsv-parser';
 import { BASE_PATH, isLocalDeployment } from '@/utils/config';
+import { isFileAvailable } from '@/services/availability';
 import type {
   Video,
   Playlist,
   Comment,
+  Channel,
   VideoTSVRow,
   PlaylistTSVRow,
+  ChannelTSVRow,
 } from '@/types/models';
 
 export class DataLoader {
@@ -110,22 +113,29 @@ export class DataLoader {
   /**
    * Load full video metadata from JSON (on-demand, mykrok pattern)
    *
-   * @param videoId - YouTube video ID
+   * @param video - Video object from TSV (contains video_id and file_path)
+   * @param channelDir - Optional channel directory for multi-channel mode
    * @returns Full Video object with all metadata
    */
-  async loadVideoMetadata(videoId: string): Promise<Video> {
+  async loadVideoMetadata(video: Video, channelDir?: string): Promise<Video> {
+    const videoId = video.video_id;
+    const filePath = video.file_path || videoId;
+
+    // Cache key includes channel context
+    const cacheKey = channelDir ? `${channelDir}:${videoId}` : videoId;
+
     // Check cache first
-    if (this.metadataCache.has(videoId)) {
-      return this.metadataCache.get(videoId)!;
+    if (this.metadataCache.has(cacheKey)) {
+      return this.metadataCache.get(cacheKey)!;
     }
 
-    // Get file_path from videos cache (use path if available, otherwise video_id)
-    const filePath = this.getVideoPath(videoId);
+    // Build URL with or without channel prefix
+    const metadataUrl = channelDir
+      ? `${this.baseUrl}/${channelDir}/videos/${filePath}/metadata.json`
+      : `${this.baseUrl}/videos/${filePath}/metadata.json`;
 
     // Fetch from JSON file
-    const response = await fetch(
-      `${this.baseUrl}/videos/${filePath}/metadata.json`
-    );
+    const response = await fetch(metadataUrl);
     if (!response.ok) {
       throw new Error(
         `Failed to load metadata for ${videoId}: ${response.statusText}`
@@ -136,16 +146,11 @@ export class DataLoader {
 
     // Preserve fields from TSV that aren't in metadata.json
     // (These are calculated during TSV export)
-    if (this.videosCache) {
-      const tsvVideo = this.videosCache.find((v) => v.video_id === videoId);
-      if (tsvVideo) {
-        metadata.file_path = filePath;
-        metadata.download_status = tsvVideo.download_status;
-      }
-    }
+    metadata.file_path = filePath;
+    metadata.download_status = video.download_status;
 
     // Cache for future requests
-    this.metadataCache.set(videoId, metadata);
+    this.metadataCache.set(cacheKey, metadata);
 
     return metadata;
   }
@@ -153,22 +158,29 @@ export class DataLoader {
   /**
    * Load comments for a video (on-demand, mykrok pattern)
    *
-   * @param videoId - YouTube video ID
+   * @param video - Video object from TSV (contains video_id and file_path)
+   * @param channelDir - Optional channel directory for multi-channel mode
    * @returns Array of Comment objects (may include nested replies)
    */
-  async loadComments(videoId: string): Promise<Comment[]> {
+  async loadComments(video: Video, channelDir?: string): Promise<Comment[]> {
+    const videoId = video.video_id;
+    const filePath = video.file_path || videoId;
+
+    // Cache key includes channel context
+    const cacheKey = channelDir ? `${channelDir}:${videoId}` : videoId;
+
     // Check cache first
-    if (this.commentsCache.has(videoId)) {
-      return this.commentsCache.get(videoId)!;
+    if (this.commentsCache.has(cacheKey)) {
+      return this.commentsCache.get(cacheKey)!;
     }
 
-    // Get file_path from videos cache
-    const filePath = this.getVideoPath(videoId);
+    // Build URL with or without channel prefix
+    const commentsUrl = channelDir
+      ? `${this.baseUrl}/${channelDir}/videos/${filePath}/comments.json`
+      : `${this.baseUrl}/videos/${filePath}/comments.json`;
 
     // Fetch from JSON file
-    const response = await fetch(
-      `${this.baseUrl}/videos/${filePath}/comments.json`
-    );
+    const response = await fetch(commentsUrl);
     if (!response.ok) {
       // Comments may not exist for some videos
       if (response.status === 404) {
@@ -182,7 +194,7 @@ export class DataLoader {
     const comments = (await response.json()) as Comment[];
 
     // Cache for future requests
-    this.commentsCache.set(videoId, comments);
+    this.commentsCache.set(cacheKey, comments);
 
     return comments;
   }
@@ -255,6 +267,206 @@ export class DataLoader {
   }
 
   /**
+   * Check if this is a multi-channel collection (channels.tsv exists)
+   */
+  async isMultiChannelMode(): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.baseUrl}/channels.tsv`);
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Load channels from channels.tsv (for multi-channel collections)
+   *
+   * @param loadFullMetadata - If true, load full channel.json for each channel (includes complete archive_stats)
+   */
+  async loadChannels(loadFullMetadata = true): Promise<Channel[]> {
+    const response = await fetch(`${this.baseUrl}/channels.tsv`);
+    if (!response.ok) {
+      throw new Error(`Failed to load channels.tsv: ${response.statusText}`);
+    }
+
+    const text = await response.text();
+    const rows = parseTSV(text) as unknown as ChannelTSVRow[];
+
+    // Convert TSV rows to Channel objects
+    const channels = rows.map((row) => this.parseTSVChannel(row));
+
+    // Optionally load full channel.json for complete metadata
+    if (loadFullMetadata) {
+      await Promise.all(
+        channels.map(async (channel) => {
+          try {
+            const fullChannel = await this.loadChannelMetadata(channel.channel_dir!);
+            // Merge full metadata (prioritize channel.json over TSV)
+            Object.assign(channel, fullChannel);
+            // Preserve channel_dir from TSV (not in channel.json)
+            channel.channel_dir = fullChannel.channel_dir || channel.channel_dir;
+          } catch (err) {
+            // If channel.json doesn't exist, keep TSV data
+            console.warn(
+              `Could not load full metadata for channel ${channel.channel_id}:`,
+              err
+            );
+          }
+        })
+      );
+    }
+
+    return channels;
+  }
+
+  /**
+   * Load full channel metadata from channel.json
+   *
+   * @param channelDir - Relative path to channel directory (e.g., 'ch-annextubetesting')
+   * @returns Full Channel object with complete archive_stats
+   */
+  async loadChannelMetadata(channelDir: string): Promise<Channel> {
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/channel.json`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load channel.json for ${channelDir}: ${response.statusText}`
+      );
+    }
+
+    const channel = (await response.json()) as Channel;
+
+    // Preserve channel_dir for navigation
+    channel.channel_dir = channelDir;
+
+    // Check for local avatar file
+    const avatarPath = await this.findChannelAvatar(channelDir);
+    if (avatarPath) {
+      channel.avatar_url = avatarPath;
+    }
+
+    return channel;
+  }
+
+  /**
+   * Find local channel avatar file (channel_avatar.*)
+   *
+   * @param channelDir - Relative path to channel directory
+   * @returns Path to avatar file, or null if not found
+   */
+  async findChannelAvatar(channelDir: string): Promise<string | null> {
+    // Try common image extensions
+    const extensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'];
+
+    for (const ext of extensions) {
+      const avatarPath = `${this.baseUrl}/${channelDir}/channel_avatar.${ext}`;
+      if (await isFileAvailable(avatarPath)) {
+        return avatarPath;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Load videos for a specific channel directory
+   *
+   * @param channelDir - Relative path to channel directory (from channels.tsv)
+   */
+  async loadChannelVideos(channelDir: string): Promise<Video[]> {
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/videos/videos.tsv`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load videos for channel ${channelDir}: ${response.statusText}`
+      );
+    }
+
+    const text = await response.text();
+    const rows = parseTSV(text) as unknown as VideoTSVRow[];
+
+    // Convert TSV rows to Video objects
+    return rows.map((row) => this.parseTSVVideo(row));
+  }
+
+  /**
+   * Load playlists for a specific channel directory
+   *
+   * @param channelDir - Relative path to channel directory (from channels.tsv)
+   */
+  async loadChannelPlaylists(channelDir: string): Promise<Playlist[]> {
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/playlists/playlists.tsv`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load playlists for channel ${channelDir}: ${response.statusText}`
+      );
+    }
+
+    const text = await response.text();
+    const rows = parseTSV(text) as unknown as PlaylistTSVRow[];
+
+    // Convert TSV rows to Playlist objects
+    const playlists = rows.map((row) => this.parseTSVPlaylist(row));
+
+    // Load video_ids from playlist.json files
+    await Promise.all(
+      playlists.map(async (playlist) => {
+        try {
+          const fullPlaylist = await this.loadChannelPlaylistMetadata(
+            channelDir,
+            playlist.playlist_id,
+            playlist.path
+          );
+          playlist.video_ids = fullPlaylist.video_ids;
+        } catch (err) {
+          // If playlist.json doesn't exist, keep empty array
+          console.warn(
+            `Could not load video_ids for playlist ${playlist.playlist_id}:`,
+            err
+          );
+        }
+      })
+    );
+
+    return playlists;
+  }
+
+  /**
+   * Load full playlist metadata from channel-specific playlist.json
+   *
+   * @param channelDir - Channel directory
+   * @param playlistId - YouTube playlist ID
+   * @param path - Playlist directory name
+   */
+  async loadChannelPlaylistMetadata(
+    channelDir: string,
+    playlistId: string,
+    path?: string
+  ): Promise<Playlist> {
+    if (!path) {
+      throw new Error(
+        `Cannot load playlist metadata for ${playlistId}: path not provided`
+      );
+    }
+
+    // Fetch playlist.json from the channel's playlist directory
+    const response = await fetch(
+      `${this.baseUrl}/${channelDir}/playlists/${path}/playlist.json`
+    );
+    if (!response.ok) {
+      throw new Error(
+        `Failed to load playlist metadata for ${playlistId}: ${response.statusText}`
+      );
+    }
+
+    return (await response.json()) as Playlist;
+  }
+
+  /**
    * Clear all caches (useful for testing or manual refresh)
    */
   clearCache(): void {
@@ -314,6 +526,35 @@ export class DataLoader {
       video_ids: [],
       updated_at: row.last_sync,
       fetched_at: row.last_sync,
+    };
+  }
+
+  /**
+   * Convert TSV row to Channel object
+   */
+  private parseTSVChannel(row: ChannelTSVRow): Channel {
+    return {
+      channel_id: row.channel_id,
+      name: row.title,
+      description: row.description,
+      custom_url: row.custom_url,
+      subscriber_count: parseIntField(row.subscriber_count),
+      video_count: parseIntField(row.video_count),
+      avatar_url: '',
+      videos: [],
+      playlists: [],
+      last_sync: row.last_sync,
+      created_at: '',
+      fetched_at: row.last_sync,
+      archive_stats: {
+        total_videos_archived: parseIntField(row.total_videos_archived),
+        first_video_date: row.first_video_date || undefined,
+        last_video_date: row.last_video_date || undefined,
+        total_duration_seconds: 0,
+        total_size_bytes: 0,
+      },
+      // Add channel_dir as custom property for navigation
+      channel_dir: row.channel_dir,
     };
   }
 }

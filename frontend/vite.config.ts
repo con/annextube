@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import path from 'path';
+import { readFileSync } from 'fs';
+
+// Read version from package.json
+const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -16,6 +20,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [svelte()],
+
+    // Inject version at build time
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
 
     // Critical for file:// protocol support (local) or GitHub Pages (deployed)
     base: basePath,
@@ -34,14 +43,14 @@ export default defineConfig(({ mode }) => {
       minify: 'esbuild',  // Use esbuild (faster, built-in)
       sourcemap: false,
 
-      // Manual chunks for better caching
+      // Clean asset filenames (no content hashes)
       rollupOptions: {
         output: {
-          manualChunks: {
-            vendor: ['svelte']
-          }
-        }
-      }
+          entryFileNames: 'assets/[name].js',
+          chunkFileNames: 'assets/[name].js',
+          assetFileNames: 'assets/[name][extname]',
+        },
+      },
     },
 
     // Configure Vitest

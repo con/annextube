@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.config import save_config_template
 from annextube.lib.logging_config import get_logger
 from annextube.services.git_annex import GitAnnexService
@@ -20,20 +21,24 @@ logger = get_logger(__name__)
 )
 @click.argument("urls", nargs=-1)
 @click.option("--videos/--no-videos", default=True, help="Enable video downloading (default: enabled)")
-@click.option("--comments", type=int, default=-1, help="Comments depth (-1=unlimited (default), 0=disabled, N=limit to N)")
+@click.option("--comments-depth", type=int, default=-1, show_default=True, help="Comments depth: -1=unlimited, 0=disabled, N=limit to N")
 @click.option("--captions/--no-captions", default=True, help="Enable captions (default: enabled)")
 @click.option("--thumbnails/--no-thumbnails", default=True, help="Enable thumbnails (default: enabled)")
 @click.option("--limit", type=int, default=None, help="Limit to N most recent videos")
-@click.option("--include-playlists", default="all", help="Playlist inclusion: 'all' (default), 'none', or regex pattern")
-@click.option("--include-podcasts", default="all", help="Podcast inclusion: 'all' (default), 'none', or regex pattern")
-@click.option("--video-path-pattern", default="{year}/{month}/{date}_{sanitized_title}", help="Path pattern for video directories (default: {year}/{month}/{date}_{sanitized_title})")
+@click.option("--include-playlists", default="all", show_default=True, help="Playlist inclusion: 'all', 'none', or regex pattern")
+@click.option("--include-podcasts", default="all", show_default=True, help="Podcast inclusion: 'all', 'none', or regex pattern")
+@click.option("--video-path-pattern", default="{year}/{month}/{date}_{sanitized_title}", show_default=True, help="Path pattern for video directories")
 @click.option("--all-to-git", is_flag=True, default=False, help="Keep all files in git (no annexing). Use for demos/GitHub Pages.")
+@click.option("--datalad", is_flag=True, default=False, help="Create a DataLad dataset (requires: pip install annextube[datalad])")
 @click.pass_context
-def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool):
+def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments_depth: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool, datalad: bool):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
     configures file tracking rules, and generates configuration template.
+
+    With --datalad flag, creates a DataLad dataset instead of manual git/git-annex init.
+    This creates .datalad/ directory with DataLad configuration.
 
     Arguments:
         DIRECTORY: Directory to initialize (default: current directory)
@@ -60,22 +65,33 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Check if already initialized
-    git_annex = GitAnnexService(output_dir)
-    if git_annex.is_annex_repo():
-        click.echo(f"Error: {output_dir} is already a git-annex repository", err=True)
+    archive_info = discover_annextube(output_dir)
+    if archive_info is not None:
+        error_msg = (
+            f"Error: {output_dir} is already a multi-channel collection."
+            if archive_info.type == "multi-channel"
+            else f"Error: {output_dir} is already a single-channel annextube archive."
+        )
+        click.echo(error_msg, err=True)
         return
 
-    try:
-        # Initialize git-annex
-        git_annex.init_repo(description="annextube YouTube archive")
+    git_annex = GitAnnexService(output_dir)
 
-        # Configure .gitattributes
+    try:
+        # Initialize git-annex or DataLad dataset
+        if datalad:
+            logger.info("Initializing DataLad dataset")
+            git_annex.init_datalad_dataset(description="annextube YouTube archive")
+        else:
+            git_annex.init_repo(description="annextube YouTube archive")
+
+        # Configure .gitattributes (works for both git-annex and DataLad)
         git_annex.configure_gitattributes(all_to_git=all_to_git)
 
         # Create config directory and template
         config_dir = output_dir / ".annextube"
         # Convert -1 (unlimited) to None
-        comments_depth_value = None if comments == -1 else comments
+        comments_depth_value = None if comments_depth == -1 else comments_depth
         config_path = save_config_template(
             config_dir,
             urls=list(urls),
@@ -93,7 +109,10 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         git_annex.add_and_commit("Initial annextube repository setup")
 
         # Success message
-        click.echo("Initialized YouTube archive repository in current directory")
+        if datalad:
+            click.echo("Initialized DataLad dataset in current directory")
+        else:
+            click.echo("Initialized YouTube archive repository in current directory")
         click.echo("Git-annex backend: URL (for video URLs)")
         if all_to_git:
             click.echo("Tracking configuration: ALL FILES IN GIT (demo mode)")
@@ -112,12 +131,12 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         click.echo()
         click.echo("Component settings:")
         click.echo(f"  - Videos: {'enabled' if videos else 'disabled'}")
-        if comments == 0:
+        if comments_depth == 0:
             click.echo("  - Comments: disabled")
-        elif comments == -1:
+        elif comments_depth == -1:
             click.echo("  - Comments: unlimited (fetches all, incrementally)")
         else:
-            click.echo(f"  - Comments: up to {comments}")
+            click.echo(f"  - Comments: up to {comments_depth}")
         click.echo(f"  - Captions: {'enabled' if captions else 'disabled'}")
         click.echo(f"  - Thumbnails: {'enabled' if thumbnails else 'disabled'}")
         if limit:

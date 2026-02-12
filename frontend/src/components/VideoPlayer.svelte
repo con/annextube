@@ -1,36 +1,63 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import type { Video } from '@/types/models';
+  import { checkVideoAvailability } from '@/services/availability';
 
   export let video: Video;
+  export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
-  // Active tab: 'local' or 'youtube'
-  let activeTab: 'local' | 'youtube' = video.download_status === 'downloaded' ? 'local' : 'youtube';
+  // Actual availability determined by HEAD request, NOT by metadata
+  // TSV's download_status is guidance for filters, not source of truth
+  let hasLocalVideo = false;
+  let localVideoCheckComplete = false;
 
-  // Check if local video is available
-  $: hasLocalVideo = video.download_status === 'downloaded';
+  // Reset state when video changes
+  $: if (video) {
+    hasLocalVideo = false;
+    localVideoCheckComplete = false;
+    videoError = false;
+    videoErrorMessage = '';
+    // Trigger availability check when video changes
+    checkAvailability();
+  }
+
+  // Active tab: 'local' if available, otherwise 'youtube'
+  $: activeTab = hasLocalVideo ? 'local' : 'youtube';
 
   // Error and loading states
   let videoError = false;
   let videoErrorMessage = '';
   let youtubeLoading = true;
 
-  // Get video file path (absolute path from server root)
+  // Get video file path (relative from web/ directory)
   function getVideoPath(): string {
     // Use path from videos.tsv (supports hierarchical structure like 2026/01/video_dir)
     // Fall back to video_id for older archives
     const filePath = video.file_path || video.video_id;
+
     // Video files are named video.mkv (git-annex symlinked to actual content)
-    // Use absolute path from server root to avoid relative path issues with hash routing
-    const path = `/videos/${filePath}/video.mkv`;
-    console.log('[VideoPlayer] Video path:', path, 'download_status:', video.download_status);
+    // Use relative ../videos/ path (web/index.html is one level below archive root)
+    // In multi-channel mode, include channel directory prefix
+    const path = channelDir
+      ? `../${channelDir}/videos/${filePath}/video.mkv`
+      : `../videos/${filePath}/video.mkv`;
+
+    console.log('[VideoPlayer] Video path:', path, 'channelDir:', channelDir, 'download_status:', video.download_status);
     return path;
   }
 
-  // Get local thumbnail path (use local file instead of YouTube CDN to avoid CORS issues)
+  // Get thumbnail path - use local file if video is tracked/downloaded, otherwise YouTube CDN
   function getThumbnailPath(): string {
+    // If video isn't tracked locally, use YouTube thumbnail URL
+    if (video.download_status !== 'downloaded' && video.download_status !== 'tracked') {
+      return video.thumbnail_url;
+    }
+
     const filePath = video.file_path || video.video_id;
-    // Use absolute path from server root
-    return `/videos/${filePath}/thumbnail.jpg`;
+    // Use relative path from web/, include channel directory in multi-channel mode
+    return channelDir
+      ? `../${channelDir}/videos/${filePath}/thumbnail.jpg`
+      : `../videos/${filePath}/thumbnail.jpg`;
   }
 
   // Get YouTube embed URL
@@ -40,6 +67,14 @@
 
   // Get caption tracks
   $: captionTracks = video.captions_available || [];
+
+  // Get caption file path for a language
+  function getCaptionPath(lang: string): string {
+    const filePath = video.file_path || video.video_id;
+    return channelDir
+      ? `../${channelDir}/videos/${filePath}/video.${lang}.vtt`
+      : `../videos/${filePath}/video.${lang}.vtt`;
+  }
 
   // Handle video loading error
   function handleVideoError(event: Event) {
@@ -105,10 +140,30 @@
       youtubeLoading = true;
     }
   }
+
+  // Check if video file actually exists via HEAD request
+  async function checkAvailability() {
+    const videoPath = getVideoPath();
+    const available = await checkVideoAvailability(videoPath);
+    hasLocalVideo = available;
+
+    if (available) {
+      console.log('[VideoPlayer] Local video available:', videoPath);
+    } else {
+      console.log('[VideoPlayer] Local video not available:', videoPath);
+    }
+
+    localVideoCheckComplete = true;
+  }
+
+  // Check availability on mount
+  onMount(() => {
+    checkAvailability();
+  });
 </script>
 
 <div class="video-player">
-  <!-- Tab Navigation (hide if only one tab) -->
+  <!-- Tab Navigation (show if local video is available) -->
   {#if hasLocalVideo}
     <div class="tabs" role="tablist">
       <button
@@ -179,7 +234,7 @@
             {#each captionTracks as lang}
               <track
                 kind="subtitles"
-                src={`/videos/${video.file_path || video.video_id}/video.${lang}.vtt`}
+                src={getCaptionPath(lang)}
                 srclang={lang}
                 label={lang.toUpperCase()}
               />

@@ -6,12 +6,12 @@ from typing import Any
 
 import click
 
+from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.config import load_config
 from annextube.lib.date_utils import parse_date
 from annextube.lib.logging_config import get_logger
 from annextube.services.archiver import Archiver
 from annextube.services.export import ExportService
-from annextube.services.git_annex import GitAnnexService
 
 logger = get_logger(__name__)
 
@@ -28,8 +28,8 @@ logger = get_logger(__name__)
 @click.option(
     "--update",
     type=click.Choice([
-        "videos-incremental",  # New videos only
         "all-incremental",      # New videos + social for recent (default)
+        "videos-incremental",  # New videos only
         "all-force",            # Re-process everything
         "social",               # Comments + captions only (shortcut)
         "playlists",            # Playlists only
@@ -38,7 +38,8 @@ logger = get_logger(__name__)
         "tsv_metadata"          # Regenerate TSVs only (no downloads)
     ], case_sensitive=False),
     default="all-incremental",
-    help="Update mode: all-incremental (new videos + social for recent, default), videos-incremental (new videos only), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
+    show_default=True,
+    help="Update mode: all-incremental (new videos + social for recent), videos-incremental (new videos only), all-force (re-process all), social (comments+captions), playlists/comments/captions (specific components), tsv_metadata (regenerate TSV files from existing JSON)",
 )
 @click.option(
     "--from-date",
@@ -51,13 +52,19 @@ logger = get_logger(__name__)
     help="End date for update window (ISO format or duration like '1 week', '2 days')",
 )
 @click.option(
+    "--comments-depth",
+    type=int,
+    default=None,
+    help="Override comments depth: -1=unlimited, 0=disabled, N=limit to N",
+)
+@click.option(
     "--skip-existing",
     is_flag=True,
     hidden=True,  # Deprecated, replaced by --update=all-incremental
     help="(Deprecated: use --update=all-incremental instead)",
 )
 @click.pass_context
-def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, skip_existing: bool):
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, skip_existing: bool):
     """Backup YouTube channel or playlist.
 
     If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
@@ -89,13 +96,15 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
     logger.info(f"annextube {annextube_version} with yt-dlp {ytdlp_version}")
     logger.info("Starting backup operation")
 
-    # Check if this is a git-annex repo
-    git_annex = GitAnnexService(output_dir)
-    if not git_annex.is_annex_repo():
-        click.echo(
-            f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",
-            err=True,
+    # Check if this is an annextube archive
+    archive_info = discover_annextube(output_dir)
+    if archive_info is None or archive_info.type == "multi-channel":
+        error_msg = (
+            f"Error: {output_dir} is not a single-channel annextube archive."
+            if archive_info
+            else f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first."
         )
+        click.echo(error_msg, err=True)
         raise click.Abort()
 
     try:
@@ -106,6 +115,12 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Override limit if specified
         if limit:
             config.filters.limit = limit
+
+        # Override comments_depth if specified
+        if comments_depth is not None:
+            # Convert -1 (unlimited) to None, same as init does
+            config.components.comments_depth = None if comments_depth == -1 else comments_depth
+            click.echo(f"Comments depth override: {comments_depth} ({'unlimited' if comments_depth == -1 else 'disabled' if comments_depth == 0 else f'up to {comments_depth}'})")
 
         # Handle deprecated --skip-existing flag
         if skip_existing:
@@ -173,6 +188,15 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 stats = archiver.backup_channel(url)
             _print_stats(stats)
 
+            # Generate channel.json for multi-channel collection integration
+            try:
+                exporter = ExportService(output_dir)
+                channel_json_path = exporter.generate_channel_json()
+                logger.info(f"Generated channel.json at {channel_json_path}")
+            except Exception as e:
+                # Don't fail the entire backup if channel.json generation fails
+                logger.warning(f"Could not generate channel.json: {e}")
+
         else:
             # Config mode: backup all enabled sources
             enabled_sources = [s for s in config.sources if s.enabled]
@@ -222,6 +246,15 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
 
             if total_stats["errors"]:
                 click.echo(f"  Errors: {len(total_stats['errors'])}")
+
+        # Generate channel.json for multi-channel collection integration
+        try:
+            exporter = ExportService(output_dir)
+            channel_json_path = exporter.generate_channel_json()
+            logger.info(f"Generated channel.json at {channel_json_path}")
+        except Exception as e:
+            # Don't fail the entire backup if channel.json generation fails
+            logger.warning(f"Could not generate channel.json: {e}")
 
         click.echo()
         click.echo("[ok] Backup complete!")
