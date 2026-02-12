@@ -349,9 +349,12 @@ def copy_frontend_to_ghpages(
 
     dist_dir = None
     for path in search_paths:
-        candidate = path / 'dist'
-        if candidate.exists():
-            dist_dir = candidate
+        # Check dist/ (gh-pages mode), web/ subdir, and ../web (vite outDir: '../web')
+        for candidate in (path / 'dist', path / 'web', path.parent / 'web'):
+            if candidate.exists():
+                dist_dir = candidate
+                break
+        if dist_dir:
             break
 
     if not dist_dir:
