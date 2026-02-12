@@ -69,8 +69,8 @@ export class URLStateManager {
       params.set('status', state.downloadStatus.join(','));
     if (state.playlists?.length)
       params.set('playlists', state.playlists.join(','));
-    if (state.sortField) params.set('sort', state.sortField);
-    if (state.sortDirection) params.set('dir', state.sortDirection);
+    if (state.sortField && state.sortField !== 'date') params.set('sort', state.sortField);
+    if (state.sortDirection && state.sortDirection !== 'desc') params.set('dir', state.sortDirection);
 
     const queryString = params.toString();
     const prefix = routePrefix || '/';
@@ -105,7 +105,8 @@ export class URLStateManager {
    */
   updateHash(state: URLState): void {
     const currentRoutePrefix = this.getRoutePrefix(window.location.hash);
-    window.location.hash = this.encodeHash(state, currentRoutePrefix);
+    const newHash = this.encodeHash(state, currentRoutePrefix);
+    history.replaceState(null, '', newHash);
   }
 
   /**

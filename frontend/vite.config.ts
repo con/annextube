@@ -30,9 +30,16 @@ export default defineConfig({
 
     // Optimization
     minify: 'esbuild',  // Use esbuild (faster, built-in)
-    sourcemap: false
+    sourcemap: false,
 
-    // Note: manualChunks will be added later when components exist
+    // Clean asset filenames (no content hashes)
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name].js',
+        chunkFileNames: 'assets/[name].js',
+        assetFileNames: 'assets/[name][extname]',
+      },
+    },
   },
 
   // Configure Vitest

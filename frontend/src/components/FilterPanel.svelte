@@ -5,7 +5,7 @@
   Updates URL hash to preserve filter state (mykrok pattern).
 -->
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import type { Video, Playlist } from '@/types/models';
   import { searchService } from '@/services/search';
   import { filterService } from '@/services/filter';
@@ -55,23 +55,23 @@
   }
 
   // Handle browser back/forward navigation
-  function handleHashChange() {
-    // Temporarily disable URL updates while restoring state
+  async function handleHashChange() {
     isInitializing = true;
     restoreFromURL();
-    isInitializing = false;
-    // Re-apply filters with restored state
     applyFilters();
+    await tick();
+    isInitializing = false;
   }
 
   // Restore filter state from URL on mount and listen for hash changes
-  onMount(() => {
+  onMount(async () => {
     restoreFromURL();
 
     // Listen for hash changes (browser back/forward)
     window.addEventListener('hashchange', handleHashChange);
 
-    // Allow URL updates after initialization
+    applyFilters();
+    await tick();
     isInitializing = false;
   });
 

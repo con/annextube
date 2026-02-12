@@ -29,18 +29,18 @@
   let videoErrorMessage = '';
   let youtubeLoading = true;
 
-  // Get video file path (absolute path from server root)
+  // Get video file path (relative from web/ directory)
   function getVideoPath(): string {
     // Use path from videos.tsv (supports hierarchical structure like 2026/01/video_dir)
     // Fall back to video_id for older archives
     const filePath = video.file_path || video.video_id;
 
     // Video files are named video.mkv (git-annex symlinked to actual content)
-    // Use absolute path from server root to avoid relative path issues with hash routing
+    // Use relative ../videos/ path (web/index.html is one level below archive root)
     // In multi-channel mode, include channel directory prefix
     const path = channelDir
-      ? `/${channelDir}/videos/${filePath}/video.mkv`
-      : `/videos/${filePath}/video.mkv`;
+      ? `../${channelDir}/videos/${filePath}/video.mkv`
+      : `../videos/${filePath}/video.mkv`;
 
     console.log('[VideoPlayer] Video path:', path, 'channelDir:', channelDir, 'download_status:', video.download_status);
     return path;
@@ -54,10 +54,10 @@
     }
 
     const filePath = video.file_path || video.video_id;
-    // Use absolute path from server root, include channel directory in multi-channel mode
+    // Use relative path from web/, include channel directory in multi-channel mode
     return channelDir
-      ? `/${channelDir}/videos/${filePath}/thumbnail.jpg`
-      : `/videos/${filePath}/thumbnail.jpg`;
+      ? `../${channelDir}/videos/${filePath}/thumbnail.jpg`
+      : `../videos/${filePath}/thumbnail.jpg`;
   }
 
   // Get YouTube embed URL
@@ -72,8 +72,8 @@
   function getCaptionPath(lang: string): string {
     const filePath = video.file_path || video.video_id;
     return channelDir
-      ? `/${channelDir}/videos/${filePath}/video.${lang}.vtt`
-      : `/videos/${filePath}/video.${lang}.vtt`;
+      ? `../${channelDir}/videos/${filePath}/video.${lang}.vtt`
+      : `../videos/${filePath}/video.${lang}.vtt`;
   }
 
   // Handle video loading error

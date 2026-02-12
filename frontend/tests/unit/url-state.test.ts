@@ -88,7 +88,7 @@ describe('URLStateManager', () => {
       channels: ['CH1', 'CH2'],
       playlists: ['PL1'],
       sortField: 'views' as const,
-      sortDirection: 'desc' as const,
+      sortDirection: 'asc' as const,
     };
 
     const hash = urlStateManager.encodeHash(originalState);
@@ -101,6 +101,34 @@ describe('URLStateManager', () => {
     expect(parsedState.playlists).toEqual(originalState.playlists);
     expect(parsedState.sortField).toBe(originalState.sortField);
     expect(parsedState.sortDirection).toBe(originalState.sortDirection);
+  });
+
+  test('does not encode default sort field (date)', () => {
+    const hash = urlStateManager.encodeHash({ sortField: 'date' });
+    expect(hash).toBe('#/');
+    expect(hash).not.toContain('sort=');
+  });
+
+  test('does not encode default sort direction (desc)', () => {
+    const hash = urlStateManager.encodeHash({ sortDirection: 'desc' });
+    expect(hash).toBe('#/');
+    expect(hash).not.toContain('dir=');
+  });
+
+  test('encodes non-default sort field', () => {
+    const hash = urlStateManager.encodeHash({ sortField: 'views' });
+    expect(hash).toContain('sort=views');
+  });
+
+  test('encodes non-default sort direction', () => {
+    const hash = urlStateManager.encodeHash({ sortDirection: 'asc' });
+    expect(hash).toContain('dir=asc');
+  });
+
+  test('encodes non-default sort but omits default direction', () => {
+    const hash = urlStateManager.encodeHash({ sortField: 'views', sortDirection: 'desc' });
+    expect(hash).toContain('sort=views');
+    expect(hash).not.toContain('dir=');
   });
 
   test('handles URL with hash variations', () => {
