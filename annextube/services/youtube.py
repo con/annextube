@@ -1392,6 +1392,7 @@ class YouTubeService:
         self,
         metadata: dict[str, Any],
         enhance_with_api: bool = True,
+        api_metadata_cache: dict[str, dict] | None = None,
     ) -> Video:
         """Convert metadata to Video model.
 
@@ -1402,6 +1403,9 @@ class YouTubeService:
         Args:
             metadata: yt-dlp metadata dictionary OR stored Video.to_dict() format
             enhance_with_api: Whether to enhance metadata with YouTube API (default: True)
+            api_metadata_cache: Pre-fetched API metadata dict (video_id -> metadata).
+                If provided and video_id is in cache, uses cached data instead of
+                making a per-video API call. Enables batch API efficiency.
 
         Returns:
             Video model instance
@@ -1418,13 +1422,19 @@ class YouTubeService:
         api_metadata = {}
         if enhance_with_api and self.api_client and "video_id" not in metadata:
             # Only enhance for yt-dlp metadata (new videos), not stored metadata
-            try:
-                api_data = self.api_client.enhance_video_metadata(video_id)
-                api_metadata = api_data.get(video_id, {})
+            if api_metadata_cache is not None and video_id in api_metadata_cache:
+                # Use pre-fetched batch data
+                api_metadata = api_metadata_cache[video_id]
                 if api_metadata:
-                    logger.info(f"Enhanced metadata for {video_id} with YouTube API")
-            except Exception as e:
-                logger.warning(f"Failed to enhance metadata with API for {video_id}: {e}")
+                    logger.debug(f"Using cached API metadata for {video_id}")
+            else:
+                try:
+                    api_data = self.api_client.enhance_video_metadata(video_id)
+                    api_metadata = api_data.get(video_id, {})
+                    if api_metadata:
+                        logger.info(f"Enhanced metadata for {video_id} with YouTube API")
+                except Exception as e:
+                    logger.warning(f"Failed to enhance metadata with API for {video_id}: {e}")
 
         # Parse published date - handle both yt-dlp format and stored ISO format
         published_str = metadata.get("upload_date", "") or metadata.get("published_at", "")

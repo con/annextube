@@ -193,7 +193,7 @@ class TestE2EBackupFeatures:
 
             subprocess.run(
                 [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
-                 "--no-videos", "--comments", "0", "--no-captions", "--limit", "2"],
+                 "--no-videos", "--comments-depth", "0", "--no-captions", "--limit", "2"],
                 check=True,
                 capture_output=True
             )

@@ -705,14 +705,48 @@ class Archiver:
         if self.update_mode != "playlists":
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
+            # Batch pre-fetch API data for efficiency (instead of per-video API calls)
+            prefetched_stats: dict[str, dict[str, int]] | None = None
+            api_metadata_cache: dict[str, dict] | None = None
+
+            if self.youtube.api_client:
+                # For all-incremental mode: batch-fetch statistics for existing videos
+                if self.update_mode == "all-incremental":
+                    existing_ids = [
+                        v.get("video_id") or v.get("id")
+                        for v in videos_metadata
+                        if v.get("video_id")  # stored metadata has video_id
+                    ]
+                    if existing_ids:
+                        logger.info(f"Batch-fetching statistics for {len(existing_ids)} existing video(s)")
+                        try:
+                            prefetched_stats = self.youtube.api_client.batch_get_video_statistics(existing_ids)
+                            logger.info(f"Pre-fetched statistics for {len(prefetched_stats)} video(s)")
+                        except Exception as e:
+                            logger.warning(f"Failed to batch-fetch statistics: {e}")
+
+                # For new videos: batch-fetch enhanced API metadata
+                new_video_ids = [
+                    v.get("id")
+                    for v in videos_metadata
+                    if v.get("id") and not v.get("video_id")  # yt-dlp metadata (new videos) uses "id"
+                ]
+                if new_video_ids:
+                    logger.info(f"Batch-fetching API metadata for {len(new_video_ids)} new video(s)")
+                    try:
+                        api_metadata_cache = self.youtube.api_client.batch_enhance_video_metadata(new_video_ids)
+                        logger.info(f"Pre-fetched API metadata for {len(api_metadata_cache)} video(s)")
+                    except Exception as e:
+                        logger.warning(f"Failed to batch-fetch API metadata: {e}")
+
             # Process each video with checkpoint support
             checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
 
             try:
                 for i, video_meta in enumerate(videos_metadata, 1):
                     logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                    video = self.youtube.metadata_to_video(video_meta)
-                    caption_count = self._process_video(video)
+                    video = self.youtube.metadata_to_video(video_meta, api_metadata_cache=api_metadata_cache)
+                    caption_count = self._process_video(video, prefetched_stats=prefetched_stats)
 
                     stats["videos_processed"] += 1
                     stats["videos_tracked"] += 1
@@ -781,6 +815,16 @@ class Archiver:
             self.git_annex.add_and_commit("Update TSV metadata files")
         except Exception as e:
             logger.warning(f"Failed to generate TSV files: {e}")
+
+        # Log API quota usage summary
+        if self.youtube.api_client:
+            summary = self.youtube.api_client.get_quota_summary()
+            if summary["total_units"] > 0:
+                calls_str = ", ".join(f"{k}: {v}" for k, v in summary["calls"].items())
+                logger.info(
+                    f"YouTube API quota used: {summary['total_units']} unit(s) "
+                    f"({calls_str})"
+                )
 
         return stats
 
@@ -962,11 +1006,13 @@ class Archiver:
 
         return stats
 
-    def _process_video(self, video: Video) -> int:
+    def _process_video(self, video: Video, prefetched_stats: dict[str, dict[str, int]] | None = None) -> int:
         """Process a single video.
 
         Args:
             video: Video model instance
+            prefetched_stats: Pre-fetched statistics dict (video_id -> stats) for batch efficiency.
+                If provided, uses this instead of making per-video API calls.
 
         Returns:
             Number of captions downloaded
@@ -1018,14 +1064,18 @@ class Archiver:
                         logger.warning(f"Failed to load existing metadata for {video.video_id}: {e}")
                         return 0
 
-                    # Fetch current statistics from YouTube API (cheap: 2 quota units)
+                    # Use pre-fetched statistics if available, otherwise fetch per-video (1 unit/request)
                     try:
-                        from annextube.services.youtube_api import YouTubeAPIMetadataClient
-                        api_client = YouTubeAPIMetadataClient()
-                        stats = api_client.get_video_statistics(video.video_id)
+                        if prefetched_stats is not None:
+                            video_stats = prefetched_stats
+                        else:
+                            # Fallback: per-video fetch (inefficient, but works without batch)
+                            from annextube.services.youtube_api import YouTubeAPIMetadataClient
+                            api_client = YouTubeAPIMetadataClient()
+                            video_stats = api_client.get_video_statistics(video.video_id)
 
-                        if video.video_id in stats:
-                            current_stats = stats[video.video_id]
+                        if video.video_id in video_stats:
+                            current_stats = video_stats[video.video_id]
                             new_comment_count = current_stats.get('commentCount', 0)
                             new_view_count = current_stats.get('viewCount', 0)
                             new_like_count = current_stats.get('likeCount', 0)

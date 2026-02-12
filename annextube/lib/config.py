@@ -629,8 +629,8 @@ def generate_user_config_template() -> str:
 #   - Comment replies with proper threading
 #
 # Get your API key: https://console.cloud.google.com/apis/credentials
-# Free tier: 10,000 units/day (~1,000 videos)
-# Quota cost: 10 units per video
+# Free tier: 10,000 units/day
+# Quota cost: 1 unit per request (up to 50 videos batched per request)
 #
 # RECOMMENDED: Use environment variable instead!
 #   export YOUTUBE_API_KEY="your-key-here"

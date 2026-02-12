@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 )
 @click.argument("urls", nargs=-1)
 @click.option("--videos/--no-videos", default=True, help="Enable video downloading (default: enabled)")
-@click.option("--comments", type=int, default=-1, show_default=True, help="Comments depth: -1=unlimited, 0=disabled, N=limit to N")
+@click.option("--comments-depth", type=int, default=-1, show_default=True, help="Comments depth: -1=unlimited, 0=disabled, N=limit to N")
 @click.option("--captions/--no-captions", default=True, help="Enable captions (default: enabled)")
 @click.option("--thumbnails/--no-thumbnails", default=True, help="Enable thumbnails (default: enabled)")
 @click.option("--limit", type=int, default=None, help="Limit to N most recent videos")
@@ -31,7 +31,7 @@ logger = get_logger(__name__)
 @click.option("--all-to-git", is_flag=True, default=False, help="Keep all files in git (no annexing). Use for demos/GitHub Pages.")
 @click.option("--datalad", is_flag=True, default=False, help="Create a DataLad dataset (requires: pip install annextube[datalad])")
 @click.pass_context
-def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool, datalad: bool):
+def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments_depth: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool, datalad: bool):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
@@ -91,7 +91,7 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         # Create config directory and template
         config_dir = output_dir / ".annextube"
         # Convert -1 (unlimited) to None
-        comments_depth_value = None if comments == -1 else comments
+        comments_depth_value = None if comments_depth == -1 else comments_depth
         config_path = save_config_template(
             config_dir,
             urls=list(urls),
@@ -131,12 +131,12 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         click.echo()
         click.echo("Component settings:")
         click.echo(f"  - Videos: {'enabled' if videos else 'disabled'}")
-        if comments == 0:
+        if comments_depth == 0:
             click.echo("  - Comments: disabled")
-        elif comments == -1:
+        elif comments_depth == -1:
             click.echo("  - Comments: unlimited (fetches all, incrementally)")
         else:
-            click.echo(f"  - Comments: up to {comments}")
+            click.echo(f"  - Comments: up to {comments_depth}")
         click.echo(f"  - Captions: {'enabled' if captions else 'disabled'}")
         click.echo(f"  - Thumbnails: {'enabled' if thumbnails else 'disabled'}")
         if limit:

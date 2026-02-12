@@ -1,6 +1,7 @@
 """Unit tests for DataLad dataset initialization."""
 
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -26,7 +27,7 @@ def test_datalad_init_flag_creates_dataset():
                 str(repo_path),
                 "--datalad",
                 "--no-videos",
-                "--comments", "0",
+                "--comments-depth", "0",
                 "--no-captions",
                 "--no-thumbnails",
             ],
@@ -70,9 +71,11 @@ def test_datalad_init_without_datalad_installed_fails():
         repo_path = Path(tmpdir) / "datalad-archive"
 
         # Try to initialize with --datalad flag (should fail)
+        # Use sys.executable to stay within the same venv as the test process
+        # (uv run would use the project .venv which may have datalad installed)
         result = subprocess.run(
             [
-                "uv", "run", "annextube", "init",
+                sys.executable, "-m", "annextube", "init",
                 str(repo_path),
                 "--datalad",
             ],
@@ -104,7 +107,7 @@ def test_datalad_flag_with_source_url():
                 "https://www.youtube.com/@AnnexTubeTesting",
                 "--datalad",
                 "--no-videos",
-                "--comments", "0",
+                "--comments-depth", "0",
                 "--no-captions",
                 "--no-thumbnails",
                 "--limit", "1",

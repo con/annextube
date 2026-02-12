@@ -58,7 +58,7 @@ def _create_process_video_mock(archiver):
     This is needed so that _has_uncommitted_changes() returns True
     and commits are actually created during checkpoints.
     """
-    def mock_process_video(video):
+    def mock_process_video(video, **kwargs):
         """Mock that creates actual metadata.json files for git to track."""
 
         # Get video directory path using archiver's method
@@ -109,7 +109,7 @@ class TestCheckpointCommits:
             with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
                 with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
                     # Mock video objects
-                    def create_mock_video(meta):
+                    def create_mock_video(meta, **kwargs):
                         video = MagicMock()
                         video.video_id = meta["id"]
                         video.title = meta["title"]
@@ -161,7 +161,7 @@ class TestCheckpointCommits:
 
             with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
                 with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta):
+                    def create_mock_video(meta, **kwargs):
                         video = MagicMock()
                         video.video_id = meta["id"]
                         video.title = meta["title"]
@@ -207,7 +207,7 @@ class TestCheckpointCommits:
 
             with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
                 with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta):
+                    def create_mock_video(meta, **kwargs):
                         video = MagicMock()
                         video.video_id = meta["id"]
                         video.title = meta["title"]
@@ -261,7 +261,7 @@ class TestCheckpointCommits:
 
             with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
                 with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta):
+                    def create_mock_video(meta, **kwargs):
                         video = MagicMock()
                         video.video_id = meta["id"]
                         video.title = meta["title"]
@@ -275,7 +275,7 @@ class TestCheckpointCommits:
                     process_count = [0]
                     base_mock = _create_process_video_mock(archiver)
 
-                    def process_with_interrupt(video):
+                    def process_with_interrupt(video, **kwargs):
                         process_count[0] += 1
                         # Create files for first 2 videos
                         if process_count[0] < 3:
@@ -321,7 +321,7 @@ class TestCheckpointCommits:
 
             with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
                 with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta):
+                    def create_mock_video(meta, **kwargs):
                         video = MagicMock()
                         video.video_id = meta["id"]
                         video.title = meta["title"]
@@ -334,7 +334,7 @@ class TestCheckpointCommits:
                     process_count = [0]
                     base_mock = _create_process_video_mock(archiver)
 
-                    def process_with_interrupt(video):
+                    def process_with_interrupt(video, **kwargs):
                         process_count[0] += 1
                         # Create files for first 2 videos
                         if process_count[0] < 3:
@@ -386,7 +386,7 @@ def test_checkpoint_interval_zero_disables_checkpoints():
 
         with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
             with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                def create_mock_video(meta):
+                def create_mock_video(meta, **kwargs):
                     video = MagicMock()
                     video.video_id = meta["id"]
                     video.title = meta["title"]

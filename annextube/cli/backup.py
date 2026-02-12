@@ -52,13 +52,19 @@ logger = get_logger(__name__)
     help="End date for update window (ISO format or duration like '1 week', '2 days')",
 )
 @click.option(
+    "--comments-depth",
+    type=int,
+    default=None,
+    help="Override comments depth: -1=unlimited, 0=disabled, N=limit to N",
+)
+@click.option(
     "--skip-existing",
     is_flag=True,
     hidden=True,  # Deprecated, replaced by --update=all-incremental
     help="(Deprecated: use --update=all-incremental instead)",
 )
 @click.pass_context
-def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, skip_existing: bool):
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, skip_existing: bool):
     """Backup YouTube channel or playlist.
 
     If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
@@ -109,6 +115,12 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Override limit if specified
         if limit:
             config.filters.limit = limit
+
+        # Override comments_depth if specified
+        if comments_depth is not None:
+            # Convert -1 (unlimited) to None, same as init does
+            config.components.comments_depth = None if comments_depth == -1 else comments_depth
+            click.echo(f"Comments depth override: {comments_depth} ({'unlimited' if comments_depth == -1 else 'disabled' if comments_depth == 0 else f'up to {comments_depth}'})")
 
         # Handle deprecated --skip-existing flag
         if skip_existing:

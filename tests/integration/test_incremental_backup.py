@@ -25,7 +25,7 @@ def test_incremental_backup_no_reprocessing():
         # Initialize repository (disable playlists to test channel-only incremental behavior)
         result = subprocess.run(
             [sys.executable, "-m", "annextube", "init", str(repo_path), test_channel,
-             "--no-videos", "--comments", "0", "--no-captions",
+             "--no-videos", "--comments-depth", "0", "--no-captions",
              "--include-playlists", "none"],
             capture_output=True,
             text=True,
@@ -98,7 +98,7 @@ def test_incremental_backup_detects_new_videos():
         # Initialize repository (disable playlists to test channel-only incremental behavior)
         subprocess.run(
             [sys.executable, "-m", "annextube", "init", str(repo_path), test_channel,
-             "--no-videos", "--comments", "0", "--no-captions",
+             "--no-videos", "--comments-depth", "0", "--no-captions",
              "--include-playlists", "none"],
             check=True,
             capture_output=True
