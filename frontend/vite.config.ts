@@ -1,10 +1,9 @@
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import path from 'path';
-import { readFileSync } from 'fs';
-
-// Read version from package.json
-const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
+// Version placeholder — replaced at deploy time by `annextube generate-web`
+// with the real annextube version.  Do NOT hardcode a real version here.
+const VERSION_PLACEHOLDER = '0.0.0-unknown';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -23,7 +22,7 @@ export default defineConfig(({ mode }) => {
 
     // Inject version at build time
     define: {
-      __APP_VERSION__: JSON.stringify(pkg.version),
+      __APP_VERSION__: JSON.stringify(VERSION_PLACEHOLDER),
     },
 
     // Critical for file:// protocol support (local) or GitHub Pages (deployed)

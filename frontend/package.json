@@ -1,6 +1,6 @@
 {
   "name": "annextube-frontend",
-  "version": "0.2.2",
+  "version": "0.0.0-unknown",
   "description": "Client-side web interface for browsing YouTube archives",
   "type": "module",
   "scripts": {

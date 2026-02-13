@@ -2,9 +2,16 @@
   import { onMount } from 'svelte';
   import type { Video } from '@/types/models';
   import { checkVideoAvailability } from '@/services/availability';
+  import { dataLoader } from '@/services/data-loader';
 
   export let video: Video;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
+  export let currentTime: number = 0;
+  export let showTranscriptTab: boolean = false;
+  export let onTranscriptOpen: () => void = () => {};
+
+  // Reference to the <video> element for time tracking and seeking
+  let videoElement: HTMLVideoElement | null = null;
 
   // Actual availability determined by HEAD request, NOT by metadata
   // TSV's download_status is guidance for filters, not source of truth
@@ -36,11 +43,12 @@
     const filePath = video.file_path || video.video_id;
 
     // Video files are named video.mkv (git-annex symlinked to actual content)
-    // Use relative ../videos/ path (web/index.html is one level below archive root)
+    // Use baseUrl from DataLoader (discovered at init time)
     // In multi-channel mode, include channel directory prefix
+    const base = dataLoader.baseUrl;
     const path = channelDir
-      ? `../${channelDir}/videos/${filePath}/video.mkv`
-      : `../videos/${filePath}/video.mkv`;
+      ? `${base}/${channelDir}/videos/${filePath}/video.mkv`
+      : `${base}/videos/${filePath}/video.mkv`;
 
     console.log('[VideoPlayer] Video path:', path, 'channelDir:', channelDir, 'download_status:', video.download_status);
     return path;
@@ -54,15 +62,19 @@
     }
 
     const filePath = video.file_path || video.video_id;
-    // Use relative path from web/, include channel directory in multi-channel mode
+    // Use baseUrl from DataLoader, include channel directory in multi-channel mode
+    const base = dataLoader.baseUrl;
     return channelDir
-      ? `../${channelDir}/videos/${filePath}/thumbnail.jpg`
-      : `../videos/${filePath}/thumbnail.jpg`;
+      ? `${base}/${channelDir}/videos/${filePath}/thumbnail.jpg`
+      : `${base}/videos/${filePath}/thumbnail.jpg`;
   }
 
-  // Get YouTube embed URL
+  // Get YouTube embed URL (with JS API enabled for seekTo support)
   function getYouTubeEmbedUrl(): string {
-    return `https://www.youtube.com/embed/${video.video_id}`;
+    const params = new URLSearchParams({ enablejsapi: '1' });
+    if (window.location.protocol !== 'file:')
+      params.set('origin', window.location.origin);
+    return `https://www.youtube.com/embed/${video.video_id}?${params}`;
   }
 
   // Get caption tracks
@@ -71,9 +83,30 @@
   // Get caption file path for a language
   function getCaptionPath(lang: string): string {
     const filePath = video.file_path || video.video_id;
+    const base = dataLoader.baseUrl;
     return channelDir
-      ? `../${channelDir}/videos/${filePath}/video.${lang}.vtt`
-      : `../videos/${filePath}/video.${lang}.vtt`;
+      ? `${base}/${channelDir}/videos/${filePath}/video.${lang}.vtt`
+      : `${base}/videos/${filePath}/video.${lang}.vtt`;
+  }
+
+  // Update currentTime from video playback
+  function handleTimeUpdate() {
+    if (videoElement) currentTime = videoElement.currentTime;
+  }
+
+  // Seek to a specific time in the active player
+  export function seekTo(time: number): void {
+    if (activeTab === 'local' && videoElement) {
+      videoElement.currentTime = time;
+    } else if (activeTab === 'youtube') {
+      const iframe = document.querySelector('.video-player iframe') as HTMLIFrameElement;
+      if (iframe?.contentWindow) {
+        iframe.contentWindow.postMessage(
+          JSON.stringify({ event: 'command', func: 'seekTo', args: [time, true] }),
+          'https://www.youtube.com'
+        );
+      }
+    }
   }
 
   // Handle video loading error
@@ -172,29 +205,38 @@
 </script>
 
 <div class="video-player">
-  <!-- Tab Navigation (show if local video is available) -->
-  {#if hasLocalVideo}
+  <!-- Tab Navigation -->
+  {#if hasLocalVideo || showTranscriptTab}
     <div class="tabs" role="tablist">
-      <button
-        class="tab"
-        class:active={activeTab === 'local'}
-        role="tab"
-        aria-selected={activeTab === 'local'}
-        aria-controls="local-player-panel"
-        on:click={() => switchTab('local')}
-      >
-        Play from Archive
-      </button>
+      {#if hasLocalVideo}
+        <button
+          class="tab"
+          class:active={activeTab === 'local'}
+          role="tab"
+          aria-selected={activeTab === 'local'}
+          on:click={() => switchTab('local')}
+        >
+          Play from Archive
+        </button>
+      {/if}
       <button
         class="tab"
         class:active={activeTab === 'youtube'}
         role="tab"
         aria-selected={activeTab === 'youtube'}
-        aria-controls="youtube-player-panel"
         on:click={() => switchTab('youtube')}
       >
         Play from YouTube
       </button>
+      {#if showTranscriptTab}
+        <button
+          class="tab transcript-tab"
+          role="tab"
+          on:click={onTranscriptOpen}
+        >
+          Transcript
+        </button>
+      {/if}
     </div>
   {/if}
 
@@ -223,6 +265,7 @@
           </div>
         {:else}
           <video
+            bind:this={videoElement}
             controls
             crossorigin="anonymous"
             preload="metadata"
@@ -231,6 +274,7 @@
             on:loadstart={handleVideoLoadStart}
             on:loadedmetadata={handleVideoLoadedMetadata}
             on:canplay={handleVideoCanPlay}
+            on:timeupdate={handleTimeUpdate}
           >
             <!--
               NOTE: No type attribute specified - let browser auto-detect format.
@@ -334,6 +378,18 @@
     color: #1a73e8;
     border-bottom-color: #1a73e8;
     background: white;
+  }
+
+  .tab.transcript-tab {
+    flex: none;
+    padding: 12px 16px;
+    border-left: 1px solid #e0e0e0;
+    font-size: 13px;
+    color: #1a73e8;
+  }
+
+  .tab.transcript-tab:hover {
+    background: #e8f0fe;
   }
 
   .tab-content-wrapper {

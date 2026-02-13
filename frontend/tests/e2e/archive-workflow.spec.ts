@@ -218,11 +218,9 @@ test.describe('Complete Archive Workflow', () => {
       const iframe = page.locator('.video-player .tab-content iframe');
       await expect(iframe).toBeVisible();
 
-      // Verify iframe src points to YouTube embed
-      await expect(iframe).toHaveAttribute(
-        'src',
-        `https://www.youtube.com/embed/${METADATA_ONLY_VIDEO_ID}`
-      );
+      // Verify iframe src points to YouTube embed (may include query params like enablejsapi)
+      const iframeSrc = await iframe.getAttribute('src');
+      expect(iframeSrc).toContain(`https://www.youtube.com/embed/${METADATA_ONLY_VIDEO_ID}`);
     });
 
     test('metadata-only video does not show local player tab', async ({ page }) => {
@@ -269,10 +267,8 @@ test.describe('Complete Archive Workflow', () => {
       // Should show iframe
       const iframe = page.locator('.video-player .tab-content iframe');
       await expect(iframe).toBeVisible();
-      await expect(iframe).toHaveAttribute(
-        'src',
-        `https://www.youtube.com/embed/${DOWNLOADED_VIDEO_ID}`
-      );
+      const iframeSrc = await iframe.getAttribute('src');
+      expect(iframeSrc).toContain(`https://www.youtube.com/embed/${DOWNLOADED_VIDEO_ID}`);
 
       // Should not show video element
       const videoElement = page.locator('.video-player .tab-content video');

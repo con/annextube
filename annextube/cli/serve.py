@@ -1,7 +1,6 @@
 """Serve command for annextube - HTTP server with range support and auto-regeneration."""
 
 import os
-import shutil
 import socketserver
 import time
 from pathlib import Path
@@ -10,15 +9,13 @@ from threading import Thread
 import click
 
 from annextube.cli.aggregate import discover_channels
+from annextube.cli.generate_web import deploy_frontend
 from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.logging_config import get_logger
 from annextube.lib.range_server import RangeHTTPRequestHandler
 from annextube.services.export import ExportService
 
 logger = get_logger(__name__)
-
-# Path to frontend build (relative to this file)
-FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "web"
 
 
 class ArchiveWatcher:
@@ -229,21 +226,7 @@ def serve(
             # Regenerate web UI
             if regenerate in ['web', 'all']:
                 click.echo("Regenerating web UI...")
-
-                # Check if frontend build exists
-                if not FRONTEND_BUILD_DIR.exists():
-                    click.echo(
-                        f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
-                        err=True,
-                    )
-                    click.echo("Run 'cd frontend && npm run build' to build the frontend first.")
-                    raise click.Abort()
-
-                # Copy frontend to web directory
-                if web_dir.exists():
-                    shutil.rmtree(web_dir)
-                shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
-                click.echo("  [ok] web/")
+                deploy_frontend(web_dir)
 
         except Exception as e:
             click.echo(f"Error regenerating: {e}", err=True)

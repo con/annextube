@@ -1,6 +1,5 @@
 """Generate web command for annextube."""
 
-import re
 import shutil
 from pathlib import Path
 
@@ -13,32 +12,82 @@ from annextube.services.export import ExportService
 
 logger = get_logger(__name__)
 
-# Placeholder version in built frontend (from package.json)
-FRONTEND_VERSION_PLACEHOLDER = "0.2.2"
-
-
-def _inject_version(web_dir: Path, version: str) -> None:
-    """Replace placeholder version in built JS files with actual annextube version."""
-    assets_dir = web_dir / "assets"
-    if not assets_dir.exists():
-        return
-
-    for js_file in assets_dir.glob("*.js"):
-        content = js_file.read_text()
-        # Replace the placeholder version string (quoted in JS)
-        # The template has "v{__APP_VERSION__}" so Vite inlines it as "v0.2.2"
-        # Match patterns like "v0.2.2" or 'v0.2.2'
-        new_content = re.sub(
-            rf'(["\'])v{re.escape(FRONTEND_VERSION_PLACEHOLDER)}(["\'])',
-            rf'\g<1>v{version}\g<2>',
-            content,
-        )
-        if new_content != content:
-            js_file.write_text(new_content)
-            logger.debug(f"Injected version into {js_file.name}")
+# Placeholder baked into the Vite build (must match frontend/vite.config.ts)
+FRONTEND_VERSION_PLACEHOLDER = "0.0.0-unknown"
 
 # Path to frontend build (relative to this file)
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "web"
+
+
+def _inject_version(web_dir: Path, version: str) -> bool:
+    """Replace placeholder version in built JS files with actual annextube version.
+
+    Returns True if the placeholder was found and replaced.
+    """
+    assets_dir = web_dir / "assets"
+    if not assets_dir.exists():
+        return False
+
+    replaced = False
+    for js_file in assets_dir.glob("*.js"):
+        content = js_file.read_text()
+        # Vite inlines the placeholder as "v0.0.0-unknown" in the JS bundle.
+        # Replace it with the real annextube version.
+        new_content = content.replace(
+            f"v{FRONTEND_VERSION_PLACEHOLDER}",
+            f"v{version}",
+        )
+        if new_content != content:
+            js_file.write_text(new_content)
+            logger.debug(f"Injected version v{version} into {js_file.name}")
+            replaced = True
+    return replaced
+
+
+def deploy_frontend(web_dir: Path) -> None:
+    """Copy the built frontend to *web_dir* and inject the annextube version.
+
+    This is the single code-path used by both ``generate-web`` and
+    ``serve --regenerate``.  It:
+
+    1. Verifies that the frontend build exists.
+    2. Replaces *web_dir* with a fresh copy of the build.
+    3. Injects ``__version__`` into the JS bundle so the UI shows the
+       correct annextube version.
+
+    Raises
+    ------
+    click.Abort
+        If the frontend build directory does not exist.
+    """
+    if not FRONTEND_BUILD_DIR.exists():
+        click.echo(
+            f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
+            err=True,
+        )
+        click.echo()
+        click.echo("The web frontend is not included in this installation.")
+        click.echo()
+        click.echo("Options to fix this:")
+        click.echo("  1. Development: Run 'cd frontend && npm run build' to build the frontend")
+        click.echo("  2. Production: Install from a release that includes the built frontend")
+        click.echo("  3. Manual: Copy a pre-built web/ directory to your installation")
+        click.echo()
+        click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
+        raise click.Abort()
+
+    if web_dir.exists():
+        shutil.rmtree(web_dir)
+    shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
+
+    if _inject_version(web_dir, __version__):
+        click.echo(f"  [ok] web/ (v{__version__})")
+    else:
+        click.echo(
+            f"  Warning: could not inject version v{__version__} "
+            f"(placeholder '{FRONTEND_VERSION_PLACEHOLDER}' not found in JS bundle)",
+            err=True,
+        )
 
 
 @click.command()
@@ -115,32 +164,9 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
             click.echo(f"  [ok] {playlists_tsv.name}")
             click.echo(f"  [ok] {authors_tsv.name}")
 
-        # Check if frontend build exists
-        if not FRONTEND_BUILD_DIR.exists():
-            click.echo(
-                f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
-                err=True,
-            )
-            click.echo()
-            click.echo("The web frontend is not included in this installation.")
-            click.echo()
-            click.echo("Options to fix this:")
-            click.echo("  1. Development: Run 'cd frontend && npm run build' to build the frontend")
-            click.echo("  2. Production: Install from a release that includes the built frontend")
-            click.echo("  3. Manual: Copy a pre-built web/ directory to your installation")
-            click.echo()
-            click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
-            raise click.Abort()
-
-        # Copy frontend to web directory
+        # Deploy frontend (copy + version injection)
         click.echo(f"Copying web browser to {web_dir}...")
-        if web_dir.exists():
-            shutil.rmtree(web_dir)
-        shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
-
-        # Inject actual annextube version into the built JS
-        _inject_version(web_dir, __version__)
-        click.echo(f"  Version: {__version__}")
+        deploy_frontend(web_dir)
 
         click.echo()
         click.echo("[ok] Web browser generated successfully!")

@@ -4,10 +4,12 @@
  * Implements the mykrok on-demand loading pattern:
  * 1. Load TSV files immediately (fast, ~1-2 MB)
  * 2. Fetch JSON details on demand (lazy loading)
+ *
+ * On init(), discovers the archive root by probing ascending directory
+ * levels for marker files (channels.tsv or videos/videos.tsv).
  */
 
 import { parseTSV, parseIntField } from '@/utils/tsv-parser';
-import { BASE_PATH, isLocalDeployment } from '@/utils/config';
 import { isFileAvailable } from '@/services/availability';
 import type {
   Video,
@@ -20,25 +22,102 @@ import type {
 } from '@/types/models';
 
 export class DataLoader {
-  private baseUrl: string;
+  /** Resolved path to the archive root (set by init()) */
+  baseUrl: string = '';
+  private _initialized = false;
+  private _isMultiChannel = false;
   private videosCache: Video[] | null = null;
   private playlistsCache: Playlist[] | null = null;
   private metadataCache: Map<string, Video> = new Map();
   private commentsCache: Map<string, Comment[]> = new Map();
 
   constructor(baseUrl?: string) {
-    // Auto-detect base URL based on deployment mode
     if (baseUrl) {
       this.baseUrl = baseUrl;
-    } else if (isLocalDeployment()) {
-      // Local file:// - data is in parent directory
-      this.baseUrl = '..';
-    } else {
-      // GitHub Pages or web server - data is at BASE_PATH
-      this.baseUrl = BASE_PATH.endsWith('/') ? BASE_PATH.slice(0, -1) : BASE_PATH;
+      this._initialized = true;
+    }
+  }
+
+  /**
+   * Discover the archive root and detect multi-channel mode.
+   *
+   * Probes ascending directory levels from the current page for:
+   *   - channels.tsv  → multi-channel collection
+   *   - videos/videos.tsv → single-channel archive
+   *
+   * Must be called once before any data loading methods.
+   */
+  async init(): Promise<void> {
+    if (this._initialized) return;
+
+    const result = await this._discoverArchiveRoot();
+    this.baseUrl = result.baseUrl;
+    this._isMultiChannel = result.isMultiChannel;
+    this._initialized = true;
+
+    console.log(
+      `[DataLoader] Archive root: ${this.baseUrl} ` +
+      `(${this._isMultiChannel ? 'multi-channel' : 'single-channel'})`
+    );
+  }
+
+  /**
+   * Probe ascending directory levels for archive marker files.
+   *
+   * For file:// protocol, skip probing (fetch HEAD is unreliable)
+   * and default to '..' since the web UI is always at web/.
+   */
+  private async _discoverArchiveRoot(): Promise<{
+    baseUrl: string;
+    isMultiChannel: boolean;
+  }> {
+    // file:// fast-path: fetch HEAD is unreliable, and the layout
+    // is always web/ one level below the archive root.
+    if (window.location.protocol === 'file:') {
+      return { baseUrl: '..', isMultiChannel: false };
     }
 
-    console.log(`DataLoader initialized with baseUrl: ${this.baseUrl}`);
+    // Probe ascending from the current page directory.
+    // '..' is the most common case (annextube serve), '.' for GitHub
+    // Pages root deployments, then further up for deeper nestings.
+    const candidates = ['..', '.', '../..', '../../..', '../../../..'];
+
+    for (const prefix of candidates) {
+      // Multi-channel marker
+      try {
+        const resp = await fetch(`${prefix}/channels.tsv`, { method: 'HEAD' });
+        if (resp.ok) return { baseUrl: prefix, isMultiChannel: true };
+      } catch { /* network error, skip */ }
+
+      // Single-channel markers
+      for (const marker of ['videos/videos.tsv', 'channel.json']) {
+        try {
+          const resp = await fetch(`${prefix}/${marker}`, { method: 'HEAD' });
+          if (resp.ok) return { baseUrl: prefix, isMultiChannel: false };
+        } catch { /* network error, skip */ }
+      }
+    }
+
+    // Fallback — assume one level up (standard layout)
+    console.warn('[DataLoader] Could not discover archive root, falling back to ".."');
+    return { baseUrl: '..', isMultiChannel: false };
+  }
+
+  /**
+   * Whether the archive is a multi-channel collection.
+   * Available after init().
+   */
+  async isMultiChannelMode(): Promise<boolean> {
+    if (!this._initialized) await this.init();
+    return this._isMultiChannel;
+  }
+
+  /**
+   * Build a path to a media file under the archive root.
+   * Components should use this instead of hard-coding '../'.
+   */
+  mediaPath(relativePath: string): string {
+    return `${this.baseUrl}/${relativePath}`;
   }
 
   /**
@@ -245,7 +324,7 @@ export class DataLoader {
    */
   getCaptionPath(videoId: string, languageCode: string): string {
     const filePath = this.getVideoPath(videoId);
-    return `${this.baseUrl}/videos/${filePath}/caption_${languageCode}.vtt`;
+    return `${this.baseUrl}/videos/${filePath}/video.${languageCode}.vtt`;
   }
 
   /**
@@ -264,18 +343,6 @@ export class DataLoader {
     }
     // Fallback to video_id if not found in cache
     return videoId;
-  }
-
-  /**
-   * Check if this is a multi-channel collection (channels.tsv exists)
-   */
-  async isMultiChannelMode(): Promise<boolean> {
-    try {
-      const response = await fetch(`${this.baseUrl}/channels.tsv`);
-      return response.ok;
-    } catch {
-      return false;
-    }
   }
 
   /**

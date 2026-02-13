@@ -1,20 +1,62 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { Video, Comment } from '@/types/models';
   import { dataLoader } from '@/services/data-loader';
   import { formatViews, formatRelativeTime } from '@/utils/format';
   import VideoPlayer from './VideoPlayer.svelte';
+  import CaptionBrowser from './CaptionBrowser.svelte';
   import CommentView from './CommentView.svelte';
+
+  // TODO: URL permalink — persist video player state in the URL hash so that
+  // links can restore: which player tab is active (archive vs youtube),
+  // wide mode on/off, transcript panel shown/hidden, and playback position
+  // (e.g. #video=ID&tab=local&wide=1&transcript=1&t=90).
 
   export let video: Video;
   export let onBack: () => void;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
+
+  let playerRef: VideoPlayer;
+  let currentTime: number = 0;
+  let captionVisible = true;
+  let playerHeight: number = 0;
 
   let fullMetadata: Video = video;
   let comments: Comment[] = [];
   let loadingMetadata = false;
   let loadingComments = false;
   let showDescription = false;
+
+  // Wide mode (persisted in localStorage)
+  const WIDE_MODE_KEY = 'annextube-wide-mode';
+  let wideMode = getWideMode();
+
+  function getWideMode(): boolean {
+    try { return localStorage.getItem(WIDE_MODE_KEY) === 'true'; }
+    catch { return false; }
+  }
+
+  function toggleWideMode() {
+    wideMode = !wideMode;
+    try { localStorage.setItem(WIDE_MODE_KEY, String(wideMode)); }
+    catch { /* file:// protocol may not support localStorage */ }
+  }
+
+  // Sync body class for wide mode (escapes Svelte scoping)
+  $: if (typeof document !== 'undefined') {
+    document.body.classList.toggle('annextube-wide', wideMode);
+  }
+
+  onDestroy(() => {
+    document.body.classList.remove('annextube-wide');
+  });
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.key === 't') toggleWideMode();
+  }
+
+  $: hasCaptions = fullMetadata.captions_available && fullMetadata.captions_available.length > 0;
 
   onMount(async () => {
     // Load full metadata (with tags, description, etc.)
@@ -52,13 +94,34 @@
   }
 </script>
 
-<div class="video-detail">
+<svelte:window on:keydown={handleKeydown} />
+
+<div class="video-detail" class:wide-mode={wideMode}>
   <button class="back-button" on:click={onBack}>
     ← Back to list
   </button>
 
-  <div class="player-container">
-    <VideoPlayer video={fullMetadata} {channelDir} />
+  <div class="video-with-captions" class:no-captions={!hasCaptions || !captionVisible}
+       style="--player-height: {playerHeight}px">
+    <div class="player-container" bind:clientHeight={playerHeight}>
+      <VideoPlayer
+        bind:this={playerRef}
+        bind:currentTime
+        video={fullMetadata}
+        {channelDir}
+        showTranscriptTab={hasCaptions && !captionVisible}
+        onTranscriptOpen={() => captionVisible = true}
+      />
+    </div>
+    {#if hasCaptions && captionVisible}
+      <CaptionBrowser
+        video={fullMetadata}
+        {channelDir}
+        {currentTime}
+        onSeek={(time) => playerRef?.seekTo(time)}
+        onHide={() => captionVisible = false}
+      />
+    {/if}
   </div>
 
   <div class="video-info">
@@ -73,6 +136,14 @@
         <span class="date">{formatRelativeTime(fullMetadata.published_at)}</span>
       </div>
       <div class="metadata-right">
+        <button
+          class="wide-mode-toggle"
+          on:click={toggleWideMode}
+          aria-pressed={wideMode}
+          title={wideMode ? 'Exit wide mode (t)' : 'Use full browser width (t)'}
+        >
+          {wideMode ? '\u2713 Wide' : 'Wide'}
+        </button>
         <a
           href={fullMetadata.source_url}
           target="_blank"
@@ -127,7 +198,7 @@
 
 <style>
   .video-detail {
-    max-width: 1280px;
+    max-width: 1680px;
     margin: 0 auto;
     padding: 24px 0;
   }
@@ -147,8 +218,30 @@
     background: #e0e0e0;
   }
 
-  .player-container {
+  .video-with-captions {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 16px;
     margin-bottom: 16px;
+    /* align-items: start prevents grid items from stretching to fill the row.
+       Without it, the caption browser pushes the row taller, the player-container
+       stretches to match, and bind:clientHeight reports the inflated height —
+       creating a circular dependency that breaks wide→normal height revert. */
+    align-items: start;
+  }
+
+  .video-with-captions.no-captions {
+    grid-template-columns: 1fr;
+  }
+
+  .player-container {
+    min-width: 0;
+  }
+
+  .video-with-captions > :global(.caption-browser) {
+    max-height: var(--player-height, 500px);
+    min-height: 0;
+    overflow: hidden;
   }
 
   .video-info {
@@ -209,6 +302,34 @@
   .channel-name {
     font-weight: 500;
     color: #030303;
+  }
+
+  .wide-mode-toggle {
+    color: #065fd4;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border: 1px solid #065fd4;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .wide-mode-toggle:hover {
+    background: #065fd4;
+    color: white;
+  }
+
+  .video-detail.wide-mode {
+    max-width: none;
+    padding-left: 32px;
+    padding-right: 32px;
+  }
+
+  /* Break out of App.svelte's .container max-width via body class */
+  :global(body.annextube-wide .container) {
+    max-width: none;
   }
 
   .youtube-link {
@@ -279,6 +400,16 @@
   .description-text p {
     margin: 8px 0 0 0;
     white-space: pre-wrap;
+  }
+
+  @media (max-width: 1023px) {
+    .video-with-captions {
+      grid-template-columns: 1fr;
+    }
+
+    .video-with-captions > :global(.caption-browser) {
+      max-height: 350px;
+    }
   }
 
   @media (max-width: 768px) {
