@@ -23,6 +23,15 @@
   let useRegex = false;
   let filterMode = false; // true = hide non-matching cues; false = dim them
 
+  function toggleFilterMode() {
+    filterMode = !filterMode;
+    // When exiting filter mode, scroll to the current match in the full list
+    // (the scroll position from the short filtered list is meaningless)
+    if (!filterMode && matchCount > 0) {
+      scrollToMatch(currentMatchPos);
+    }
+  }
+
   // DOM refs
   let cueListEl: HTMLDivElement;
   let autoScrollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -302,7 +311,7 @@
         <button
           class="option-btn"
           class:active={filterMode}
-          on:click={() => filterMode = !filterMode}
+          on:click={toggleFilterMode}
           title="Filter: hide non-matching cues"
           aria-pressed={filterMode}
         >Filter</button>
