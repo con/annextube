@@ -59,6 +59,64 @@ $ANNEXTUBE backup --output-dir "$FIXTURE_DIR"
 # Phase 3: Export + generate web UI
 echo ""
 echo "=== Phase 3: Export + generate-web ==="
+
+# Phase 3.5: Create synthetic caption files for downloaded videos
+# NOTE: @AnnexTubeTesting videos are 1-5 seconds long — cues must fit within that range
+echo "--- Phase 3.5: Adding synthetic captions to downloaded videos ---"
+for VIDEO_DIR in $(find "$FIXTURE_DIR/videos" -name "video.mkv" -exec dirname {} \;); do
+    # Create English VTT
+    cat > "$VIDEO_DIR/video.en.vtt" << 'VTTEOF'
+WEBVTT
+
+00:00:00.000 --> 00:00:01.000
+Welcome to this test video
+
+00:00:01.000 --> 00:00:02.000
+This is the second caption cue
+
+00:00:02.000 --> 00:00:03.000
+And this is the searchable third cue
+
+00:00:03.000 --> 00:00:04.000
+The final caption for testing
+VTTEOF
+
+    # Create Spanish VTT
+    cat > "$VIDEO_DIR/video.es.vtt" << 'VTTEOF'
+WEBVTT
+
+00:00:00.000 --> 00:00:01.000
+Bienvenidos a este video de prueba
+
+00:00:01.000 --> 00:00:02.000
+Este es el segundo subtitulo
+
+00:00:02.000 --> 00:00:03.000
+Y este es el tercer subtitulo buscable
+
+00:00:03.000 --> 00:00:04.000
+El subtitulo final para pruebas
+VTTEOF
+
+    # Update metadata.json to include captions_available
+    if command -v jq &>/dev/null; then
+        jq '.captions_available = ["en", "es"]' "$VIDEO_DIR/metadata.json" > "$VIDEO_DIR/metadata.json.tmp" \
+            && mv "$VIDEO_DIR/metadata.json.tmp" "$VIDEO_DIR/metadata.json"
+    else
+        # Fallback: use python if jq not available
+        python3 -c "
+import json, sys
+with open('$VIDEO_DIR/metadata.json') as f:
+    data = json.load(f)
+data['captions_available'] = ['en', 'es']
+with open('$VIDEO_DIR/metadata.json', 'w') as f:
+    json.dump(data, f, indent=2)
+"
+    fi
+    echo "  Added captions to: $VIDEO_DIR"
+done
+git -C "$FIXTURE_DIR" add -A && git -C "$FIXTURE_DIR" commit -m "Add synthetic captions for E2E tests"
+
 $ANNEXTUBE export --output-dir "$FIXTURE_DIR"
 $ANNEXTUBE generate-web --output-dir "$FIXTURE_DIR"
 
