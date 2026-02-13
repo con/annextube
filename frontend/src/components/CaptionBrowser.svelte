@@ -78,8 +78,25 @@
 
   // Current search match navigation
   let currentMatchPos = 0;
-  $: if (searchQuery) {
+  $: if (matchingIndices.length > 0) {
+    // Reset to first match and scroll to it
     currentMatchPos = 0;
+    scrollToMatch(0);
+  } else {
+    currentMatchPos = 0;
+  }
+
+  function scrollToMatch(pos: number) {
+    // Run after DOM updates
+    setTimeout(() => {
+      const targetIdx = matchingIndices[pos];
+      if (targetIdx == null) return;
+      const el = cueListEl?.querySelector(`[data-cue-index="${targetIdx}"]`);
+      if (el) {
+        autoScroll = false;
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 0);
   }
 
   function getCaptionUrl(lang: string): string {
@@ -170,12 +187,7 @@
   function navigateMatch(direction: 1 | -1) {
     if (matchCount === 0) return;
     currentMatchPos = (currentMatchPos + direction + matchCount) % matchCount;
-    const targetIdx = matchingIndices[currentMatchPos];
-    const el = cueListEl?.querySelector(`[data-cue-index="${targetIdx}"]`);
-    if (el) {
-      autoScroll = false;
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    scrollToMatch(currentMatchPos);
   }
 
   function formatCueTime(seconds: number): string {

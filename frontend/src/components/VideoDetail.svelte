@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import type { Video, Comment } from '@/types/models';
   import { dataLoader } from '@/services/data-loader';
   import { formatViews, formatRelativeTime } from '@/utils/format';
@@ -36,6 +36,15 @@
     try { localStorage.setItem(WIDE_MODE_KEY, String(wideMode)); }
     catch { /* file:// protocol may not support localStorage */ }
   }
+
+  // Sync body class for wide mode (escapes Svelte scoping)
+  $: if (typeof document !== 'undefined') {
+    document.body.classList.toggle('annextube-wide', wideMode);
+  }
+
+  onDestroy(() => {
+    document.body.classList.remove('annextube-wide');
+  });
 
   function handleKeydown(event: KeyboardEvent) {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
@@ -308,8 +317,8 @@
     padding-right: 32px;
   }
 
-  /* Break out of App.svelte's .container max-width */
-  :global(.container:has(.video-detail.wide-mode)) {
+  /* Break out of App.svelte's .container max-width via body class */
+  :global(body.annextube-wide .container) {
     max-width: none;
   }
 
