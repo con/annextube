@@ -25,34 +25,41 @@ class ExportService:
         """
         self.repo_path = repo_path
 
-    def generate_videos_tsv(self, output_path: Path | None = None) -> Path:
-        """Generate videos/videos.tsv with summary metadata for all videos.
+    def generate_videos_tsv(self, output_path: Path | None = None,
+                            base_dir: Path | None = None) -> Path:
+        """Generate videos.tsv with summary metadata for all videos in a directory.
 
-        Scans videos/ directory and extracts key metadata from each
-        video's metadata.json file.
+        Scans base_dir for metadata.json files (follows symlinks) and extracts
+        key metadata. Works for both videos/ directory and playlist directories
+        containing symlinks to video directories.
 
         Args:
-            output_path: Optional custom output path (default: repo_path/videos/videos.tsv)
+            output_path: Optional custom output path (default: base_dir/videos.tsv)
+            base_dir: Directory to scan for metadata.json files
+                      (default: repo_path/videos/)
 
         Returns:
             Path to generated TSV file
         """
+        if base_dir is None:
+            base_dir = self.repo_path / "videos"
+
         if output_path is None:
-            output_path = self.repo_path / "videos" / "videos.tsv"
+            output_path = base_dir / "videos.tsv"
 
         logger.info(f"Generating videos.tsv at {output_path}")
 
-        videos_dir = self.repo_path / "videos"
-        if not videos_dir.exists():
-            logger.warning("Videos directory does not exist, creating empty TSV")
+        if not base_dir.exists():
+            logger.warning(f"Directory {base_dir} does not exist, creating empty TSV")
             self._write_empty_videos_tsv(output_path)
             return output_path
 
         # Collect video metadata
         # Find all video directories by looking for metadata.json files
         # This supports both flat and hierarchical directory structures
+        # Note: rglob follows symlinks, so this works for playlist dirs with symlinks too
         videos = []
-        for metadata_path in sorted(videos_dir.rglob("metadata.json")):
+        for metadata_path in sorted(base_dir.rglob("metadata.json")):
             video_dir = metadata_path.parent
 
             try:
@@ -62,8 +69,10 @@ class ExportService:
                 # Extract key fields for TSV (frontend-compatible format)
                 video_id = metadata.get("video_id", "")
 
-                # Get relative path from videos/ directory (supports hierarchical layouts)
-                relative_path = video_dir.relative_to(videos_dir)
+                # Get relative path from base directory
+                # For videos/: gives "2026/01/video_name"
+                # For playlists/: gives "0001_video_name" (symlink name)
+                relative_path = video_dir.relative_to(base_dir)
 
                 # Use download_status from metadata.json - reflects ACTION taken, not current availability
                 # Availability (whether content is present) is git-annex's domain.
@@ -95,7 +104,7 @@ class ExportService:
                 videos.append(video_entry)
 
             except Exception as e:
-                logger.error(f"Failed to read metadata from {video_dir.relative_to(videos_dir)}: {e}")
+                logger.error(f"Failed to read metadata from {video_dir.relative_to(base_dir)}: {e}")
 
         # Write TSV file
         self._write_videos_tsv(output_path, videos)
@@ -166,6 +175,9 @@ class ExportService:
                     "path": playlist_dir.name,  # Directory name for loading playlist.json
                 }
                 playlists.append(playlist_entry)
+
+                # Generate per-playlist videos.tsv
+                self.generate_videos_tsv(base_dir=playlist_dir)
 
             except Exception as e:
                 logger.error(f"Failed to read metadata from {playlist_dir.name}: {e}")

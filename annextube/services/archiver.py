@@ -521,6 +521,93 @@ class Archiver:
 
         return symlink_name
 
+    def _build_video_id_map(self) -> dict[str, Path]:
+        """Build mapping from video_id to video directory path.
+
+        Scans all metadata.json files in videos/ directory to build the map.
+
+        Returns:
+            Dictionary mapping video_id to absolute video directory Path
+        """
+        videos_dir = self.repo_path / "videos"
+        video_id_map: dict[str, Path] = {}
+
+        if not videos_dir.exists():
+            return video_id_map
+
+        for metadata_path in videos_dir.rglob("metadata.json"):
+            try:
+                with open(metadata_path) as f:
+                    metadata = json.load(f)
+                video_id = metadata.get("video_id")
+                if video_id:
+                    video_id_map[video_id] = metadata_path.parent
+            except Exception as e:
+                logger.debug(f"Failed to read {metadata_path}: {e}")
+
+        return video_id_map
+
+    def _rebuild_playlist_symlinks(self, playlist_dir: Path, playlist: Playlist) -> None:
+        """Rebuild all symlinks in a playlist directory from scratch.
+
+        Removes existing symlinks, resolves video_ids to directories,
+        sorts by (published_at, video_id) for chronological ordering,
+        and creates fresh sequential symlinks.
+
+        Args:
+            playlist_dir: Path to playlist directory
+            playlist: Playlist model with video_ids
+        """
+        # Step 1: Remove ALL existing symlinks (but not playlist.json or videos.tsv)
+        for item in playlist_dir.iterdir():
+            if item.is_symlink():
+                item.unlink()
+
+        # Step 2: Build video_id -> video_dir mapping
+        video_id_map = self._build_video_id_map()
+
+        # Step 3: Collect video dirs with published_at for sorting
+        videos_with_dates: list[tuple[datetime, str, Path]] = []
+        for video_id in playlist.video_ids:
+            video_dir = video_id_map.get(video_id)
+            if not video_dir:
+                logger.debug(f"Video {video_id} not found in archive, skipping symlink")
+                continue
+
+            # Read published_at from metadata
+            metadata_path = video_dir / "metadata.json"
+            published_at = datetime.min  # fallback for missing dates
+            try:
+                with open(metadata_path) as f:
+                    metadata = json.load(f)
+                published_str = metadata.get("published_at", "")
+                if published_str:
+                    published_at = datetime.fromisoformat(
+                        published_str.replace('Z', '+00:00')
+                    )
+            except Exception as e:
+                logger.debug(f"Failed to read published_at for {video_id}: {e}")
+
+            videos_with_dates.append((published_at, video_id, video_dir))
+
+        # Step 4: Sort by (published_at, video_id) — chronological, oldest first
+        videos_with_dates.sort(key=lambda x: (x[0], x[1]))
+
+        # Step 5: Create sequential symlinks
+        for index, (_published_at, _video_id, video_dir) in enumerate(videos_with_dates, 1):
+            symlink_name = self._get_playlist_symlink_name(video_dir, index)
+            symlink_path = playlist_dir / symlink_name
+
+            # Create relative symlink (for repository portability)
+            relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
+            symlink_path.symlink_to(relative_target)
+            logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
+
+        logger.info(
+            f"Rebuilt {len(videos_with_dates)} symlinks in {playlist_dir.name} "
+            f"(chronological order)"
+        )
+
     def _discover_playlists(self, channel_url: str, include_pattern: str,
                            exclude_pattern: str | None, include_podcasts: str) -> list[str]:
         """Discover and filter playlists from a channel.
@@ -925,9 +1012,11 @@ class Archiver:
         # Skip video processing in playlists mode if content unchanged
         if not playlist_changed and self.update_mode == "playlists":
             logger.info("Playlist content unchanged, skipping video processing")
+            # Still rebuild symlinks — video directories may have been added from channel backup
+            self._rebuild_playlist_symlinks(playlist_dir, playlist)
             return stats
 
-        # Process each video and create ordered symlinks with checkpoint support
+        # Process each video with checkpoint support
         checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
 
         try:
@@ -938,7 +1027,6 @@ class Archiver:
                 # Check if video was already processed in this run (e.g., from channel backup)
                 if video_id in self._processed_video_ids:
                     logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
-                    caption_count = 0
                 else:
                     logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
                     # Process video (creates video directory with content)
@@ -948,28 +1036,6 @@ class Archiver:
                     stats["videos_tracked"] += 1
                     stats["metadata_saved"] += 1
                     stats["captions_downloaded"] += caption_count
-
-                # Create ordered symlink in playlist directory (even if already processed)
-                video_dir = self._get_video_path(video)
-                if video_dir.exists():
-                    # Generate symlink name: {index:04d}_{video_dir_name}
-                    symlink_name = self._get_playlist_symlink_name(video_dir, i)
-                    symlink_path = playlist_dir / symlink_name
-
-                    # Create relative symlink (for repository portability)
-                    # From: playlists/{playlist_title}/{symlink}
-                    # To:   videos/{year}/{month}/{video_dir_name} (or videos/{video_dir_name} for flat)
-                    # Use relative_to() to support both flat and hierarchical layouts
-                    relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
-
-                    # Remove existing symlink if present
-                    if symlink_path.exists() or symlink_path.is_symlink():
-                        symlink_path.unlink()
-
-                    symlink_path.symlink_to(relative_target)
-                    logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
-                else:
-                    logger.warning(f"Video directory not found, skipping symlink: {video_dir}")
 
                 # Periodic checkpoint
                 if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
@@ -1002,6 +1068,9 @@ class Archiver:
             raise
 
         logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
+
+        # Rebuild playlist symlinks from scratch (chronological order)
+        self._rebuild_playlist_symlinks(playlist_dir, playlist)
 
         # Generate TSV metadata files (non-critical, can be regenerated later)
         try:

@@ -145,12 +145,14 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
 
 @pytest.mark.ai_generated
 def test_playlist_backup_creates_symlinks(tmp_git_annex_repo: Path) -> None:
-    """Test that playlist backup creates numbered symlinks.
+    """Test that playlist backup creates chronologically ordered symlinks.
 
     Verifies:
     - Playlist directory is created
     - Numbered symlinks (0001_, 0002_, etc.) point to video directories
+    - Symlinks are in chronological order (oldest first)
     - playlist.json is created
+    - Per-playlist videos.tsv exists with correct content
     - playlists.tsv is generated
     """
     config = Config(
@@ -196,11 +198,45 @@ def test_playlist_backup_creates_symlinks(tmp_git_annex_repo: Path) -> None:
     assert symlinks[1].name.startswith("0002_")
     assert symlinks[2].name.startswith("0003_")
 
-    # Verify symlinks point to video directories
+    # Verify symlinks point to video directories and are in chronological order
+    published_dates = []
     for symlink in symlinks:
         target = symlink.resolve()
         assert target.exists()
-        assert (target / "metadata.json").exists()
+        metadata_path = target / "metadata.json"
+        assert metadata_path.exists()
+
+        with open(metadata_path) as f:
+            metadata = json.load(f)
+        published_dates.append(metadata["published_at"])
+
+    # Verify chronological order (oldest first)
+    assert published_dates == sorted(published_dates), (
+        f"Symlinks not in chronological order: {published_dates}"
+    )
+
+    # Verify per-playlist videos.tsv exists
+    playlist_videos_tsv = playlist_dir / "videos.tsv"
+    assert playlist_videos_tsv.exists(), "Per-playlist videos.tsv should exist"
+
+    # Parse and verify per-playlist videos.tsv content
+    with open(playlist_videos_tsv) as f:
+        lines = f.readlines()
+    assert len(lines) == 4, f"Expected 1 header + 3 data rows, got {len(lines)}"
+
+    # Verify header
+    header = lines[0].strip().split('\t')
+    assert "video_id" in header
+    assert "path" in header
+
+    # Verify path column uses symlink names (0001_, 0002_, etc.)
+    path_idx = header.index("path")
+    for line in lines[1:]:
+        fields = line.strip().split('\t')
+        path_value = fields[path_idx]
+        assert path_value.startswith("000"), (
+            f"Path in playlist videos.tsv should be symlink name, got: {path_value}"
+        )
 
     # Verify playlists.tsv was generated
     playlists_tsv = tmp_git_annex_repo / "playlists" / "playlists.tsv"
