@@ -39,6 +39,10 @@ test = [
     "pytest-timeout>=2.0",
     "pytest-asyncio>=0.21.0",
 ]
+e2e = [
+    "annextube[test]",
+    "playwright>=1.40",
+]
 datalad = [
     "datalad>=1.0.0",  # For DataLad dataset creation
 ]

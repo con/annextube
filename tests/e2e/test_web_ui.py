@@ -23,7 +23,12 @@ import argparse
 import sys
 import time
 
-from playwright.sync_api import Page, sync_playwright
+try:
+    from playwright.sync_api import Page, sync_playwright
+except ImportError:
+    import pytest
+
+    pytest.skip("playwright not installed (install via: pip install annextube[e2e])", allow_module_level=True)
 
 
 def test_main_page_loads(page: Page, base_url: str) -> bool:
