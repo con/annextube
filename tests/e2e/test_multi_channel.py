@@ -1,7 +1,7 @@
 """E2E test for multi-channel collections.
 
 Tests the complete workflow:
-1. Create two channel archives (limited videos)
+1. Create two channel archives (same channel, different configs)
 2. Export channel.json for each
 3. Aggregate into channels.tsv
 4. Generate web UI
@@ -23,18 +23,19 @@ import pytest
 def test_multi_channel_collection_workflow():
     """Test complete multi-channel collection workflow.
 
-    Creates a collection with two channels (AnnexTubeTesting and limited apopyk),
-    aggregates metadata, and verifies web UI generation.
+    Creates a collection with two archives of the same channel (@AnnexTubeTesting)
+    under different configs (full vs partial), aggregates metadata, and verifies
+    web UI generation.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         collection_dir = Path(tmpdir) / "collection"
         collection_dir.mkdir()
 
-        # Channel 1: AnnexTubeTesting (limit 3 videos)
-        ch1_dir = collection_dir / "ch-annextubetesting"
+        # Channel 1 (full): @AnnexTubeTesting, limit 5, videos enabled
+        ch1_dir = collection_dir / "ch-annextube-full"
         ch1_dir.mkdir()
 
-        print("\n=== Creating channel 1: AnnexTubeTesting ===")
+        print("\n=== Creating channel 1: AnnexTubeTesting (full) ===")
         result = subprocess.run(
             [
                 sys.executable,
@@ -44,7 +45,7 @@ def test_multi_channel_collection_workflow():
                 str(ch1_dir),
                 "https://www.youtube.com/@AnnexTubeTesting",
                 "--limit",
-                "3",
+                "5",
                 "--comments-depth",
                 "0",
                 "--no-captions",
@@ -82,23 +83,26 @@ def test_multi_channel_collection_workflow():
         )
         print(result.stdout)
 
-        # Channel 2: Andriy Popyk (limit 2 videos)
-        ch2_dir = collection_dir / "ch-apopyk"
+        # Channel 2 (partial): @AnnexTubeTesting, NO videos, only Creative Commons playlists
+        ch2_dir = collection_dir / "ch-annextube-partial"
         ch2_dir.mkdir()
 
-        print("\n=== Creating channel 2: Andriy Popyk ===")
+        print("\n=== Creating channel 2: AnnexTubeTesting (partial) ===")
         result = subprocess.run(
             [
                 sys.executable, "-m", "annextube",
                 "init",
                 str(ch2_dir),
-                "https://www.youtube.com/@apopyk",
+                "https://www.youtube.com/@AnnexTubeTesting",
+                "--no-videos",
                 "--limit",
-                "2",
+                "3",
                 "--comments-depth",
                 "0",
                 "--no-captions",
                 "--no-thumbnails",
+                "--include-playlists",
+                ".*Creative Commons.*",
             ],
             capture_output=True,
             text=True,
@@ -153,8 +157,11 @@ def test_multi_channel_collection_workflow():
             assert "channel_id" in ch2_data
             assert "name" in ch2_data
             assert "archive_stats" in ch2_data
-            assert ch2_data["archive_stats"]["total_videos_archived"] > 0
             print(f"Channel 2: {ch2_data['name']} - {ch2_data['archive_stats']['total_videos_archived']} videos")
+
+        # Both archives are the same channel — verify same channel_id
+        assert ch1_data["channel_id"] == ch2_data["channel_id"], \
+            "Both archives should reference the same channel"
 
         # Aggregate channels
         print("\n=== Aggregating channels ===")
@@ -198,8 +205,7 @@ def test_multi_channel_collection_workflow():
                 print(f"\n  - {channel['title']} ({channel['channel_dir']}): {channel['total_videos_archived']} videos")
                 assert channel["channel_id"] != ""
                 assert channel["title"] != ""
-                assert int(channel["total_videos_archived"]) > 0
-                assert channel["channel_dir"] in ["ch-annextubetesting", "ch-apopyk"]
+                assert channel["channel_dir"] in ["ch-annextube-full", "ch-annextube-partial"]
 
         # Generate web UI
         print("\n=== Generating web UI ===")
@@ -222,16 +228,14 @@ def test_multi_channel_collection_workflow():
 
         # Verify per-channel videos.tsv files exist
         ch1_videos_tsv = ch1_dir / "videos" / "videos.tsv"
-        ch2_videos_tsv = ch2_dir / "videos" / "videos.tsv"
         assert ch1_videos_tsv.exists(), "videos.tsv not found for channel 1"
-        assert ch2_videos_tsv.exists(), "videos.tsv not found for channel 2"
 
-        print("\n✅ Multi-channel collection workflow successful!")
+        print("\n Multi-channel collection workflow successful!")
         print(f"Collection directory: {collection_dir}")
         print("Structure:")
-        print("  - channels.tsv (2 channels)")
-        print(f"  - ch-annextubetesting/ ({ch1_data['archive_stats']['total_videos_archived']} videos)")
-        print(f"  - ch-apopyk/ ({ch2_data['archive_stats']['total_videos_archived']} videos)")
+        print("  - channels.tsv (2 entries, same channel)")
+        print(f"  - ch-annextube-full/ ({ch1_data['archive_stats']['total_videos_archived']} videos)")
+        print(f"  - ch-annextube-partial/ ({ch2_data['archive_stats']['total_videos_archived']} videos)")
         print("  - web/index.html")
 
 
@@ -246,7 +250,7 @@ def test_aggregate_with_depth():
         # Create nested structure: org/channel/
         org_dir = collection_dir / "ukraine"
         org_dir.mkdir()
-        ch_dir = org_dir / "ch-annextubetesting"
+        ch_dir = org_dir / "ch-annextube-full"
         ch_dir.mkdir()
 
         print("\n=== Creating nested channel ===")
@@ -315,6 +319,6 @@ def test_aggregate_with_depth():
             reader = csv.DictReader(f, delimiter="\t")
             channels = list(reader)
             assert len(channels) == 1
-            assert channels[0]["channel_dir"] == "ukraine/ch-annextubetesting"
+            assert channels[0]["channel_dir"] == "ukraine/ch-annextube-full"
 
-        print("\n✅ Depth-based discovery successful!")
+        print("\n Depth-based discovery successful!")

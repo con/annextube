@@ -4,22 +4,26 @@
  * Tests the full user journey from browsing the video list to playing videos,
  * using a real test archive served by `annextube serve`.
  *
- * Test data: apopyk-archive from test-archives/fake-home-hierarchical-test
- *   - 17 total videos (3 downloaded, 14 metadata_only)
- *   - Downloaded video: x2vBnbAvAg4 (has local file, 101MB)
- *   - Metadata-only video: YOZ6rFQhv1U (no local file)
+ * Test data: test-archives/archive-workflow-fixture (@AnnexTubeTesting channel)
+ *   - Created by: frontend/scripts/create-e2e-fixture.sh
+ *   - 10 videos total (3 downloaded + 7 metadata_only)
+ *   - 5 playlists
+ *   - Video IDs loaded dynamically from videos.tsv (upload dates are identical,
+ *     so yt-dlp ordering may vary between runs)
  *
  * @ai_generated
  */
 
 import { test, expect } from '@playwright/test';
 
-// Video IDs from the test archive
-const DOWNLOADED_VIDEO_ID = 'x2vBnbAvAg4';
-const METADATA_ONLY_VIDEO_ID = 'YOZ6rFQhv1U';
-const TOTAL_VIDEOS = 17;
+// Archive counts — must match the fixture created by create-e2e-fixture.sh
+const TOTAL_VIDEOS = 10;
 const DOWNLOADED_COUNT = 3;
-const METADATA_ONLY_COUNT = 14;
+const METADATA_ONLY_COUNT = 7;
+
+// Video IDs are loaded dynamically in beforeAll (see below)
+let DOWNLOADED_VIDEO_ID = '';
+let METADATA_ONLY_VIDEO_ID = '';
 
 // Base path for the web UI when served by `annextube serve`
 const WEB_BASE = '/web/';
@@ -42,12 +46,46 @@ test.setTimeout(60000);
 test.describe('Complete Archive Workflow', () => {
   // Run tests serially to avoid overwhelming the single-threaded Python HTTP server
   test.describe.configure({ mode: 'serial' });
+
+  // Load video IDs dynamically from the fixture's videos.tsv
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    try {
+      const response = await page.goto('/videos/videos.tsv');
+      const tsvText = await response!.text();
+      const lines = tsvText.trim().split('\n');
+      // Parse header to find column indices
+      const headers = lines[0].split('\t');
+      const idIdx = headers.indexOf('video_id');
+      const statusIdx = headers.indexOf('download_status');
+
+      for (const line of lines.slice(1)) {
+        const cols = line.split('\t');
+        const videoId = cols[idIdx];
+        const status = cols[statusIdx];
+        if (status === 'downloaded' && !DOWNLOADED_VIDEO_ID) {
+          DOWNLOADED_VIDEO_ID = videoId;
+        }
+        if (status === 'metadata_only' && !METADATA_ONLY_VIDEO_ID) {
+          METADATA_ONLY_VIDEO_ID = videoId;
+        }
+        if (DOWNLOADED_VIDEO_ID && METADATA_ONLY_VIDEO_ID) break;
+      }
+    } finally {
+      await page.close();
+    }
+
+    // Sanity check — fail fast if the fixture is broken
+    if (!DOWNLOADED_VIDEO_ID) throw new Error('No downloaded video found in videos.tsv');
+    if (!METADATA_ONLY_VIDEO_ID) throw new Error('No metadata_only video found in videos.tsv');
+  });
+
   test.describe('Navigation and video list display', () => {
     test('loads and displays all videos from the archive', async ({ page }) => {
       await page.goto(WEB_BASE);
       await page.waitForSelector('.video-grid');
 
-      // Should display all 17 videos
+      // Should display all 10 videos
       const videoCards = page.locator('.video-card');
       await expect(videoCards).toHaveCount(TOTAL_VIDEOS);
     });
@@ -340,14 +378,15 @@ test.describe('Complete Archive Workflow', () => {
       await page.goto(WEB_BASE);
       await page.waitForSelector('.video-grid');
 
-      // Type a search term that matches a known video title
+      // Type a search term that matches known video titles
+      // "Location" matches "NYC Location" and "London Location" test videos
       const searchInput = page.locator('#search-input');
-      await searchInput.fill('спутника');
+      await searchInput.fill('Location');
 
       // Wait for debounced search to apply
       await page.waitForTimeout(500);
 
-      // Should show filtered results (the downloaded video with that term)
+      // Should show filtered results (2 videos with "Location" in the title)
       const videoCards = page.locator('.video-card');
       const count = await videoCards.count();
       expect(count).toBeGreaterThan(0);
@@ -377,7 +416,7 @@ test.describe('Complete Archive Workflow', () => {
 
       // Apply search
       const searchInput = page.locator('#search-input');
-      await searchInput.fill('спутника');
+      await searchInput.fill('Location');
       await page.waitForTimeout(500);
 
       // Clear search

@@ -69,13 +69,13 @@ class ExportService:
                 # Availability (whether content is present) is git-annex's domain.
                 # Frontend checks actual file availability via HEAD request.
                 # Map spec values to frontend-friendly values:
-                #   not_downloaded/failed → metadata_only (for display purposes)
-                #   tracked/downloaded → as-is
+                #   downloaded → downloaded
+                #   not_downloaded/failed/tracked → metadata_only
                 raw_status = metadata.get("download_status", "not_downloaded")
-                if raw_status in ("not_downloaded", "failed"):
-                    download_status = "metadata_only"
+                if raw_status == "downloaded":
+                    download_status = "downloaded"
                 else:
-                    download_status = raw_status  # tracked or downloaded
+                    download_status = "metadata_only"
 
                 video_entry = {
                     "video_id": video_id,
