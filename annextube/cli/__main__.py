@@ -1,6 +1,5 @@
 """CLI entry point for annextube."""
 
-import os
 import sys
 from pathlib import Path
 
