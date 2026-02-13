@@ -704,6 +704,42 @@ class YouTubeService:
                 logger.error(f"Failed to fetch playlist metadata: {e}")
                 return None
 
+    def get_videos_metadata(self, video_ids: list[str]) -> list[dict[str, Any]]:
+        """Fetch full metadata for specific video IDs.
+
+        Used to get metadata for playlist-exclusive videos that weren't
+        discovered via channel video listing.
+
+        Args:
+            video_ids: List of YouTube video IDs to fetch metadata for
+
+        Returns:
+            List of video metadata dictionaries (skips failed fetches)
+        """
+        if not video_ids:
+            return []
+
+        logger.info(f"Fetching metadata for {len(video_ids)} individual video(s)")
+
+        ydl_opts = self._get_ydl_opts(download=False)
+        ydl_opts["ignoreerrors"] = True
+
+        videos = []
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            for idx, video_id in enumerate(video_ids, 1):
+                url = f"https://www.youtube.com/watch?v={video_id}"
+                try:
+                    if idx % 10 == 0 or idx == 1 or idx == len(video_ids):
+                        logger.info(f"Fetching metadata [{idx}/{len(video_ids)}]: {video_id}")
+                    info = ydl.extract_info(url, download=False)
+                    if info:
+                        videos.append(info)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+
+        logger.info(f"Successfully fetched metadata for {len(videos)}/{len(video_ids)} video(s)")
+        return videos
+
     def get_channel_playlists(self, channel_url: str) -> list[dict[str, Any]]:
         """Get all playlists from a channel.
 
