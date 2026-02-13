@@ -128,7 +128,7 @@
           aria-pressed={wideMode}
           title={wideMode ? 'Exit wide mode (t)' : 'Use full browser width (t)'}
         >
-          {wideMode ? 'Normal width' : 'Wide mode'}
+          {wideMode ? '\u2713 Wide' : 'Wide'}
         </button>
         <a
           href={fullMetadata.source_url}
@@ -306,6 +306,11 @@
     max-width: none;
     padding-left: 32px;
     padding-right: 32px;
+  }
+
+  /* Break out of App.svelte's .container max-width */
+  :global(.container:has(.video-detail.wide-mode)) {
+    max-width: none;
   }
 
   .youtube-link {
