@@ -273,43 +273,56 @@
     </button>
   </div>
 
-  <div class="caption-search">
-    <input
-      type="text"
-      class="search-input"
-      placeholder="Search transcript..."
-      bind:value={searchQuery}
-      on:keydown={handleSearchKeydown}
-    />
-    <div class="search-options">
+  <div class="search-bar">
+    <div class="search-row">
+      <input
+        type="text"
+        class="search-input"
+        placeholder="Search (Enter/Shift+Enter to navigate)"
+        bind:value={searchQuery}
+        on:keydown={handleSearchKeydown}
+      />
       <button
         class="option-btn"
         class:active={caseSensitive}
         on:click={() => caseSensitive = !caseSensitive}
         title="Case sensitive"
+        aria-pressed={caseSensitive}
       >C</button>
       <button
         class="option-btn"
         class:active={useRegex}
         on:click={() => useRegex = !useRegex}
         title="Regular expression"
+        aria-pressed={useRegex}
       >.*</button>
-      <button
-        class="option-btn"
-        class:active={filterMode}
-        on:click={() => filterMode = !filterMode}
-        title="Filter mode: hide non-matching cues"
-      >F</button>
     </div>
     {#if searchQuery}
-      <div class="search-nav">
-        {#if matchCount > 0}
-          <span class="match-count">{currentMatchPos + 1}/{matchCount}</span>
-          <button class="nav-btn" on:click={() => navigateMatch(-1)} title="Previous match (Shift+Enter)">&#9650;</button>
-          <button class="nav-btn" on:click={() => navigateMatch(1)} title="Next match (Enter)">&#9660;</button>
-        {:else}
-          <span class="match-count">0 matches</span>
-        {/if}
+      <div class="nav-row">
+        <button
+          class="option-btn"
+          class:active={filterMode}
+          on:click={() => filterMode = !filterMode}
+          title="Filter: hide non-matching cues"
+          aria-pressed={filterMode}
+        >Filter</button>
+        <div class="nav-group">
+          <span class="match-count" role="status" aria-live="polite">{matchCount > 0 ? `${currentMatchPos + 1}/${matchCount}` : '0/0'}</span>
+          <button
+            class="nav-btn"
+            on:click={() => navigateMatch(-1)}
+            title="Previous match (Shift+Enter)"
+            aria-label="Previous match"
+            disabled={matchCount === 0}
+          >&lsaquo; Prev</button>
+          <button
+            class="nav-btn"
+            on:click={() => navigateMatch(1)}
+            title="Next match (Enter)"
+            aria-label="Next match"
+            disabled={matchCount === 0}
+          >Next &rsaquo;</button>
+        </div>
       </div>
     {/if}
   </div>
@@ -426,17 +439,24 @@
     color: #030303;
   }
 
-  .caption-search {
+  .search-bar {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 4px;
     padding: 8px 12px;
     border-bottom: 1px solid #e0e0e0;
     flex-shrink: 0;
   }
 
+  .search-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
   .search-input {
     flex: 1;
+    min-width: 0;
     padding: 6px 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
@@ -449,13 +469,8 @@
     border-color: #1a73e8;
   }
 
-  .search-options {
-    display: flex;
-    gap: 2px;
-    flex-shrink: 0;
-  }
-
   .option-btn {
+    flex: none;
     background: #f0f0f0;
     border: 1px solid #ccc;
     border-radius: 3px;
@@ -479,32 +494,46 @@
     color: white;
   }
 
-  .search-nav {
+  .nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .nav-group {
     display: flex;
     align-items: center;
     gap: 4px;
-    flex-shrink: 0;
+    margin-left: auto;
   }
 
   .match-count {
     font-size: 12px;
     color: #606060;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   .nav-btn {
-    background: none;
+    background: #f0f0f0;
     border: 1px solid #ccc;
     border-radius: 3px;
-    padding: 2px 6px;
-    font-size: 10px;
+    padding: 4px 8px;
+    font-size: 12px;
     cursor: pointer;
     color: #606060;
     line-height: 1;
+    transition: all 0.15s;
   }
 
-  .nav-btn:hover {
-    background: #e8e8e8;
+  .nav-btn:hover:not(:disabled) {
+    background: #e0e0e0;
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.4;
+    cursor: default;
   }
 
   .cue-list {
