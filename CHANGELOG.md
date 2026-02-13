@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Search nav button clipping**: Redesigned as two-row layout — search options on row 1, navigation (Filter + Prev/Next) on conditional row 2
 - **Filter→unfilter scroll position**: Scroll to current match when exiting filter mode instead of jumping to top
 - **Caption file path**: Fixed `getCaptionPath` in DataLoader to use `video.{lang}.vtt` naming (was `caption_{lang}.vtt`)
+- **Missing captions in transcript browser**: Reconcile `captions_available` in metadata.json with actual VTT files on disk during export. Fixes videos where captions were downloaded but metadata wasn't re-saved
 - **YouTube customUrl field**: Strip leading `@` from API response
 
 ### Changed
