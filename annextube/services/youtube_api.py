@@ -617,7 +617,7 @@ class YouTubeAPIMetadataClient:
                 "channel_id": item["id"],
                 "channel_name": snippet.get("title", ""),
                 "description": snippet.get("description", ""),
-                "custom_url": snippet.get("customUrl", ""),
+                "custom_url": snippet.get("customUrl", "").lstrip("@"),
                 "avatar_url": avatar_url,
                 "banner_url": banner_url,
                 "country": snippet.get("country", ""),
