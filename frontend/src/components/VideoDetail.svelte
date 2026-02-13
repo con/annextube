@@ -4,17 +4,44 @@
   import { dataLoader } from '@/services/data-loader';
   import { formatViews, formatRelativeTime } from '@/utils/format';
   import VideoPlayer from './VideoPlayer.svelte';
+  import CaptionBrowser from './CaptionBrowser.svelte';
   import CommentView from './CommentView.svelte';
 
   export let video: Video;
   export let onBack: () => void;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
+  let playerRef: VideoPlayer;
+  let currentTime: number = 0;
+  let captionVisible = true;
+
   let fullMetadata: Video = video;
   let comments: Comment[] = [];
   let loadingMetadata = false;
   let loadingComments = false;
   let showDescription = false;
+
+  // Wide mode (persisted in localStorage)
+  const WIDE_MODE_KEY = 'annextube-wide-mode';
+  let wideMode = getWideMode();
+
+  function getWideMode(): boolean {
+    try { return localStorage.getItem(WIDE_MODE_KEY) === 'true'; }
+    catch { return false; }
+  }
+
+  function toggleWideMode() {
+    wideMode = !wideMode;
+    try { localStorage.setItem(WIDE_MODE_KEY, String(wideMode)); }
+    catch { /* file:// protocol may not support localStorage */ }
+  }
+
+  function handleKeydown(event: KeyboardEvent) {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+    if (event.key === 't') toggleWideMode();
+  }
+
+  $: hasCaptions = fullMetadata.captions_available && fullMetadata.captions_available.length > 0;
 
   onMount(async () => {
     // Load full metadata (with tags, description, etc.)
@@ -52,13 +79,33 @@
   }
 </script>
 
-<div class="video-detail">
+<svelte:window on:keydown={handleKeydown} />
+
+<div class="video-detail" class:wide-mode={wideMode}>
   <button class="back-button" on:click={onBack}>
     ← Back to list
   </button>
 
-  <div class="player-container">
-    <VideoPlayer video={fullMetadata} {channelDir} />
+  <div class="video-with-captions" class:no-captions={!hasCaptions || !captionVisible}>
+    <div class="player-container">
+      <VideoPlayer
+        bind:this={playerRef}
+        bind:currentTime
+        video={fullMetadata}
+        {channelDir}
+        showTranscriptTab={hasCaptions && !captionVisible}
+        onTranscriptOpen={() => captionVisible = true}
+      />
+    </div>
+    {#if hasCaptions && captionVisible}
+      <CaptionBrowser
+        video={fullMetadata}
+        {channelDir}
+        {currentTime}
+        onSeek={(time) => playerRef?.seekTo(time)}
+        onHide={() => captionVisible = false}
+      />
+    {/if}
   </div>
 
   <div class="video-info">
@@ -73,6 +120,14 @@
         <span class="date">{formatRelativeTime(fullMetadata.published_at)}</span>
       </div>
       <div class="metadata-right">
+        <button
+          class="wide-mode-toggle"
+          on:click={toggleWideMode}
+          aria-pressed={wideMode}
+          title={wideMode ? 'Exit wide mode (t)' : 'Use full browser width (t)'}
+        >
+          {wideMode ? 'Normal width' : 'Wide mode'}
+        </button>
         <a
           href={fullMetadata.source_url}
           target="_blank"
@@ -127,7 +182,7 @@
 
 <style>
   .video-detail {
-    max-width: 1280px;
+    max-width: 1680px;
     margin: 0 auto;
     padding: 24px 0;
   }
@@ -147,8 +202,24 @@
     background: #e0e0e0;
   }
 
-  .player-container {
+  .video-with-captions {
+    display: grid;
+    grid-template-columns: 1fr 350px;
+    gap: 16px;
     margin-bottom: 16px;
+  }
+
+  .video-with-captions.no-captions {
+    grid-template-columns: 1fr;
+  }
+
+  .player-container {
+    min-width: 0;
+  }
+
+  .video-with-captions > :global(.caption-browser) {
+    min-height: 0;
+    overflow: hidden;
   }
 
   .video-info {
@@ -209,6 +280,29 @@
   .channel-name {
     font-weight: 500;
     color: #030303;
+  }
+
+  .wide-mode-toggle {
+    color: #065fd4;
+    font-size: 14px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border: 1px solid #065fd4;
+    border-radius: 4px;
+    background: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .wide-mode-toggle:hover {
+    background: #065fd4;
+    color: white;
+  }
+
+  .video-detail.wide-mode {
+    max-width: none;
+    padding-left: 32px;
+    padding-right: 32px;
   }
 
   .youtube-link {
@@ -279,6 +373,16 @@
   .description-text p {
     margin: 8px 0 0 0;
     white-space: pre-wrap;
+  }
+
+  @media (max-width: 1023px) {
+    .video-with-captions {
+      grid-template-columns: 1fr;
+    }
+
+    .video-with-captions > :global(.caption-browser) {
+      max-height: 350px;
+    }
   }
 
   @media (max-width: 768px) {
