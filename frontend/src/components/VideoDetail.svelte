@@ -14,6 +14,7 @@
   let playerRef: VideoPlayer;
   let currentTime: number = 0;
   let captionVisible = true;
+  let playerHeight: number = 0;
 
   let fullMetadata: Video = video;
   let comments: Comment[] = [];
@@ -86,8 +87,9 @@
     ← Back to list
   </button>
 
-  <div class="video-with-captions" class:no-captions={!hasCaptions || !captionVisible}>
-    <div class="player-container">
+  <div class="video-with-captions" class:no-captions={!hasCaptions || !captionVisible}
+       style="--player-height: {playerHeight}px">
+    <div class="player-container" bind:clientHeight={playerHeight}>
       <VideoPlayer
         bind:this={playerRef}
         bind:currentTime
@@ -218,6 +220,7 @@
   }
 
   .video-with-captions > :global(.caption-browser) {
+    max-height: var(--player-height, 500px);
     min-height: 0;
     overflow: hidden;
   }
