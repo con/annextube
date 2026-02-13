@@ -87,7 +87,7 @@ def prepare_ghpages(
             build_frontend_for_ghpages(repo_path, repo_name)
             click.echo("✓ Frontend build completed")
         except Exception as e:
-            raise click.ClickException(f"Frontend build failed: {e}")
+            raise click.ClickException(f"Frontend build failed: {e}") from e
 
     # 3. Create/update gh-pages branch
     click.echo(f"\nPreparing {gh_branch} branch...")
@@ -95,7 +95,7 @@ def prepare_ghpages(
         create_ghpages_branch(repo_path, gh_branch)
         click.echo(f"✓ {gh_branch} branch ready")
     except Exception as e:
-        raise click.ClickException(f"Failed to create {gh_branch} branch: {e}")
+        raise click.ClickException(f"Failed to create {gh_branch} branch: {e}") from e
 
     # 4. Copy frontend build to gh-pages branch
     click.echo(f"\nCopying frontend to {gh_branch} branch...")
@@ -103,7 +103,7 @@ def prepare_ghpages(
         copy_frontend_to_ghpages(repo_path, gh_branch, build_frontend)
         click.echo("✓ Frontend copied")
     except Exception as e:
-        raise click.ClickException(f"Failed to copy frontend: {e}")
+        raise click.ClickException(f"Failed to copy frontend: {e}") from e
 
     # 5. Copy data files if requested
     if copy_data:
@@ -112,15 +112,15 @@ def prepare_ghpages(
             copy_data_to_ghpages(repo_path, gh_branch)
             click.echo("✓ Data files copied")
         except Exception as e:
-            raise click.ClickException(f"Failed to copy data files: {e}")
+            raise click.ClickException(f"Failed to copy data files: {e}") from e
 
     # 6. Setup GitHub Pages config files
-    click.echo(f"\nSetting up GitHub Pages configuration...")
+    click.echo("\nSetting up GitHub Pages configuration...")
     try:
         setup_ghpages_config(repo_path, gh_branch)
         click.echo("✓ .nojekyll and 404.html created")
     except Exception as e:
-        raise click.ClickException(f"Failed to setup config files: {e}")
+        raise click.ClickException(f"Failed to setup config files: {e}") from e
 
     # 7. Commit changes
     click.echo(f"\nCommitting changes to {gh_branch}...")
@@ -128,7 +128,7 @@ def prepare_ghpages(
         commit_ghpages(repo_path, gh_branch)
         click.echo("✓ Changes committed")
     except Exception as e:
-        raise click.ClickException(f"Failed to commit changes: {e}")
+        raise click.ClickException(f"Failed to commit changes: {e}") from e
 
     # 8. Return to original branch
     try:
@@ -359,8 +359,8 @@ def copy_frontend_to_ghpages(
 
     if not dist_dir:
         raise FileNotFoundError(
-            f"Frontend dist directory not found.\n"
-            f"Run with --build-frontend to build first."
+            "Frontend dist directory not found.\n"
+            "Run with --build-frontend to build first."
         )
 
     # Copy all files from dist/ to repository root
@@ -421,7 +421,7 @@ def copy_data_to_ghpages(repo_path: Path, branch_name: str) -> None:
                 continue
 
     logger.info(f"Data files copied to {branch_name} (including any git-annex symlinks)")
-    logger.info(f"Run 'git annex get' to fetch annexed content, or remove symlinks if content is unavailable")
+    logger.info("Run 'git annex get' to fetch annexed content, or remove symlinks if content is unavailable")
 
 
 def setup_ghpages_config(repo_path: Path, branch_name: str) -> None:
@@ -521,14 +521,14 @@ def print_deployment_instructions(repo_name: str, branch_name: str):
     click.echo("✓ GitHub Pages branch prepared successfully!")
     click.echo("=" * 70)
     click.echo(f"\nBranch: {branch_name}")
-    click.echo(f"\nNext steps:")
+    click.echo("\nNext steps:")
     click.echo(f"  1. Push the {branch_name} branch to GitHub:")
     click.echo(f"       git push origin {branch_name}")
-    click.echo(f"\n  2. Enable GitHub Pages in repository settings:")
+    click.echo("\n  2. Enable GitHub Pages in repository settings:")
     click.echo(f"       https://github.com/con/{repo_name}/settings/pages")
-    click.echo(f"       - Source: Deploy from a branch")
+    click.echo("       - Source: Deploy from a branch")
     click.echo(f"       - Branch: {branch_name}")
-    click.echo(f"       - Folder: / (root)")
-    click.echo(f"\n  3. Your site will be available at (after ~1 minute):")
+    click.echo("       - Folder: / (root)")
+    click.echo("\n  3. Your site will be available at (after ~1 minute):")
     click.echo(f"       https://con.github.io/{repo_name}/")
     click.echo("\n" + "=" * 70 + "\n")
