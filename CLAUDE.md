@@ -143,6 +143,15 @@ This channel is maintained specifically for annextube testing and has:
 - Captions (for caption testing)
 - Predictable content (stable test fixtures)
 
+## Git Hygiene Before New Work
+
+**MANDATORY**: Before starting a new feature or task, check `git status` first. If there are uncommitted changes:
+- Ask the user whether to commit them before proceeding
+- Do NOT pile up unrelated changes across multiple features without committing
+- Keep commits modular — one logical change per commit
+
+This prevents large, hard-to-review diffs and ensures each change is properly attributed.
+
 ## Documentation and Working Notes
 
 **DO NOT commit working notes/documentation to the main tree:**
