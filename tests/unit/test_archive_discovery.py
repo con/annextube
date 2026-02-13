@@ -1,6 +1,5 @@
 """Unit tests for archive discovery utilities."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -16,34 +15,27 @@ from annextube.lib.archive_discovery import (
 
 
 @pytest.fixture
-def temp_dir():
-    """Create a temporary directory for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
-
-
-@pytest.fixture
-def single_channel_archive():
+def single_channel_archive(tmp_path):
     """Create a minimal single-channel archive structure."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        temp_path = Path(tmpdir)
-        # Create .git/annex directory structure
-        git_dir = temp_path / ".git"
-        git_dir.mkdir()
-        annex_dir = git_dir / "annex"
-        annex_dir.mkdir()
-        yield temp_path
+    temp_path = tmp_path / "single_channel"
+    temp_path.mkdir()
+    # Create .git/annex directory structure
+    git_dir = temp_path / ".git"
+    git_dir.mkdir()
+    annex_dir = git_dir / "annex"
+    annex_dir.mkdir()
+    return temp_path
 
 
 @pytest.fixture
-def multi_channel_collection():
+def multi_channel_collection(tmp_path):
     """Create a minimal multi-channel collection structure."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        temp_path = Path(tmpdir)
-        # Create channels.tsv
-        channels_tsv = temp_path / "channels.tsv"
-        channels_tsv.write_text("channel_id\ttitle\n")
-        yield temp_path
+    temp_path = tmp_path / "multi_channel"
+    temp_path.mkdir()
+    # Create channels.tsv
+    channels_tsv = temp_path / "channels.tsv"
+    channels_tsv.write_text("channel_id\ttitle\n")
+    return temp_path
 
 
 class TestDiscoverAnnextube:
@@ -95,40 +87,40 @@ class TestDiscoverAnnextube:
         assert info.type == "multi-channel"
         assert info.web_exists is True
 
-    def test_discover_not_archive(self, temp_dir):
+    def test_discover_not_archive(self, tmp_path):
         """Test discovering non-archive directory."""
         # Empty directory
-        info = discover_annextube(temp_dir)
+        info = discover_annextube(tmp_path)
         assert info is None
 
-    def test_discover_nonexistent_path(self, temp_dir):
+    def test_discover_nonexistent_path(self, tmp_path):
         """Test discovering nonexistent path."""
-        nonexistent = temp_dir / "does-not-exist"
+        nonexistent = tmp_path / "does-not-exist"
         info = discover_annextube(nonexistent)
         assert info is None
 
-    def test_discover_file_not_directory(self, temp_dir):
+    def test_discover_file_not_directory(self, tmp_path):
         """Test discovering a file instead of directory."""
-        file_path = temp_dir / "file.txt"
+        file_path = tmp_path / "file.txt"
         file_path.write_text("content")
         info = discover_annextube(file_path)
         assert info is None
 
-    def test_multi_channel_takes_precedence(self, temp_dir):
+    def test_multi_channel_takes_precedence(self, tmp_path):
         """Test that multi-channel detection takes precedence over git-annex.
 
         If both channels.tsv and .git/annex exist (unlikely but possible),
         should be detected as multi-channel.
         """
         # Create both structures
-        git_dir = temp_dir / ".git"
+        git_dir = tmp_path / ".git"
         git_dir.mkdir()
         (git_dir / "annex").mkdir()
 
-        channels_tsv = temp_dir / "channels.tsv"
+        channels_tsv = tmp_path / "channels.tsv"
         channels_tsv.write_text("channel_id\ttitle\n")
 
-        info = discover_annextube(temp_dir)
+        info = discover_annextube(tmp_path)
 
         assert info is not None
         assert info.type == "multi-channel"
@@ -145,9 +137,9 @@ class TestIsAnnextubeArchive:
         """Test multi-channel collection is detected."""
         assert is_annextube_archive(multi_channel_collection) is True
 
-    def test_empty_dir_not_archive(self, temp_dir):
+    def test_empty_dir_not_archive(self, tmp_path):
         """Test empty directory is not an archive."""
-        assert is_annextube_archive(temp_dir) is False
+        assert is_annextube_archive(tmp_path) is False
 
 
 class TestIsSingleChannelArchive:
@@ -161,9 +153,9 @@ class TestIsSingleChannelArchive:
         """Test multi-channel collection is not single-channel."""
         assert is_single_channel_archive(multi_channel_collection) is False
 
-    def test_empty_dir_not_single(self, temp_dir):
+    def test_empty_dir_not_single(self, tmp_path):
         """Test empty directory is not single-channel."""
-        assert is_single_channel_archive(temp_dir) is False
+        assert is_single_channel_archive(tmp_path) is False
 
 
 class TestIsMultiChannelCollection:
@@ -177,9 +169,9 @@ class TestIsMultiChannelCollection:
         """Test single-channel archive is not multi-channel."""
         assert is_multi_channel_collection(single_channel_archive) is False
 
-    def test_empty_dir_not_multi(self, temp_dir):
+    def test_empty_dir_not_multi(self, tmp_path):
         """Test empty directory is not multi-channel."""
-        assert is_multi_channel_collection(temp_dir) is False
+        assert is_multi_channel_collection(tmp_path) is False
 
 
 class TestRequireAnnextubeArchive:
@@ -204,10 +196,10 @@ class TestRequireAnnextubeArchive:
         with pytest.raises(ValueError, match="multi-channel collection.*single-channel archive"):
             require_annextube_archive(multi_channel_collection, allow_multi_channel=False)
 
-    def test_require_fails_for_non_archive(self, temp_dir):
+    def test_require_fails_for_non_archive(self, tmp_path):
         """Test requiring archive fails for non-archive directory."""
         with pytest.raises(ValueError, match="not an annextube archive"):
-            require_annextube_archive(temp_dir)
+            require_annextube_archive(tmp_path)
 
     def test_require_both_types_allowed_by_default(self, single_channel_archive, multi_channel_collection):
         """Test that allow_multi_channel defaults to False."""

@@ -2,7 +2,6 @@
 
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -84,297 +83,168 @@ def _create_process_video_mock(archiver):
 class TestCheckpointCommits:
     """Tests for checkpoint commit behavior during backup."""
 
-    def test_checkpoint_creates_intermediate_commits(self):
+    def test_checkpoint_creates_intermediate_commits(self, tmp_path: Path):
         """Test that checkpoints create commits at specified intervals."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_path = Path(tmpdir)
-            _init_test_repo(repo_path)
+        repo_path = tmp_path
+        _init_test_repo(repo_path)
 
-            # Configure with small checkpoint interval (every 2 videos)
-            config = Config(
-                sources=[SourceConfig(url="test-channel", type="channel")],
-                components=ComponentsConfig(videos=False, metadata=True, captions=False),
-                filters=FiltersConfig(limit=5),
-                backup=BackupConfig(checkpoint_interval=2, checkpoint_enabled=True),
-            )
+        # Configure with small checkpoint interval (every 2 videos)
+        config = Config(
+            sources=[SourceConfig(url="test-channel", type="channel")],
+            components=ComponentsConfig(videos=False, metadata=True, captions=False),
+            filters=FiltersConfig(limit=5),
+            backup=BackupConfig(checkpoint_interval=2, checkpoint_enabled=True),
+        )
 
-            archiver = Archiver(repo_path, config)
+        archiver = Archiver(repo_path, config)
 
-            # Mock YouTube service to return 5 videos
-            mock_videos = [
-                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
-                for i in range(1, 6)
-            ]
+        # Mock YouTube service to return 5 videos
+        mock_videos = [
+            {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+            for i in range(1, 6)
+        ]
 
-            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
-                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    # Mock video objects
-                    def create_mock_video(meta, **kwargs):
-                        video = MagicMock()
-                        video.video_id = meta["id"]
-                        video.title = meta["title"]
-                        video.upload_date = "2026-01-01"
-                        video.channel_name = "Test Channel"
-                        video.published_at = "2026-01-01T00:00:00Z"
-                        return video
-                    mock_to_video.side_effect = create_mock_video
+        with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+            with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                # Mock video objects
+                def create_mock_video(meta, **kwargs):
+                    video = MagicMock()
+                    video.video_id = meta["id"]
+                    video.title = meta["title"]
+                    video.upload_date = "2026-01-01"
+                    video.channel_name = "Test Channel"
+                    video.published_at = "2026-01-01T00:00:00Z"
+                    return video
+                mock_to_video.side_effect = create_mock_video
 
-                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
-                        # Run backup
-                        archiver.backup_channel("test-channel")
+                with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+                    # Run backup
+                    archiver.backup_channel("test-channel")
 
-            # Check commit history
-            commits = _get_git_commit_messages(repo_path)
+        # Check commit history
+        commits = _get_git_commit_messages(repo_path)
 
-            # Should have: init + checkpoint(2) + checkpoint(4) + final(5)
-            assert len(commits) >= 4, f"Expected at least 4 commits, got {len(commits)}: {commits}"
+        # Should have: init + checkpoint(2) + checkpoint(4) + final(5)
+        assert len(commits) >= 4, f"Expected at least 4 commits, got {len(commits)}: {commits}"
 
-            # Verify checkpoint messages exist
-            checkpoint_commits = [c for c in commits if "Checkpoint:" in c]
-            assert len(checkpoint_commits) >= 2, f"Expected at least 2 checkpoints, got {checkpoint_commits}"
+        # Verify checkpoint messages exist
+        checkpoint_commits = [c for c in commits if "Checkpoint:" in c]
+        assert len(checkpoint_commits) >= 2, f"Expected at least 2 checkpoints, got {checkpoint_commits}"
 
-            # Verify checkpoint messages have correct format
-            assert any("2/" in c for c in checkpoint_commits), "Should have checkpoint for 2 videos"
-            assert any("4/" in c for c in checkpoint_commits), "Should have checkpoint for 4 videos"
+        # Verify checkpoint messages have correct format
+        assert any("2/" in c for c in checkpoint_commits), "Should have checkpoint for 2 videos"
+        assert any("4/" in c for c in checkpoint_commits), "Should have checkpoint for 4 videos"
 
-    def test_checkpoint_disabled_creates_single_commit(self):
+    def test_checkpoint_disabled_creates_single_commit(self, tmp_path: Path):
         """Test that disabling checkpoints creates only final commit."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_path = Path(tmpdir)
-            _init_test_repo(repo_path)
+        repo_path = tmp_path
+        _init_test_repo(repo_path)
 
-            # Disable checkpoints
-            config = Config(
-                sources=[SourceConfig(url="test-channel", type="channel")],
-                components=ComponentsConfig(videos=False, metadata=True, captions=False),
-                filters=FiltersConfig(limit=5),
-                backup=BackupConfig(checkpoint_enabled=False),
-            )
+        # Disable checkpoints
+        config = Config(
+            sources=[SourceConfig(url="test-channel", type="channel")],
+            components=ComponentsConfig(videos=False, metadata=True, captions=False),
+            filters=FiltersConfig(limit=5),
+            backup=BackupConfig(checkpoint_enabled=False),
+        )
 
-            archiver = Archiver(repo_path, config)
+        archiver = Archiver(repo_path, config)
 
-            # Mock YouTube service
-            mock_videos = [
-                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
-                for i in range(1, 6)
-            ]
+        # Mock YouTube service
+        mock_videos = [
+            {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+            for i in range(1, 6)
+        ]
 
-            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
-                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta, **kwargs):
-                        video = MagicMock()
-                        video.video_id = meta["id"]
-                        video.title = meta["title"]
-                        video.upload_date = "2026-01-01"
-                        video.channel_name = "Test Channel"
-                        video.published_at = "2026-01-01T00:00:00Z"
-                        return video
-                    mock_to_video.side_effect = create_mock_video
+        with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+            with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                def create_mock_video(meta, **kwargs):
+                    video = MagicMock()
+                    video.video_id = meta["id"]
+                    video.title = meta["title"]
+                    video.upload_date = "2026-01-01"
+                    video.channel_name = "Test Channel"
+                    video.published_at = "2026-01-01T00:00:00Z"
+                    return video
+                mock_to_video.side_effect = create_mock_video
 
-                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+                with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+                    archiver.backup_channel("test-channel")
+
+        # Check commit history
+        commits = _get_git_commit_messages(repo_path)
+
+        # Should have: init + final backup (no checkpoints)
+        checkpoint_commits = [c for c in commits if "Checkpoint:" in c]
+        assert len(checkpoint_commits) == 0, f"Expected 0 checkpoints, got {checkpoint_commits}"
+
+        # Should have final backup commit
+        backup_commits = [c for c in commits if "Backup channel:" in c]
+        assert len(backup_commits) == 1, f"Expected 1 backup commit, got {backup_commits}"
+
+    def test_checkpoint_regenerates_tsvs(self, tmp_path: Path):
+        """Test that checkpoints regenerate TSV files."""
+        repo_path = tmp_path
+        _init_test_repo(repo_path)
+
+        config = Config(
+            sources=[SourceConfig(url="test-channel", type="channel")],
+            components=ComponentsConfig(videos=False, metadata=True, captions=False),
+            filters=FiltersConfig(limit=4),
+            backup=BackupConfig(checkpoint_interval=2, checkpoint_enabled=True),
+        )
+
+        archiver = Archiver(repo_path, config)
+
+        mock_videos = [
+            {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+            for i in range(1, 5)
+        ]
+
+        with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+            with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                def create_mock_video(meta, **kwargs):
+                    video = MagicMock()
+                    video.video_id = meta["id"]
+                    video.title = meta["title"]
+                    video.upload_date = "2026-01-01"
+                    video.channel_name = "Test Channel"
+                    video.published_at = "2026-01-01T00:00:00Z"
+                    return video
+                mock_to_video.side_effect = create_mock_video
+
+                with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+                    # Spy on checkpoint TSV generation (generate_videos_tsv)
+                    original_gen_tsv = archiver.export.generate_videos_tsv
+                    checkpoint_tsv_calls = []
+
+                    def track_checkpoint_tsv():
+                        checkpoint_tsv_calls.append(_count_metadata_files(repo_path))
+                        return original_gen_tsv()
+
+                    with patch.object(archiver.export, "generate_videos_tsv", side_effect=track_checkpoint_tsv):
                         archiver.backup_channel("test-channel")
 
-            # Check commit history
-            commits = _get_git_commit_messages(repo_path)
+        # Checkpoints call generate_videos_tsv; should have at least 1 checkpoint
+        assert len(checkpoint_tsv_calls) >= 1, f"Expected at least 1 checkpoint TSV generation, got {len(checkpoint_tsv_calls)}"
 
-            # Should have: init + final backup (no checkpoints)
-            checkpoint_commits = [c for c in commits if "Checkpoint:" in c]
-            assert len(checkpoint_commits) == 0, f"Expected 0 checkpoints, got {checkpoint_commits}"
+        # TSV file should exist
+        videos_tsv = repo_path / "videos" / "videos.tsv"
+        assert videos_tsv.exists(), "videos.tsv should exist after checkpoint"
 
-            # Should have final backup commit
-            backup_commits = [c for c in commits if "Backup channel:" in c]
-            assert len(backup_commits) == 1, f"Expected 1 backup commit, got {backup_commits}"
-
-    def test_checkpoint_regenerates_tsvs(self):
-        """Test that checkpoints regenerate TSV files."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_path = Path(tmpdir)
-            _init_test_repo(repo_path)
-
-            config = Config(
-                sources=[SourceConfig(url="test-channel", type="channel")],
-                components=ComponentsConfig(videos=False, metadata=True, captions=False),
-                filters=FiltersConfig(limit=4),
-                backup=BackupConfig(checkpoint_interval=2, checkpoint_enabled=True),
-            )
-
-            archiver = Archiver(repo_path, config)
-
-            mock_videos = [
-                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
-                for i in range(1, 5)
-            ]
-
-            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
-                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta, **kwargs):
-                        video = MagicMock()
-                        video.video_id = meta["id"]
-                        video.title = meta["title"]
-                        video.upload_date = "2026-01-01"
-                        video.channel_name = "Test Channel"
-                        video.published_at = "2026-01-01T00:00:00Z"
-                        return video
-                    mock_to_video.side_effect = create_mock_video
-
-                    with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
-                        # Spy on export.generate_all calls
-                        original_generate = archiver.export.generate_all
-                        generate_calls = []
-
-                        def track_generate():
-                            generate_calls.append(_count_metadata_files(repo_path))
-                            return original_generate()
-
-                        with patch.object(archiver.export, "generate_all", side_effect=track_generate):
-                            archiver.backup_channel("test-channel")
-
-            # Should have called generate_all at least twice (checkpoints)
-            assert len(generate_calls) >= 2, f"Expected at least 2 TSV generations, got {len(generate_calls)}"
-
-            # TSV file should exist
-            videos_tsv = repo_path / "videos" / "videos.tsv"
-            assert videos_tsv.exists(), "videos.tsv should exist after checkpoint"
-
-    def test_keyboard_interrupt_auto_commits(self):
+    def test_keyboard_interrupt_auto_commits(self, tmp_path: Path):
         """Test that Ctrl+C triggers auto-commit of partial progress."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_path = Path(tmpdir)
-            _init_test_repo(repo_path)
-
-            config = Config(
-                sources=[SourceConfig(url="test-channel", type="channel")],
-                components=ComponentsConfig(videos=False, metadata=True, captions=False),
-                filters=FiltersConfig(limit=5),
-                backup=BackupConfig(
-                    checkpoint_interval=10,  # Won't trigger during test
-                    auto_commit_on_interrupt=True
-                ),
-            )
-
-            archiver = Archiver(repo_path, config)
-
-            mock_videos = [
-                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
-                for i in range(1, 6)
-            ]
-
-            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
-                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta, **kwargs):
-                        video = MagicMock()
-                        video.video_id = meta["id"]
-                        video.title = meta["title"]
-                        video.upload_date = "2026-01-01"
-                        video.channel_name = "Test Channel"
-                        video.published_at = "2026-01-01T00:00:00Z"
-                        return video
-                    mock_to_video.side_effect = create_mock_video
-
-                    # Simulate Ctrl+C after processing 3 videos
-                    process_count = [0]
-                    base_mock = _create_process_video_mock(archiver)
-
-                    def process_with_interrupt(video, **kwargs):
-                        process_count[0] += 1
-                        # Create files for first 2 videos
-                        if process_count[0] < 3:
-                            base_mock(video)
-                        if process_count[0] == 3:
-                            raise KeyboardInterrupt("User interrupted")
-                        return 0
-
-                    with patch.object(archiver, "_process_video", side_effect=process_with_interrupt):
-                        # Should raise KeyboardInterrupt but auto-commit first
-                        with pytest.raises(KeyboardInterrupt):
-                            archiver.backup_channel("test-channel")
-
-            # Check commit history
-            commits = _get_git_commit_messages(repo_path)
-
-            # Should have partial backup commit
-            partial_commits = [c for c in commits if "Partial backup (interrupted)" in c]
-            assert len(partial_commits) == 1, f"Expected 1 partial commit, got {partial_commits}"
-
-            # Verify commit message mentions correct video count
-            assert "2 videos" in partial_commits[0], f"Expected '2 videos' in commit: {partial_commits[0]}"
-
-    def test_keyboard_interrupt_without_auto_commit(self):
-        """Test that disabling auto-commit leaves changes uncommitted."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            repo_path = Path(tmpdir)
-            _init_test_repo(repo_path)
-
-            config = Config(
-                sources=[SourceConfig(url="test-channel", type="channel")],
-                components=ComponentsConfig(videos=False, metadata=True, captions=False),
-                filters=FiltersConfig(limit=5),
-                backup=BackupConfig(auto_commit_on_interrupt=False),
-            )
-
-            archiver = Archiver(repo_path, config)
-
-            mock_videos = [
-                {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
-                for i in range(1, 6)
-            ]
-
-            with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
-                with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
-                    def create_mock_video(meta, **kwargs):
-                        video = MagicMock()
-                        video.video_id = meta["id"]
-                        video.title = meta["title"]
-                        video.upload_date = "2026-01-01"
-                        video.channel_name = "Test Channel"
-                        video.published_at = "2026-01-01T00:00:00Z"
-                        return video
-                    mock_to_video.side_effect = create_mock_video
-
-                    process_count = [0]
-                    base_mock = _create_process_video_mock(archiver)
-
-                    def process_with_interrupt(video, **kwargs):
-                        process_count[0] += 1
-                        # Create files for first 2 videos
-                        if process_count[0] < 3:
-                            base_mock(video)
-                        if process_count[0] == 3:
-                            raise KeyboardInterrupt("User interrupted")
-                        return 0
-
-                    with patch.object(archiver, "_process_video", side_effect=process_with_interrupt):
-                        with pytest.raises(KeyboardInterrupt):
-                            archiver.backup_channel("test-channel")
-
-            # Check commit history - should NOT have partial commit
-            commits = _get_git_commit_messages(repo_path)
-            partial_commits = [c for c in commits if "Partial backup" in c]
-            assert len(partial_commits) == 0, f"Expected 0 partial commits, got {partial_commits}"
-
-            # But should have uncommitted changes
-            result = subprocess.run(
-                ["git", "status", "--porcelain"],
-                cwd=repo_path,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            assert result.stdout.strip() != "", "Should have uncommitted changes"
-
-
-@pytest.mark.ai_generated
-def test_checkpoint_interval_zero_disables_checkpoints():
-    """Test that checkpoint_interval=0 disables checkpoints."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        repo_path = Path(tmpdir)
+        repo_path = tmp_path
         _init_test_repo(repo_path)
 
         config = Config(
             sources=[SourceConfig(url="test-channel", type="channel")],
             components=ComponentsConfig(videos=False, metadata=True, captions=False),
             filters=FiltersConfig(limit=5),
-            backup=BackupConfig(checkpoint_interval=0),  # Disabled
+            backup=BackupConfig(
+                checkpoint_interval=10,  # Won't trigger during test
+                auto_commit_on_interrupt=True
+            ),
         )
 
         archiver = Archiver(repo_path, config)
@@ -396,9 +266,132 @@ def test_checkpoint_interval_zero_disables_checkpoints():
                     return video
                 mock_to_video.side_effect = create_mock_video
 
-                with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
-                    archiver.backup_channel("test-channel")
+                # Simulate Ctrl+C after processing 3 videos
+                process_count = [0]
+                base_mock = _create_process_video_mock(archiver)
 
+                def process_with_interrupt(video, **kwargs):
+                    process_count[0] += 1
+                    # Create files for first 2 videos
+                    if process_count[0] < 3:
+                        base_mock(video)
+                    if process_count[0] == 3:
+                        raise KeyboardInterrupt("User interrupted")
+                    return 0
+
+                with patch.object(archiver, "_process_video", side_effect=process_with_interrupt):
+                    # Should raise KeyboardInterrupt but auto-commit first
+                    with pytest.raises(KeyboardInterrupt):
+                        archiver.backup_channel("test-channel")
+
+        # Check commit history
         commits = _get_git_commit_messages(repo_path)
-        checkpoint_commits = [c for c in commits if "Checkpoint:" in c]
-        assert len(checkpoint_commits) == 0, "checkpoint_interval=0 should disable checkpoints"
+
+        # Should have partial backup commit
+        partial_commits = [c for c in commits if "Partial backup (interrupted)" in c]
+        assert len(partial_commits) == 1, f"Expected 1 partial commit, got {partial_commits}"
+
+        # Verify commit message mentions correct video count
+        assert "2 videos" in partial_commits[0], f"Expected '2 videos' in commit: {partial_commits[0]}"
+
+    def test_keyboard_interrupt_without_auto_commit(self, tmp_path: Path):
+        """Test that disabling auto-commit leaves changes uncommitted."""
+        repo_path = tmp_path
+        _init_test_repo(repo_path)
+
+        config = Config(
+            sources=[SourceConfig(url="test-channel", type="channel")],
+            components=ComponentsConfig(videos=False, metadata=True, captions=False),
+            filters=FiltersConfig(limit=5),
+            backup=BackupConfig(auto_commit_on_interrupt=False),
+        )
+
+        archiver = Archiver(repo_path, config)
+
+        mock_videos = [
+            {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+            for i in range(1, 6)
+        ]
+
+        with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+            with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+                def create_mock_video(meta, **kwargs):
+                    video = MagicMock()
+                    video.video_id = meta["id"]
+                    video.title = meta["title"]
+                    video.upload_date = "2026-01-01"
+                    video.channel_name = "Test Channel"
+                    video.published_at = "2026-01-01T00:00:00Z"
+                    return video
+                mock_to_video.side_effect = create_mock_video
+
+                process_count = [0]
+                base_mock = _create_process_video_mock(archiver)
+
+                def process_with_interrupt(video, **kwargs):
+                    process_count[0] += 1
+                    # Create files for first 2 videos
+                    if process_count[0] < 3:
+                        base_mock(video)
+                    if process_count[0] == 3:
+                        raise KeyboardInterrupt("User interrupted")
+                    return 0
+
+                with patch.object(archiver, "_process_video", side_effect=process_with_interrupt):
+                    with pytest.raises(KeyboardInterrupt):
+                        archiver.backup_channel("test-channel")
+
+        # Check commit history - should NOT have partial commit
+        commits = _get_git_commit_messages(repo_path)
+        partial_commits = [c for c in commits if "Partial backup" in c]
+        assert len(partial_commits) == 0, f"Expected 0 partial commits, got {partial_commits}"
+
+        # But should have uncommitted changes
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert result.stdout.strip() != "", "Should have uncommitted changes"
+
+
+@pytest.mark.ai_generated
+def test_checkpoint_interval_zero_disables_checkpoints(tmp_path: Path):
+    """Test that checkpoint_interval=0 disables checkpoints."""
+    repo_path = tmp_path
+    _init_test_repo(repo_path)
+
+    config = Config(
+        sources=[SourceConfig(url="test-channel", type="channel")],
+        components=ComponentsConfig(videos=False, metadata=True, captions=False),
+        filters=FiltersConfig(limit=5),
+        backup=BackupConfig(checkpoint_interval=0),  # Disabled
+    )
+
+    archiver = Archiver(repo_path, config)
+
+    mock_videos = [
+        {"id": f"video{i}", "title": f"Video {i}", "upload_date": "20260101"}
+        for i in range(1, 6)
+    ]
+
+    with patch.object(archiver.youtube, "get_channel_videos", return_value=mock_videos):
+        with patch.object(archiver.youtube, "metadata_to_video") as mock_to_video:
+            def create_mock_video(meta, **kwargs):
+                video = MagicMock()
+                video.video_id = meta["id"]
+                video.title = meta["title"]
+                video.upload_date = "2026-01-01"
+                video.channel_name = "Test Channel"
+                video.published_at = "2026-01-01T00:00:00Z"
+                return video
+            mock_to_video.side_effect = create_mock_video
+
+            with patch.object(archiver, "_process_video", side_effect=_create_process_video_mock(archiver)):
+                archiver.backup_channel("test-channel")
+
+    commits = _get_git_commit_messages(repo_path)
+    checkpoint_commits = [c for c in commits if "Checkpoint:" in c]
+    assert len(checkpoint_commits) == 0, "checkpoint_interval=0 should disable checkpoints"

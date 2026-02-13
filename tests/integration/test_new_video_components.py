@@ -1,7 +1,6 @@
 """Integration tests for new video component fetching logic."""
 
 import subprocess
-import tempfile
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -14,24 +13,23 @@ from annextube.services.archiver import Archiver
 
 
 @pytest.fixture
-def git_annex_test_repo():
+def git_annex_test_repo(tmp_path):
     """Create a temporary git-annex repository."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        repo_path = Path(tmpdir)
+    repo_path = tmp_path
 
-        # Initialize git and git-annex
-        subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True, capture_output=True)
-        subprocess.run(["git", "annex", "init", "test-repo"], cwd=repo_path, check=True, capture_output=True)
+    # Initialize git and git-annex
+    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True, capture_output=True)
+    subprocess.run(["git", "annex", "init", "test-repo"], cwd=repo_path, check=True, capture_output=True)
 
-        # Configure .gitattributes
-        gitattributes = repo_path / ".gitattributes"
-        gitattributes.write_text("*.json annex.largefiles=nothing\n*.tsv annex.largefiles=nothing\n")
-        subprocess.run(["git", "add", ".gitattributes"], cwd=repo_path, check=True)
-        subprocess.run(["git", "commit", "-m", "Add .gitattributes"], cwd=repo_path, check=True, capture_output=True)
+    # Configure .gitattributes
+    gitattributes = repo_path / ".gitattributes"
+    gitattributes.write_text("*.json annex.largefiles=nothing\n*.tsv annex.largefiles=nothing\n")
+    subprocess.run(["git", "add", ".gitattributes"], cwd=repo_path, check=True)
+    subprocess.run(["git", "commit", "-m", "Add .gitattributes"], cwd=repo_path, check=True, capture_output=True)
 
-        yield repo_path
+    return repo_path
 
 
 @pytest.fixture
