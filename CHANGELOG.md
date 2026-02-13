@@ -5,6 +5,39 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-02-13
+
+### Added
+
+- **Interactive caption/transcript browser**: Side-by-side panel next to video player with full transcript display, click-to-seek, and active cue highlighting synced to playback position
+- **Transcript search**: Search within captions with case-sensitive (C), regex (.*), and filter (F) modes. Filter mode hides non-matching cues; dim mode preserves timeline context. Enter/Shift+Enter keyboard navigation between matches with N/M position indicator
+- **WebVTT parser with auto-caption dedup**: Zero-dependency parser handles YouTube auto-caption rolling 3-cue pattern (display→snapshot→carry-over), merging overlapping cues and stripping carry-over lines. Reduces a 1-hour video from ~4000 raw cues to ~1400 clean cues
+- **Wide/theater mode**: Toggle (button or `t` key) to use full browser width for video+transcript layout, persisted in localStorage
+- **Language selector**: Switch between available caption languages in the transcript panel
+- **Auto-scroll with manual override**: Transcript auto-scrolls to active cue during playback, pauses on manual scroll, re-enables after 5s idle or cue click. "Resume auto-scroll" button when disabled
+- **GitHub Pages sharing**: `annextube unannex` command and `prepare-ghpages` workflow for sharing archives via GitHub Pages
+- **Frontend download button**: Download local video files directly from the player
+- **YouTube external links**: "View on YouTube" button with source URL
+
+### Fixed
+
+- **Per-playlist videos.tsv**: Use `os.walk` to follow directory symlinks when indexing playlist videos
+- **Playlist symlink indexing**: Fixed per-playlist videos.tsv generation
+- **DataLoader archive root discovery**: Probe ascending paths at runtime instead of assuming fixed `../` relative path, enabling deployment at any URL depth
+- **Click-to-seek scroll glitch**: Set activeCueIndex immediately on cue click to prevent afterUpdate scrolling to the old active cue while the async seek completes
+- **Search regex statefulness**: Removed `g` flag from shared searchRegex — `RegExp.test()` with `g` advances `lastIndex`, breaking match detection in loops across different strings
+- **Wide→normal height revert**: CSS Grid `align-items: start` breaks the circular dependency where `--player-height` was measured from the grid-row height inflated by the caption browser
+- **Search nav button clipping**: Redesigned as two-row layout — search options on row 1, navigation (Filter + Prev/Next) on conditional row 2
+- **Filter→unfilter scroll position**: Scroll to current match when exiting filter mode instead of jumping to top
+- **Caption file path**: Fixed `getCaptionPath` in DataLoader to use `video.{lang}.vtt` naming (was `caption_{lang}.vtt`)
+- **YouTube customUrl field**: Strip leading `@` from API response
+
+### Changed
+
+- **Simplified unannex**: Replaced 632-line implementation with thin git-annex wrapper
+- **Version injection**: Use `0.0.0-unknown` placeholder in frontend build, replaced at deploy time by `deploy_frontend()`
+- **Video+transcript layout**: CSS Grid with `align-items: start` and dynamic `--player-height` variable ensures transcript panel matches video height exactly
+
 ## [0.3.0] - 2026-02-11
 
 ### Added
@@ -125,6 +158,7 @@ Initial release with core YouTube archival functionality:
 - Comment fetching
 - Basic web UI for browsing archives
 
+[0.4.0]: https://github.com/con/annextube/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/con/annextube/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/con/annextube/compare/v0.2.0...v0.2.2
 [0.2.0]: https://github.com/con/annextube/compare/v0.1.0...v0.2.0
