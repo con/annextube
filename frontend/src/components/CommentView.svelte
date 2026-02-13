@@ -74,7 +74,7 @@
           <div class="comment-text">{comment.text}</div>
           <div class="comment-meta">
             {#if comment.like_count > 0}
-              <span class="likes">👍 {comment.like_count.toLocaleString()}</span>
+              <span class="likes" title="Like count from YouTube">👍 {comment.like_count.toLocaleString()}</span>
             {/if}
           </div>
 
@@ -93,7 +93,7 @@
                     <div class="comment-text">{reply.text}</div>
                     <div class="comment-meta">
                       {#if reply.like_count > 0}
-                        <span class="likes">👍 {reply.like_count.toLocaleString()}</span>
+                        <span class="likes" title="Like count from YouTube">👍 {reply.like_count.toLocaleString()}</span>
                       {/if}
                     </div>
                   </div>

@@ -196,7 +196,7 @@ def serve(
                         click.echo(f"Found {len(channels)} channel(s)")
 
                         # Regenerate TSV files for each channel
-                        for rel_channel_dir, channel_json_path in channels:
+                        for rel_channel_dir, _channel_json_path in channels:
                             channel_dir = output_dir / rel_channel_dir
                             click.echo(f"  Regenerating TSVs for {rel_channel_dir}...")
 

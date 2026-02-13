@@ -942,6 +942,71 @@ From spec.md FR-037 to FR-047:
 - Dark mode toggle
 - Playlist detail page
 
+### TODO: Interactive Caption Browser in Video Player
+
+**Priority**: Medium | **Complexity**: Medium | **Consult**: UX designer agent for optimal layout
+
+Add a caption/subtitle browsing panel alongside the video player that allows users to
+read, navigate, and search through closed captions interactively.
+
+**Requirements**:
+- **Language selector**: Choose from available caption languages (VTT files in video directory)
+- **Scrollable transcript panel**: Display all caption cues with timestamps, scrollable
+  independently of the page. Must not overwhelm the UI for long videos (2h+ lectures
+  may have thousands of cues)
+- **Click-to-seek**: Clicking a caption cue seeks the active player (local HTML5 or
+  YouTube iframe, whichever is currently active) to that cue's start time
+- **Auto-scroll**: As the video plays, the transcript auto-scrolls to highlight the
+  current cue. User scrolling temporarily disables auto-scroll (re-enables on play/seek)
+- **Search within captions**: Text input to filter/highlight matching cues within the
+  transcript. Matched cues should be visually distinct; clicking jumps to that point
+- **Responsive layout**: Panel should work as a sidebar on wide screens and collapse
+  to a toggleable drawer on narrow screens
+- **Performance**: Virtualized/windowed rendering for long transcripts (only render
+  visible cues). Consider grouping cues by minute/section for very long videos
+
+**VTT data source**: `videos/{path}/video.{lang}.vtt` — parse WebVTT cues into
+`{startTime, endTime, text}` entries. Reuse existing caption loading infrastructure.
+
+**Player integration**: The seek action must target whichever player tab is active:
+- Local `<video>` element: `video.currentTime = cue.startTime`
+- YouTube iframe: `player.seekTo(cue.startTime)` via YouTube IFrame API
+
+**Design notes** (to be refined with UX designer agent):
+- Consider a split layout: video on top/left, transcript on right/bottom
+- Caption cues should show timestamps in `MM:SS` or `HH:MM:SS` format
+- Active cue should be visually highlighted (background color, bold, etc.)
+- Search results count indicator ("3 of 47 matches")
+- Keyboard shortcut to toggle transcript panel visibility
+
+### TODO (Future): Caption Correction Submission Mechanism
+
+**Priority**: Low | **Complexity**: High | **Depends on**: Caption browser above
+
+Develop a mechanism for users to submit corrections to caption text, enabling
+community-driven improvement of auto-generated or imperfect captions.
+
+**Concept**:
+- While browsing captions in the transcript panel, users can click an "edit" or
+  "suggest fix" action on individual cues
+- Corrections are submitted via a configurable backend:
+  - **GitHub/Forgejo integration**: Open an issue or PR on the archive repository
+    with the corrected VTT cue (include video ID, language, timestamp range, original
+    text, corrected text)
+  - **Email fallback**: Generate a mailto: link with pre-filled correction details
+- The archive maintainer reviews and merges corrections into the VTT files
+- Configuration in `.annextube/config.toml`:
+  ```toml
+  [web.caption_corrections]
+  enabled = true
+  backend = "github"  # or "forgejo", "email"
+  repo_url = "https://github.com/org/archive-repo"
+  # For forgejo:
+  # repo_url = "https://forgejo.example.org/org/archive-repo"
+  ```
+- Consider a simple diff format for corrections that can be applied with standard
+  tools (patch/sed) or a custom `annextube apply-corrections` command
+
 ---
 
 ## Development Workflow

@@ -33,7 +33,7 @@ class Channel:
     custom_url: str | None = None
     banner_url: str | None = None
     country: str | None = None
-    archive_stats: ArchiveStats = field(default_factory=dict)  # Stats from local archive
+    archive_stats: ArchiveStats = field(default_factory=ArchiveStats)  # Stats from local archive
 
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""

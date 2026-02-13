@@ -54,52 +54,55 @@ def compute_archive_stats(channel_dir: Path) -> dict:
     """
     videos_tsv = channel_dir / "videos" / "videos.tsv"
 
-    stats = {
-        "total_videos_archived": 0,
-        "first_video_date": None,
-        "last_video_date": None,
-        "total_duration_seconds": 0,
-        "total_size_bytes": 0,
-    }
+    total_videos = 0
+    first_video_date: str | None = None
+    last_video_date: str | None = None
+    total_duration = 0
+    total_size = 0
 
     if not videos_tsv.exists():
         logger.warning(f"videos/videos.tsv not found in {channel_dir}, archive_stats will be empty")
-        return stats
+    else:
+        try:
+            with open(videos_tsv, encoding='utf-8') as f:
+                reader = csv.DictReader(f, delimiter='\t')
+                rows = list(reader)
 
-    try:
-        with open(videos_tsv, encoding='utf-8') as f:
-            reader = csv.DictReader(f, delimiter='\t')
-            rows = list(reader)
+                total_videos = len(rows)
 
-            stats["total_videos_archived"] = len(rows)
+                if rows:
+                    # Get date range (published_at is YYYY-MM-DD format in TSV)
+                    dates: list[str] = [row['published_at'] for row in rows if row.get('published_at')]
+                    if dates:
+                        first_video_date = min(dates)
+                        last_video_date = max(dates)
 
-            if rows:
-                # Get date range (published_at is YYYY-MM-DD format in TSV)
-                dates = [row.get('published_at') for row in rows if row.get('published_at')]
-                if dates:
-                    stats["first_video_date"] = min(dates)
-                    stats["last_video_date"] = max(dates)
+                    # Sum duration (in seconds)
+                    for row in rows:
+                        duration_str = row.get('duration', '0')
+                        try:
+                            total_duration += int(duration_str)
+                        except (ValueError, TypeError):
+                            pass
 
-                # Sum duration (in seconds)
-                for row in rows:
-                    duration_str = row.get('duration', '0')
-                    try:
-                        stats["total_duration_seconds"] += int(duration_str)
-                    except (ValueError, TypeError):
-                        pass
+                    # Sum file size (in bytes)
+                    for row in rows:
+                        size_str = row.get('file_size', '0')
+                        try:
+                            total_size += int(size_str)
+                        except (ValueError, TypeError):
+                            pass
 
-                # Sum file size (in bytes)
-                for row in rows:
-                    size_str = row.get('file_size', '0')
-                    try:
-                        stats["total_size_bytes"] += int(size_str)
-                    except (ValueError, TypeError):
-                        pass
+        except Exception as e:
+            logger.warning(f"Error reading videos.tsv in {channel_dir}: {e}")
 
-    except Exception as e:
-        logger.warning(f"Error reading videos.tsv in {channel_dir}: {e}")
-
-    return stats
+    return {
+        "total_videos_archived": total_videos,
+        "first_video_date": first_video_date,
+        "last_video_date": last_video_date,
+        "total_duration_seconds": total_duration,
+        "total_size_bytes": total_size,
+    }
 
 
 @click.command()

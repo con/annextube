@@ -359,7 +359,7 @@ def test_download_channel_avatar(mock_archive):
             mock_magic.from_buffer.return_value = 'image/png'
             mock_magic_class.return_value = mock_magic
 
-            with patch.object(service, '_download_channel_avatar', wraps=service._download_channel_avatar) as mock_download:
+            with patch.object(service, '_download_channel_avatar', wraps=service._download_channel_avatar):
                 # Download avatar
                 avatar_path = service._download_channel_avatar("https://example.com/avatar.png")
 
