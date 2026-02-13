@@ -223,6 +223,11 @@
     grid-template-columns: 1fr 350px;
     gap: 16px;
     margin-bottom: 16px;
+    /* align-items: start prevents grid items from stretching to fill the row.
+       Without it, the caption browser pushes the row taller, the player-container
+       stretches to match, and bind:clientHeight reports the inflated height —
+       creating a circular dependency that breaks wide→normal height revert. */
+    align-items: start;
   }
 
   .video-with-captions.no-captions {

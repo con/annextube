@@ -21,6 +21,7 @@
   let activeCueIndex = -1;
   let caseSensitive = false;
   let useRegex = false;
+  let filterMode = false; // true = hide non-matching cues; false = dim them
 
   // DOM refs
   let cueListEl: HTMLDivElement;
@@ -196,6 +197,13 @@
     scrollToMatch(currentMatchPos);
   }
 
+  function handleSearchKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      navigateMatch(event.shiftKey ? -1 : 1);
+    }
+  }
+
   function formatCueTime(seconds: number): string {
     return formatDuration(Math.floor(seconds));
   }
@@ -271,6 +279,7 @@
       class="search-input"
       placeholder="Search transcript..."
       bind:value={searchQuery}
+      on:keydown={handleSearchKeydown}
     />
     <div class="search-options">
       <button
@@ -285,13 +294,21 @@
         on:click={() => useRegex = !useRegex}
         title="Regular expression"
       >.*</button>
+      <button
+        class="option-btn"
+        class:active={filterMode}
+        on:click={() => filterMode = !filterMode}
+        title="Filter mode: hide non-matching cues"
+      >F</button>
     </div>
     {#if searchQuery}
       <div class="search-nav">
-        <span class="match-count">{matchCount} match{matchCount !== 1 ? 'es' : ''}</span>
-        {#if matchCount > 1}
-          <button class="nav-btn" on:click={() => navigateMatch(-1)} title="Previous match">&#9650;</button>
-          <button class="nav-btn" on:click={() => navigateMatch(1)} title="Next match">&#9660;</button>
+        {#if matchCount > 0}
+          <span class="match-count">{currentMatchPos + 1}/{matchCount}</span>
+          <button class="nav-btn" on:click={() => navigateMatch(-1)} title="Previous match (Shift+Enter)">&#9650;</button>
+          <button class="nav-btn" on:click={() => navigateMatch(1)} title="Next match (Enter)">&#9660;</button>
+        {:else}
+          <span class="match-count">0 matches</span>
         {/if}
       </div>
     {/if}
@@ -313,23 +330,25 @@
         {@const isActive = cue.index === activeCueIndex}
         {@const isMatch = searchRegex ? searchRegex.test(cue.text) : false}
         {@const isDimmed = searchQuery && !isMatch}
-        <button
-          class="cue"
-          class:active={isActive}
-          class:search-match={isMatch}
-          class:dimmed={isDimmed}
-          data-cue-index={cue.index}
-          on:click={() => handleCueClick(cue)}
-        >
-          <span class="cue-time">{formatCueTime(cue.startTime)}</span>
-          <span class="cue-text">
-            {#if searchQuery && isMatch}
-              {@html highlightText(cue.text, searchQuery)}
-            {:else}
-              {cue.text}
-            {/if}
-          </span>
-        </button>
+        {#if !(filterMode && isDimmed)}
+          <button
+            class="cue"
+            class:active={isActive}
+            class:search-match={isMatch}
+            class:dimmed={isDimmed}
+            data-cue-index={cue.index}
+            on:click={() => handleCueClick(cue)}
+          >
+            <span class="cue-time">{formatCueTime(cue.startTime)}</span>
+            <span class="cue-text">
+              {#if searchQuery && isMatch}
+                {@html highlightText(cue.text, searchQuery)}
+              {:else}
+                {cue.text}
+              {/if}
+            </span>
+          </button>
+        {/if}
       {/each}
     {/if}
   </div>
