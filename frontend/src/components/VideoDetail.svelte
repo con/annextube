@@ -7,6 +7,11 @@
   import CaptionBrowser from './CaptionBrowser.svelte';
   import CommentView from './CommentView.svelte';
 
+  // TODO: URL permalink — persist video player state in the URL hash so that
+  // links can restore: which player tab is active (archive vs youtube),
+  // wide mode on/off, transcript panel shown/hidden, and playback position
+  // (e.g. #video=ID&tab=local&wide=1&transcript=1&t=90).
+
   export let video: Video;
   export let onBack: () => void;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode

@@ -67,12 +67,15 @@
   function buildSearchRegex(query: string, cs: boolean, re: boolean): RegExp | null {
     if (!query) return null;
     try {
-      const flags = cs ? 'g' : 'gi';
+      // No 'g' flag — .test() with 'g' is stateful (advances lastIndex),
+      // which breaks when called in a loop across different strings.
+      // highlightText() creates its own regex with 'g' for .replace().
+      const flags = cs ? '' : 'i';
       const pattern = re ? query : escapeRegex(query);
       return new RegExp(pattern, flags);
     } catch {
       // Invalid regex — treat as literal
-      return new RegExp(escapeRegex(query), cs ? 'g' : 'gi');
+      return new RegExp(escapeRegex(query), cs ? '' : 'i');
     }
   }
 
@@ -165,6 +168,9 @@
   });
 
   function handleCueClick(cue: VttCue) {
+    // Set activeCueIndex immediately so afterUpdate scrolls to the clicked
+    // cue, not the old active cue (seek is async — currentTime updates later)
+    activeCueIndex = cue.index;
     onSeek(cue.startTime);
     autoScroll = true;
   }
