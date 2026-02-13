@@ -1,6 +1,7 @@
 """Export service for generating TSV metadata files."""
 
 import json
+import os
 import urllib.request
 from pathlib import Path
 
@@ -57,9 +58,14 @@ class ExportService:
         # Collect video metadata
         # Find all video directories by looking for metadata.json files
         # This supports both flat and hierarchical directory structures
-        # Note: rglob follows symlinks, so this works for playlist dirs with symlinks too
+        # Use os.walk with followlinks=True because Path.rglob does NOT
+        # follow directory symlinks (playlist dirs contain symlinks to video dirs)
         videos = []
-        for metadata_path in sorted(base_dir.rglob("metadata.json")):
+        metadata_paths: list[Path] = []
+        for root, _dirs, files in os.walk(base_dir, followlinks=True):
+            if "metadata.json" in files:
+                metadata_paths.append(Path(root) / "metadata.json")
+        for metadata_path in sorted(metadata_paths):
             video_dir = metadata_path.parent
 
             try:
