@@ -70,7 +70,7 @@
     <h3 class="title">{video.title}</h3>
     <div class="channel">{video.channel_name}</div>
     <div class="metadata">
-      <span class="views">{formatViews(video.view_count)}</span>
+      <span class="views" title="View count from YouTube">{formatViews(video.view_count)}</span>
       {#if video.comment_count > 0}
         <span class="separator">•</span>
         <span class="comments">{formatCommentCount(video.comment_count)}</span>
