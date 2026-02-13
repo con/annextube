@@ -1,5 +1,6 @@
 """Unit tests for DataLad dataset initialization."""
 
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -7,14 +8,13 @@ from pathlib import Path
 
 import pytest
 
+_has_datalad = importlib.util.find_spec("datalad") is not None
+
 
 @pytest.mark.ai_generated
 def test_datalad_init_flag_creates_dataset():
     """Test that --datalad flag creates a DataLad dataset."""
-    # Check if DataLad is installed
-    try:
-        import datalad
-    except ImportError:
+    if not _has_datalad:
         pytest.skip("DataLad not installed (optional dependency)")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -23,7 +23,7 @@ def test_datalad_init_flag_creates_dataset():
         # Initialize with --datalad flag
         result = subprocess.run(
             [
-                "uv", "run", "annextube", "init",
+                sys.executable, "-m", "annextube", "init",
                 str(repo_path),
                 "--datalad",
                 "--no-videos",
@@ -61,11 +61,8 @@ def test_datalad_init_flag_creates_dataset():
 def test_datalad_init_without_datalad_installed_fails():
     """Test that --datalad flag fails gracefully when DataLad is not installed."""
     # This test can only run if DataLad is NOT installed
-    try:
-        import datalad
+    if _has_datalad:
         pytest.skip("DataLad is installed, cannot test failure case")
-    except ImportError:
-        pass
 
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_path = Path(tmpdir) / "datalad-archive"
@@ -91,9 +88,7 @@ def test_datalad_init_without_datalad_installed_fails():
 @pytest.mark.ai_generated
 def test_datalad_flag_with_source_url():
     """Test that --datalad flag works with source URLs."""
-    try:
-        import datalad
-    except ImportError:
+    if not _has_datalad:
         pytest.skip("DataLad not installed (optional dependency)")
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -102,7 +97,7 @@ def test_datalad_flag_with_source_url():
         # Initialize with --datalad flag and source URL
         result = subprocess.run(
             [
-                "uv", "run", "annextube", "init",
+                sys.executable, "-m", "annextube", "init",
                 str(repo_path),
                 "https://www.youtube.com/@AnnexTubeTesting",
                 "--datalad",

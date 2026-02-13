@@ -6,6 +6,17 @@
   export let error: string | null = null;
   export let onChannelClick: (channel: Channel) => void = () => {};
 
+  function channelHandle(custom_url: string): string {
+    return custom_url.replace(/^@+/, '');
+  }
+
+  function youtubeChannelUrl(channel: Channel): string {
+    if (channel.custom_url) {
+      return `https://www.youtube.com/@${channelHandle(channel.custom_url)}`;
+    }
+    return `https://www.youtube.com/channel/${channel.channel_id}`;
+  }
+
   function formatNumber(num: number): string {
     if (num >= 1000000) {
       return `${(num / 1000000).toFixed(1)}M`;
@@ -84,7 +95,7 @@
             <div class="channel-info">
               <h3 class="channel-name">{channel.name || channel.channel_id}</h3>
               {#if channel.custom_url}
-                <p class="channel-url">@{channel.custom_url}</p>
+                <p class="channel-url">@{channelHandle(channel.custom_url)}</p>
               {/if}
             </div>
           </div>
@@ -136,6 +147,16 @@
               {formatDate(channel.archive_stats.first_video_date)} — {formatDate(channel.archive_stats.last_video_date)}
             </div>
           {/if}
+
+          <div class="channel-youtube-link">
+            <a
+              href={youtubeChannelUrl(channel)}
+              target="_blank"
+              rel="noopener noreferrer"
+              on:click|stopPropagation
+              title="View on YouTube"
+            >View on YouTube &#8599;</a>
+          </div>
         </a>
       {/each}
     </div>
@@ -296,6 +317,21 @@
     font-size: 12px;
     color: #606060;
     text-align: center;
+  }
+
+  .channel-youtube-link {
+    margin-top: 8px;
+    text-align: right;
+    font-size: 12px;
+  }
+
+  .channel-youtube-link a {
+    color: #065fd4;
+    text-decoration: none;
+  }
+
+  .channel-youtube-link a:hover {
+    text-decoration: underline;
   }
 
   @media (max-width: 768px) {

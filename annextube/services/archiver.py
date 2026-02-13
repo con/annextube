@@ -717,10 +717,12 @@ class Archiver:
             if self.youtube.api_client:
                 # For all-incremental mode: batch-fetch statistics for existing videos
                 if self.update_mode == "all-incremental":
-                    existing_ids = [
-                        v.get("video_id") or v.get("id")
+                    existing_ids: list[str] = [
+                        vid
                         for v in videos_metadata
                         if v.get("video_id")  # stored metadata has video_id
+                        for vid in [v.get("video_id") or v.get("id")]
+                        if vid is not None
                     ]
                     if existing_ids:
                         logger.info(f"Batch-fetching statistics for {len(existing_ids)} existing video(s)")
@@ -731,8 +733,8 @@ class Archiver:
                             logger.warning(f"Failed to batch-fetch statistics: {e}")
 
                 # For new videos: batch-fetch enhanced API metadata
-                new_video_ids = [
-                    v.get("id")
+                new_video_ids: list[str] = [
+                    v["id"]
                     for v in videos_metadata
                     if v.get("id") and not v.get("video_id")  # yt-dlp metadata (new videos) uses "id"
                 ]

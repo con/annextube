@@ -68,7 +68,7 @@
       <div class="metadata-left">
         <span class="channel-name">{fullMetadata.channel_name}</span>
         <span class="separator">•</span>
-        <span class="views">{formatViews(fullMetadata.view_count)}</span>
+        <span class="views" title="View count from YouTube (not local playback)">{formatViews(fullMetadata.view_count)}</span>
         <span class="separator">•</span>
         <span class="date">{formatRelativeTime(fullMetadata.published_at)}</span>
       </div>
@@ -83,7 +83,7 @@
         </a>
         <div class="stat">
           <span class="stat-value">{fullMetadata.like_count.toLocaleString()}</span>
-          <span class="stat-label">likes</span>
+          <span class="stat-label" title="Like count from YouTube">likes</span>
         </div>
       </div>
     </div>

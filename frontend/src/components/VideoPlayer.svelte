@@ -130,6 +130,15 @@
     youtubeLoading = false;
   }
 
+  // Get suggested download filename from video path (use folder name, not "video.mkv")
+  function getDownloadFilename(): string {
+    const filePath = video.file_path || video.video_id;
+    // filePath is like "2026/01/Some-Video-Title_abc123" — use last segment
+    const segments = filePath.split('/');
+    const folderName = segments[segments.length - 1] || video.video_id;
+    return `${folderName}.mkv`;
+  }
+
   // Reset error state when switching tabs
   function switchTab(tab: 'local' | 'youtube') {
     activeTab = tab;
@@ -247,6 +256,14 @@
               </button>
             </p>
           </video>
+          <div class="download-bar">
+            <a
+              href={getVideoPath()}
+              download={getDownloadFilename()}
+              class="download-button"
+              title="Download video as {getDownloadFilename()}"
+            >Download</a>
+          </div>
         {/if}
       {:else if activeTab === 'youtube'}
         <!-- YouTube Embed -->
@@ -429,6 +446,32 @@
   .error-button:hover,
   .fallback-button:hover {
     background: #1557b0;
+  }
+
+  .download-bar {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    padding: 8px 12px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .download-button {
+    pointer-events: auto;
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    text-decoration: none;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: background 0.2s;
+  }
+
+  .download-button:hover {
+    background: rgba(26, 115, 232, 0.9);
   }
 
   .video-fallback {
