@@ -7,6 +7,7 @@
  */
 
 import { parseTSV, parseIntField } from '@/utils/tsv-parser';
+import { BASE_PATH, isLocalDeployment } from '@/utils/config';
 import { isFileAvailable } from '@/services/availability';
 import type {
   Video,
@@ -25,9 +26,19 @@ export class DataLoader {
   private metadataCache: Map<string, Video> = new Map();
   private commentsCache: Map<string, Comment[]> = new Map();
 
-  constructor(baseUrl: string = '..') {
-    // Default baseUrl: '../' (frontend is in web/, data is in parent)
-    this.baseUrl = baseUrl;
+  constructor(baseUrl?: string) {
+    // Auto-detect base URL based on deployment mode
+    if (baseUrl) {
+      this.baseUrl = baseUrl;
+    } else if (isLocalDeployment()) {
+      // Local file:// - data is in parent directory
+      this.baseUrl = '..';
+    } else {
+      // GitHub Pages or web server - data is at BASE_PATH
+      this.baseUrl = BASE_PATH.endsWith('/') ? BASE_PATH.slice(0, -1) : BASE_PATH;
+    }
+
+    console.log(`DataLoader initialized with baseUrl: ${this.baseUrl}`);
   }
 
   /**

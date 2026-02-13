@@ -7,44 +7,56 @@ import { readFileSync } from 'fs';
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'));
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [svelte()],
+export default defineConfig(({ mode }) => {
+  // Determine base path based on build mode
+  // - default/local: './' for file:// protocol support
+  // - gh-pages: use VITE_BASE_PATH env var (e.g., '/annextubetesting/')
+  const isGitHubPages = mode === 'gh-pages';
+  const basePath = isGitHubPages
+    ? (process.env.VITE_BASE_PATH || '/')
+    : './';
 
-  // Inject version at build time
-  define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
-  },
+  console.log(`Building for ${mode} mode with base path: ${basePath}`);
 
-  // Critical for file:// protocol support
-  base: './',  // Relative paths instead of absolute /assets/
+  return {
+    plugins: [svelte()],
 
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src')
-    }
-  },
+    // Inject version at build time
+    define: {
+      __APP_VERSION__: JSON.stringify(pkg.version),
+    },
 
-  build: {
-    outDir: '../web',  // Output to parent web/ directory
-    emptyOutDir: true,
+    // Critical for file:// protocol support (local) or GitHub Pages (deployed)
+    base: basePath,
 
-    // Optimization
-    minify: 'esbuild',  // Use esbuild (faster, built-in)
-    sourcemap: false,
+    resolve: {
+      alias: {
+        '@': path.resolve(__dirname, './src')
+      }
+    },
 
-    // Clean asset filenames (no content hashes)
-    rollupOptions: {
-      output: {
-        entryFileNames: 'assets/[name].js',
-        chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name][extname]',
+    build: {
+      outDir: isGitHubPages ? 'dist' : '../web',  // dist for gh-pages, web for local
+      emptyOutDir: true,
+
+      // Optimization
+      minify: 'esbuild',  // Use esbuild (faster, built-in)
+      sourcemap: false,
+
+      // Clean asset filenames (no content hashes)
+      rollupOptions: {
+        output: {
+          entryFileNames: 'assets/[name].js',
+          chunkFileNames: 'assets/[name].js',
+          assetFileNames: 'assets/[name][extname]',
+        },
       },
     },
-  },
 
-  // Configure Vitest
-  test: {
-    globals: true,
-    environment: 'jsdom'
-  }
+    // Configure Vitest
+    test: {
+      globals: true,
+      environment: 'jsdom'
+    }
+  };
 });
