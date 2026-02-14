@@ -72,6 +72,9 @@ class Video:
     # Topic classification (YouTube API enhanced)
     topic_categories: list[str] | None = None  # Wikipedia topic URLs
 
+    # Related resources (from extra_metadata.json, merged at export)
+    related_resources: list[dict] | None = None
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         data = {
@@ -123,6 +126,8 @@ class Video:
             "content_rating": self.content_rating,
             # Topic classification
             "topic_categories": self.topic_categories,
+            # Related resources
+            "related_resources": self.related_resources,
         }
         return data
 
@@ -185,4 +190,6 @@ class Video:
             content_rating=data.get("content_rating"),
             # Topic classification
             topic_categories=data.get("topic_categories"),
+            # Related resources
+            related_resources=data.get("related_resources"),
         )

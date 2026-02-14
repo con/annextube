@@ -197,9 +197,59 @@
           "type": "string",
           "format": "date-time",
           "description": "When metadata was last updated (ISO 8601)"
+        },
+        "related_resources": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/RelatedResource" },
+          "description": "Related resources (from extra_metadata.json, merged at export)"
         }
       },
       "required": ["video_id", "title", "channel_id", "channel_name", "published_at", "duration", "view_count", "like_count", "comment_count", "thumbnail_url", "license", "privacy_status", "availability", "tags", "categories", "captions_available", "has_auto_captions", "download_status", "source_url", "fetched_at", "updated_at"]
+    },
+    "RelatedResource": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the related resource"
+        },
+        "title": {
+          "type": "string",
+          "description": "Human-readable title"
+        },
+        "relation_type": {
+          "type": "string",
+          "description": "DataCite v4.6 relationType vocabulary",
+          "enum": [
+            "IsSupplementedBy", "IsSupplementTo",
+            "IsDocumentedBy", "Documents",
+            "IsDescribedBy", "Describes",
+            "References", "IsReferencedBy",
+            "IsDerivedFrom", "IsSourceOf",
+            "HasPart", "IsPartOf",
+            "IsVariantFormOf", "IsOriginalFormOf",
+            "Cites", "IsCitedBy",
+            "IsNewVersionOf", "IsPreviousVersionOf"
+          ]
+        },
+        "resource_type_general": {
+          "type": "string",
+          "description": "DataCite v4.6 resourceTypeGeneral vocabulary",
+          "enum": [
+            "Audiovisual", "Book", "BookChapter", "Collection",
+            "ComputationalNotebook", "ConferencePaper", "Dataset",
+            "Image", "JournalArticle", "Preprint", "Report",
+            "Software", "Text", "Other"
+          ]
+        },
+        "resource_type": {
+          "type": "string",
+          "description": "Specific type (free text): Presentation slides, Closed captions, etc."
+        }
+      },
+      "required": ["url"],
+      "additionalProperties": true
     },
     "Playlist": {
       "type": "object",
