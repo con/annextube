@@ -48,6 +48,7 @@ datalad = [
 ]
 devel = [
     "annextube[test]",
+    "annextube[datalad]",
     "ruff>=0.1.0",
     "mypy>=1.0",
     "types-requests",
