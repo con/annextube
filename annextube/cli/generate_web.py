@@ -31,11 +31,13 @@ def _inject_version(web_dir: Path, version: str) -> bool:
     replaced = False
     for js_file in assets_dir.glob("*.js"):
         content = js_file.read_text()
-        # Vite inlines the placeholder as "v0.0.0-unknown" in the JS bundle.
-        # Replace it with the real annextube version.
+        # Vite inlines the placeholder in the JS bundle.  Depending on
+        # how the template references it, the bundle may contain either
+        # the bare string "0.0.0-unknown" or "v0.0.0-unknown".  Replace
+        # both patterns (the bare form first to avoid double-replacing).
         new_content = content.replace(
-            f"v{FRONTEND_VERSION_PLACEHOLDER}",
-            f"v{version}",
+            FRONTEND_VERSION_PLACEHOLDER,
+            version,
         )
         if new_content != content:
             js_file.write_text(new_content)
