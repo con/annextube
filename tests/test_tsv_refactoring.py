@@ -302,5 +302,94 @@ def test_video_path_without_id():
             f"Expected '{expected}', got '{path_str}'"
 
 
+@pytest.mark.ai_generated
+def test_vtt_langs_extraction_with_variants():
+    """Test that VTT language extraction preserves variant codes like en-cur1.
+
+    When a video directory contains both video.en.vtt and video.en-cur1.vtt,
+    both language codes should appear in captions_available.
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir)
+        export_service = ExportService(repo_path)
+
+        videos_dir = repo_path / "videos"
+        videos_dir.mkdir()
+
+        video_dir = videos_dir / "2026-01-test-video"
+        video_dir.mkdir()
+
+        # Create metadata.json with NO captions_available (will be reconciled)
+        metadata = {
+            "video_id": "test_variants",
+            "title": "Caption Variants Test",
+        }
+        with open(video_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f)
+
+        # Create VTT files with various language codes:
+        # - simple codes (en, es)
+        # - yt-dlp variant codes (en-cur1, en-orig)
+        # - standard BCP 47 codes (pt-BR, zh-Hans)
+        vtt_content = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nTest\n"
+        for lang in ["en", "en-cur1", "en-orig", "es", "pt-BR", "zh-Hans"]:
+            vtt_path = video_dir / f"video.{lang}.vtt"
+            vtt_path.write_text(vtt_content)
+
+        # Generate TSV (triggers vtt_langs reconciliation)
+        export_service.generate_videos_tsv()
+
+        # Read back metadata.json to check captions_available was updated
+        with open(video_dir / "metadata.json") as f:
+            updated_metadata = json.load(f)
+
+        captions = updated_metadata.get("captions_available", [])
+        assert "en" in captions, "Simple code 'en' should be preserved"
+        assert "en-cur1" in captions, "Variant code 'en-cur1' should be preserved"
+        assert "en-orig" in captions, "Variant code 'en-orig' should be preserved"
+        assert "es" in captions, "Simple code 'es' should be preserved"
+        assert "pt-BR" in captions, "BCP 47 code 'pt-BR' should be preserved"
+        assert "zh-Hans" in captions, "BCP 47 code 'zh-Hans' should be preserved"
+        assert len(captions) == 6, f"Expected 6 captions, got {len(captions)}: {captions}"
+
+        # Verify sorted order
+        assert captions == sorted(captions), "captions_available should be sorted"
+
+
+@pytest.mark.ai_generated
+def test_vtt_langs_extraction_skips_bare_video_vtt():
+    """Test that video.vtt (without language code) is skipped."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        repo_path = Path(tmpdir)
+        export_service = ExportService(repo_path)
+
+        videos_dir = repo_path / "videos"
+        videos_dir.mkdir()
+
+        video_dir = videos_dir / "2026-01-test-video"
+        video_dir.mkdir()
+
+        metadata = {
+            "video_id": "test_bare",
+            "title": "Bare VTT Test",
+        }
+        with open(video_dir / "metadata.json", "w") as f:
+            json.dump(metadata, f)
+
+        vtt_content = "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nTest\n"
+        # video.vtt has no language code and should be skipped
+        (video_dir / "video.vtt").write_text(vtt_content)
+        # video.en.vtt has a language code and should be included
+        (video_dir / "video.en.vtt").write_text(vtt_content)
+
+        export_service.generate_videos_tsv()
+
+        with open(video_dir / "metadata.json") as f:
+            updated_metadata = json.load(f)
+
+        captions = updated_metadata.get("captions_available", [])
+        assert captions == ["en"], f"Expected ['en'], got {captions}"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

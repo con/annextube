@@ -1,18 +1,53 @@
 /**
  * Tests for DataLoader service
  *
- * Using Jest + jsdom to test data loading logic
+ * Using Vitest + jsdom to test data loading logic
+ *
+ * @ai_generated
  */
 
-import { jest } from '@jest/globals';
+import { vi, type Mock } from 'vitest';
 import { DataLoader } from '../../src/services/data-loader';
+import type { Video } from '../../src/types/models';
+
+// Mock fetch globally
+const mockFetch = vi.fn() as Mock;
+vi.stubGlobal('fetch', mockFetch);
+
+/** Helper to build a minimal Video object for tests */
+function makeVideo(overrides: Partial<Video> = {}): Video {
+  return {
+    video_id: 'abc123',
+    title: 'Test Video',
+    channel_id: 'UC123',
+    channel_name: 'Test Channel',
+    published_at: '2024-01-01T00:00:00Z',
+    duration: 300,
+    view_count: 1000,
+    like_count: 50,
+    comment_count: 10,
+    thumbnail_url: 'http://example.com/thumb.jpg',
+    license: 'standard',
+    privacy_status: 'public',
+    availability: 'public',
+    tags: [],
+    categories: [],
+    captions_available: [],
+    has_auto_captions: false,
+    download_status: 'downloaded',
+    source_url: 'https://youtube.com/watch?v=abc123',
+    fetched_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
 
 describe('DataLoader', () => {
   let dataLoader: DataLoader;
 
   beforeEach(() => {
     dataLoader = new DataLoader('../');
-    (fetch as jest.Mock).mockClear();
+    mockFetch.mockClear();
   });
 
   describe('loadVideos', () => {
@@ -20,7 +55,7 @@ describe('DataLoader', () => {
       const mockTSV = `video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\tduration\tview_count\tlike_count\tcomment_count\tthumbnail_url\tdownload_status\tsource_url
 abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://example.com/thumb.jpg\ttracked\thttps://youtube.com/watch?v=abc123`;
 
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         text: async () => mockTSV,
       });
@@ -45,7 +80,7 @@ abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10
       const mockTSV = `video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\tduration\tview_count\tlike_count\tcomment_count\tthumbnail_url\tdownload_status\tsource_url
 abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://example.com/thumb.jpg\ttracked\thttps://youtube.com/watch?v=abc123`;
 
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         text: async () => mockTSV,
       });
@@ -60,7 +95,7 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
     });
 
     test('throws error if videos.tsv not found', async () => {
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         statusText: 'Not Found',
       });
@@ -76,7 +111,7 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
       const mockTSV = `playlist_id\ttitle\tchannel_id\tchannel_name\tvideo_count\ttotal_duration\tprivacy_status\tcreated_at\tlast_sync
 PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z\t2024-01-15T00:00:00Z`;
 
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         text: async () => mockTSV,
       });
@@ -108,12 +143,13 @@ PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z
         has_auto_captions: true,
       };
 
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockMetadata,
       });
 
-      const metadata = await dataLoader.loadVideoMetadata('abc123');
+      const video = makeVideo();
+      const metadata = await dataLoader.loadVideoMetadata(video);
 
       expect(fetch).toHaveBeenCalledWith(
         '..//videos/abc123/metadata.json'
@@ -124,17 +160,19 @@ PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z
     test('caches metadata after first load', async () => {
       const mockMetadata = { video_id: 'abc123', title: 'Test' };
 
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockMetadata,
       });
 
+      const video = makeVideo();
+
       // First call
-      await dataLoader.loadVideoMetadata('abc123');
+      await dataLoader.loadVideoMetadata(video);
       expect(fetch).toHaveBeenCalledTimes(1);
 
       // Second call (should use cache)
-      await dataLoader.loadVideoMetadata('abc123');
+      await dataLoader.loadVideoMetadata(video);
       expect(fetch).toHaveBeenCalledTimes(1); // Still 1
     });
   });
@@ -151,12 +189,13 @@ PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z
         },
       ];
 
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => mockComments,
       });
 
-      const comments = await dataLoader.loadComments('abc123');
+      const video = makeVideo();
+      const comments = await dataLoader.loadComments(video);
 
       expect(fetch).toHaveBeenCalledWith(
         '..//videos/abc123/comments.json'
@@ -166,33 +205,45 @@ PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z
     });
 
     test('returns empty array if comments not found (404)', async () => {
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 404,
       });
 
-      const comments = await dataLoader.loadComments('abc123');
+      const video = makeVideo();
+      const comments = await dataLoader.loadComments(video);
 
       expect(comments).toEqual([]);
     });
 
     test('throws error for non-404 failures', async () => {
-      (fetch as jest.Mock).mockResolvedValueOnce({
+      mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
         statusText: 'Internal Server Error',
       });
 
-      await expect(dataLoader.loadComments('abc123')).rejects.toThrow(
+      const video = makeVideo();
+      await expect(dataLoader.loadComments(video)).rejects.toThrow(
         'Failed to load comments for abc123: Internal Server Error'
       );
     });
   });
 
   describe('getCaptionPath', () => {
-    test('returns correct caption path', () => {
+    test('returns correct path for simple language code', () => {
       const path = dataLoader.getCaptionPath('abc123', 'en');
-      expect(path).toBe('..//videos/abc123/caption_en.vtt');
+      expect(path).toBe('..//videos/abc123/video.en.vtt');
+    });
+
+    test('returns correct path for variant language code', () => {
+      const path = dataLoader.getCaptionPath('abc123', 'en-cur1');
+      expect(path).toBe('..//videos/abc123/video.en-cur1.vtt');
+    });
+
+    test('returns correct path for BCP 47 language code', () => {
+      const path = dataLoader.getCaptionPath('abc123', 'pt-BR');
+      expect(path).toBe('..//videos/abc123/video.pt-BR.vtt');
     });
   });
 
@@ -201,7 +252,7 @@ PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z
       const mockTSV = `video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\tduration\tview_count\tlike_count\tcomment_count\tthumbnail_url\tdownload_status\tsource_url
 abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://example.com/thumb.jpg\ttracked\thttps://youtube.com/watch?v=abc123`;
 
-      (fetch as jest.Mock).mockResolvedValue({
+      mockFetch.mockResolvedValue({
         ok: true,
         text: async () => mockTSV,
       });
