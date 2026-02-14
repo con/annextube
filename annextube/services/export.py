@@ -90,6 +90,32 @@ class ExportService:
                         f"{stored_captions} → {vtt_langs}"
                     )
 
+                # Merge extra_metadata.json into metadata.json (if present).
+                # extra_metadata.json is user-managed; fields are additive only
+                # (never overwrite archiver-managed fields in metadata.json).
+                extra_path = video_dir / "extra_metadata.json"
+                if extra_path.exists():
+                    try:
+                        with open(extra_path) as ef:
+                            extra = json.load(ef)
+                        changed = False
+                        for key, value in extra.items():
+                            if key not in metadata:
+                                metadata[key] = value
+                                changed = True
+                        if changed:
+                            with open(metadata_path, "w", encoding="utf-8") as fw:
+                                json.dump(metadata, fw, indent=2)
+                            logger.info(
+                                f"Merged extra_metadata.json for "
+                                f"{metadata.get('video_id', '?')}"
+                            )
+                    except (json.JSONDecodeError, OSError) as exc:
+                        logger.warning(
+                            f"Could not read extra_metadata.json for "
+                            f"{metadata.get('video_id', '?')}: {exc}"
+                        )
+
                 # Extract key fields for TSV (frontend-compatible format)
                 video_id = metadata.get("video_id", "")
 
