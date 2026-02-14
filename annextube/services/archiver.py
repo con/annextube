@@ -263,7 +263,7 @@ class Archiver:
             ["git", "status", "--porcelain"],
             cwd=self.repo_path,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=True
         )
         return bool(result.stdout.strip())
@@ -388,7 +388,7 @@ class Archiver:
                 ["git", "mv", str(existing_path), str(new_path)],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
             logger.debug(f"git mv successful: {result.stdout}")

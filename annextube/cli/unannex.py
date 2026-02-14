@@ -44,7 +44,7 @@ def unannex(
     if dry_run:
         # Preview: list annexed files that would be unannexed
         cmd = ["git", "annex", "find"] + list(paths)
-        result = subprocess.run(cmd, cwd=output_dir, capture_output=True, text=True)
+        result = subprocess.run(cmd, cwd=output_dir, capture_output=True, encoding="utf-8")
         if result.returncode != 0:
             click.echo(f"Error: {result.stderr.strip()}", err=True)
             raise SystemExit(1)

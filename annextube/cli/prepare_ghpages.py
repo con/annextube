@@ -173,7 +173,7 @@ def get_github_repo_name(repo_path: Path) -> str | None:
             ['git', 'remote', 'get-url', 'origin'],
             cwd=repo_path,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=True
         )
         url = result.stdout.strip()

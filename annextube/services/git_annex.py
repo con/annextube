@@ -337,7 +337,7 @@ class GitAnnexService:
                 ["git", "ls-files", "--others", "--exclude-standard"],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
 
@@ -348,7 +348,7 @@ class GitAnnexService:
                 ["git", "diff", "--name-only"],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
 
@@ -373,7 +373,7 @@ class GitAnnexService:
                     ["git", "diff", file_path],
                     cwd=self.repo_path,
                     capture_output=True,
-                    text=True,
+                    encoding="utf-8",
                     check=True
                 )
 
@@ -415,7 +415,7 @@ class GitAnnexService:
                 ["git", "diff", "--name-only"],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
 
@@ -426,7 +426,7 @@ class GitAnnexService:
                 ["git", "ls-files", "--others", "--exclude-standard"],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
 
@@ -451,7 +451,7 @@ class GitAnnexService:
                 ["git", "diff", "--cached"],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
 
@@ -538,7 +538,7 @@ class GitAnnexService:
 
         try:
             subprocess.run(["git", "commit", "-m", message], cwd=self.repo_path, check=True,
-                         capture_output=True, text=True)
+                         capture_output=True, encoding="utf-8")
             logger.info(f"Committed changes: {message}")
 
             # Ensure sensitive files have proper metadata
@@ -630,7 +630,7 @@ class GitAnnexService:
         cmd = ["git", "annex", "metadata", "--json", str(file_path)]
         try:
             result = subprocess.run(
-                cmd, cwd=self.repo_path, check=True, capture_output=True, text=True
+                cmd, cwd=self.repo_path, check=True, capture_output=True, encoding="utf-8"
             )
             if result.stdout:
                 import json
