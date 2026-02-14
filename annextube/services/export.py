@@ -72,6 +72,24 @@ class ExportService:
                 with open(metadata_path) as f:
                     metadata = json.load(f)
 
+                # Reconcile captions_available with actual VTT files on disk.
+                # Captions may exist but not be listed in metadata.json if they
+                # were downloaded after the initial metadata was saved.
+                vtt_langs = sorted(
+                    p.stem.split(".", 1)[1]       # "video.en" → "en"
+                    for p in video_dir.glob("video.*.vtt")
+                    if "." in p.stem               # skip "video.vtt" (no lang)
+                )
+                stored_captions = metadata.get("captions_available", [])
+                if vtt_langs and sorted(stored_captions) != vtt_langs:
+                    metadata["captions_available"] = vtt_langs
+                    with open(metadata_path, "w", encoding="utf-8") as fw:
+                        json.dump(metadata, fw, indent=2)
+                    logger.info(
+                        f"Updated captions_available for {metadata.get('video_id', '?')}: "
+                        f"{stored_captions} → {vtt_langs}"
+                    )
+
                 # Extract key fields for TSV (frontend-compatible format)
                 video_id = metadata.get("video_id", "")
 
