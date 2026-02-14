@@ -9,6 +9,7 @@ import pytest
 
 @pytest.mark.ai_generated
 @pytest.mark.network
+@pytest.mark.timeout(180)
 def test_incremental_backup_no_reprocessing(tmp_path: Path):
     """Test that running backup twice doesn't reprocess existing videos.
 
@@ -83,6 +84,7 @@ def test_incremental_backup_no_reprocessing(tmp_path: Path):
 
 @pytest.mark.ai_generated
 @pytest.mark.network
+@pytest.mark.timeout(180)
 def test_incremental_backup_detects_new_videos(tmp_path: Path):
     """Test that incremental backup correctly detects and fetches new videos.
 

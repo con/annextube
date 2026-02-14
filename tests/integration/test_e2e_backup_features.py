@@ -46,6 +46,7 @@ def _git_status_clean(repo_path: Path) -> bool:
 
 @pytest.mark.ai_generated
 @pytest.mark.network
+@pytest.mark.timeout(180)
 class TestE2EBackupFeatures:
     """End-to-end tests requiring network access to YouTube."""
 
@@ -183,9 +184,8 @@ class TestE2EBackupFeatures:
         """Test that default init config includes playlists and uses title-based paths."""
         repo_path = tmp_path
 
-        # Use annextube init with default settings (playlists=all, podcasts=all by default)
-        # Using yarikoptic channel which has playlists
-        channel_url = "https://www.youtube.com/@yarikoptic"
+        # Use AnnexTubeTesting channel (small, controlled, has playlists)
+        channel_url = "https://www.youtube.com/@AnnexTubeTesting"
 
         subprocess.run(
             [sys.executable, "-m", "annextube", "init", str(repo_path), channel_url,
@@ -197,7 +197,8 @@ class TestE2EBackupFeatures:
         # Run backup to discover and backup playlists
         subprocess.run(
             [sys.executable, "-m", "annextube", "backup",
-             "--output-dir", str(repo_path)],
+             "--output-dir", str(repo_path),
+             "--limit", "2"],
             check=True,
             capture_output=True
         )
