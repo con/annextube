@@ -5,6 +5,33 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-02-14
+
+### Added
+
+- **Extra metadata with DataCite vocabulary**: User-managed `extra_metadata.json` per video for supplemental metadata (related slides, papers, code repos). LinkML schema defines `RelatedResource` using DataCite v4.6 relationType and resourceTypeGeneral vocabularies. Merged additively into `metadata.json` during export (never overwrites archiver-managed fields)
+- **Related resources display**: Frontend shows linked resources in video details with type badges (`[Presentation slides]`, `[Software]`, etc.)
+- **Human-readable caption labels**: Caption language selector shows readable labels for yt-dlp variant suffixes (e.g. `en-cur1` → `EN (curated)`, `en-orig` → `EN (original)`)
+- **Caption download button**: Download VTT caption files directly from the transcript panel header
+- **Deno as core dependency**: Required for yt-dlp YouTube JS challenge solver
+- **Skip network tests by default**: pytest addopts `-m "not network"` prevents flaky CI from YouTube bot detection. Use `tox -e network` for full network test sweep
+
+### Fixed
+
+- **Phased backup_channel() flow**: Refactored into discovery → fetch → store → link phases, fixing O(P^2) TSV regeneration and symlink overhead
+- **Version injection after appVersion refactor**: Fixed placeholder matching in `deploy_frontend()` after Vite inlining changed from `v0.0.0-unknown` to bare `0.0.0-unknown`
+- **TypeError on None playlist titles**: Handle yt-dlp returning None for playlist titles
+- **Empty videos.tsv crash**: Handle missing `videos/` directory gracefully
+- **Frontend build warnings**: A11y labels, version variable reference, video caption attributes
+- **Encoding consistency**: Use `encoding="utf-8"` instead of `text=True` in all subprocess calls
+- **yt-dlp options consistency**: Use `_get_ydl_opts()` for all yt-dlp calls, apply env vars in UserConfig
+
+### Changed
+
+- **Header renamed to AnnexTube**: Links to GitHub repo https://github.com/con/annextube
+- **ejs:github enabled by default**: Remote JavaScript components for yt-dlp challenge solver
+- **Test infrastructure**: pytest tmp_path fixture, datalad in test deps, playwright skip when missing, dedicated network test environment
+
 ## [0.6.0] - 2026-02-14
 
 ### Added
@@ -171,6 +198,7 @@ Initial release with core YouTube archival functionality:
 - Comment fetching
 - Basic web UI for browsing archives
 
+[0.7.0]: https://github.com/con/annextube/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/con/annextube/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/con/annextube/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/con/annextube/compare/v0.3.0...v0.4.0
