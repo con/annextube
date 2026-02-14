@@ -167,7 +167,7 @@
           ← Back to channels
         </button>
       {/if}
-      <h1>📹 YouTube Archive Browser <span class="version">v{__APP_VERSION__}</span></h1>
+      <h1><a href="https://github.com/con/annextube" target="_blank" rel="noopener noreferrer" class="app-link">AnnexTube</a> <span class="version">v{__APP_VERSION__}</span></h1>
       <p class="subtitle">
         {#if isMultiChannel && !selectedChannel}
           {channels.length} channel{channels.length !== 1 ? 's' : ''} in collection
@@ -257,6 +257,15 @@
     color: #030303;
     font-size: 24px;
     font-weight: 500;
+  }
+
+  .app-link {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .app-link:hover {
+    text-decoration: underline;
   }
 
   .version {
