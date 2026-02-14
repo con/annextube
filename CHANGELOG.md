@@ -5,6 +5,12 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-02-14
+
+### Added
+
+- **URL permalink for caption search state**: Shared links now also restore caption search context — query, case-sensitive/regex/filter toggles, and match position. URL params `q`, `cs`, `re`, `filter`, `match` are appended alongside existing player params (e.g. `#/channel/X/video/Y?tab=local&t=90&lang=en&q=neuroimaging&cs=1&re=1&filter=1&match=3`). Match position is restored on first load, then resets normally on new searches.
+
 ## [0.5.0] - 2026-02-13
 
 ### Added
@@ -165,6 +171,7 @@ Initial release with core YouTube archival functionality:
 - Comment fetching
 - Basic web UI for browsing archives
 
+[0.6.0]: https://github.com/con/annextube/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/con/annextube/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/con/annextube/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/con/annextube/compare/v0.2.2...v0.3.0
