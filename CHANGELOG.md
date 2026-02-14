@@ -5,6 +5,12 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-02-13
+
+### Added
+
+- **URL permalink for video player state**: Shared links now restore the full viewing context — active player tab (archive/youtube), wide mode, transcript visibility, playback position, and caption language. URL params are appended to the hash route (e.g. `#/channel/X/video/Y?tab=youtube&wide=1&t=90&transcript=0&lang=es`). Only non-default values are written, keeping URLs clean. Uses `history.replaceState` to avoid history pollution.
+
 ## [0.4.0] - 2026-02-13
 
 ### Added
@@ -159,6 +165,7 @@ Initial release with core YouTube archival functionality:
 - Comment fetching
 - Basic web UI for browsing archives
 
+[0.5.0]: https://github.com/con/annextube/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/con/annextube/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/con/annextube/compare/v0.2.2...v0.3.0
 [0.2.2]: https://github.com/con/annextube/compare/v0.2.0...v0.2.2

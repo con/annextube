@@ -7,18 +7,27 @@
   import CaptionBrowser from './CaptionBrowser.svelte';
   import CommentView from './CommentView.svelte';
 
-  // TODO: URL permalink — persist video player state in the URL hash so that
-  // links can restore: which player tab is active (archive vs youtube),
-  // wide mode on/off, transcript panel shown/hidden, and playback position
-  // (e.g. #video=ID&tab=local&wide=1&transcript=1&t=90).
-
   export let video: Video;
   export let onBack: () => void;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
+  // Parse URL query params from hash (e.g. #/channel/X/video/Y?tab=youtube&t=90)
+  function parseVideoParams(): Record<string, string> {
+    const hash = window.location.hash;
+    const qIdx = hash.indexOf('?');
+    if (qIdx === -1) return {};
+    return Object.fromEntries(new URLSearchParams(hash.slice(qIdx + 1)));
+  }
+
+  const urlParams = parseVideoParams();
+  const initialTab = (urlParams.tab === 'local' || urlParams.tab === 'youtube') ? urlParams.tab : undefined;
+  const initialTime = urlParams.t ? Number(urlParams.t) : undefined;
+  const initialLang = urlParams.lang || undefined;
+
   let playerRef: VideoPlayer;
   let currentTime: number = 0;
-  let captionVisible = true;
+  // URL overrides localStorage for wide/transcript (shared links carry context)
+  let captionVisible = urlParams.transcript === '0' ? false : true;
   let playerHeight: number = 0;
 
   let fullMetadata: Video = video;
@@ -27,19 +36,41 @@
   let loadingComments = false;
   let showDescription = false;
 
-  // Wide mode (persisted in localStorage)
+  // Wide mode: URL param overrides localStorage (shared link context)
   const WIDE_MODE_KEY = 'annextube-wide-mode';
-  let wideMode = getWideMode();
+  let wideMode = urlParams.wide === '1' ? true : getWideMode();
 
   function getWideMode(): boolean {
     try { return localStorage.getItem(WIDE_MODE_KEY) === 'true'; }
     catch { return false; }
   }
 
+  // Track current state for URL params
+  let currentTab: 'local' | 'youtube' = initialTab || 'local';
+  let currentLang: string | undefined = initialLang;
+
+  function updateVideoParams() {
+    const params = new URLSearchParams();
+    if (currentTab) params.set('tab', currentTab);
+    if (wideMode) params.set('wide', '1');
+    if (!captionVisible) params.set('transcript', '0');
+    const t = Math.floor(currentTime);
+    if (t > 0) params.set('t', String(t));
+    if (currentLang && currentLang !== 'en') params.set('lang', currentLang);
+
+    const hash = window.location.hash;
+    const qIdx = hash.indexOf('?');
+    const basePath = qIdx === -1 ? hash : hash.slice(0, qIdx);
+    const qs = params.toString();
+    const newHash = qs ? `${basePath}?${qs}` : basePath;
+    history.replaceState(null, '', newHash);
+  }
+
   function toggleWideMode() {
     wideMode = !wideMode;
     try { localStorage.setItem(WIDE_MODE_KEY, String(wideMode)); }
     catch { /* file:// protocol may not support localStorage */ }
+    updateVideoParams();
   }
 
   // Sync body class for wide mode (escapes Svelte scoping)
@@ -109,8 +140,12 @@
         bind:currentTime
         video={fullMetadata}
         {channelDir}
+        {initialTab}
+        {initialTime}
         showTranscriptTab={hasCaptions && !captionVisible}
-        onTranscriptOpen={() => captionVisible = true}
+        onTranscriptOpen={() => { captionVisible = true; updateVideoParams(); }}
+        onTabChange={(tab) => { currentTab = tab; updateVideoParams(); }}
+        onPause={() => updateVideoParams()}
       />
     </div>
     {#if hasCaptions && captionVisible}
@@ -118,8 +153,10 @@
         video={fullMetadata}
         {channelDir}
         {currentTime}
-        onSeek={(time) => playerRef?.seekTo(time)}
-        onHide={() => captionVisible = false}
+        {initialLang}
+        onSeek={(time) => { playerRef?.seekTo(time); updateVideoParams(); }}
+        onHide={() => { captionVisible = false; updateVideoParams(); }}
+        onLangChange={(lang) => { currentLang = lang; updateVideoParams(); }}
       />
     {/if}
   </div>

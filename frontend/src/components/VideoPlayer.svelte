@@ -9,6 +9,10 @@
   export let currentTime: number = 0;
   export let showTranscriptTab: boolean = false;
   export let onTranscriptOpen: () => void = () => {};
+  export let initialTab: 'local' | 'youtube' | undefined = undefined;
+  export let initialTime: number | undefined = undefined;
+  export let onTabChange: ((tab: 'local' | 'youtube') => void) | undefined = undefined;
+  export let onPause: (() => void) | undefined = undefined;
 
   // Reference to the <video> element for time tracking and seeking
   let videoElement: HTMLVideoElement | null = null;
@@ -28,8 +32,20 @@
     checkAvailability();
   }
 
-  // Active tab: 'local' if available, otherwise 'youtube'
-  $: activeTab = hasLocalVideo ? 'local' : 'youtube';
+  // Active tab: respect initialTab after availability check, then default
+  let activeTab: 'local' | 'youtube' = 'youtube';
+  let tabInitialized = false;
+  $: if (localVideoCheckComplete && !tabInitialized) {
+    tabInitialized = true;
+    if (initialTab === 'youtube') {
+      activeTab = 'youtube';
+    } else if (initialTab === 'local' && hasLocalVideo) {
+      activeTab = 'local';
+    } else {
+      activeTab = hasLocalVideo ? 'local' : 'youtube';
+    }
+    onTabChange?.(activeTab);
+  }
 
   // Error and loading states
   let videoError = false;
@@ -154,8 +170,13 @@
     console.log('[VideoPlayer] Video metadata loaded');
   }
 
+  let initialTimeApplied = false;
   function handleVideoCanPlay() {
     console.log('[VideoPlayer] Video can play');
+    if (initialTime != null && !initialTimeApplied) {
+      initialTimeApplied = true;
+      seekTo(initialTime);
+    }
   }
 
   // Handle iframe load
@@ -175,6 +196,7 @@
   // Reset error state when switching tabs
   function switchTab(tab: 'local' | 'youtube') {
     activeTab = tab;
+    onTabChange?.(tab);
     if (tab === 'local') {
       videoError = false;
       videoErrorMessage = '';
@@ -275,6 +297,7 @@
             on:loadedmetadata={handleVideoLoadedMetadata}
             on:canplay={handleVideoCanPlay}
             on:timeupdate={handleTimeUpdate}
+            on:pause={() => onPause?.()}
           >
             <!--
               NOTE: No type attribute specified - let browser auto-detect format.

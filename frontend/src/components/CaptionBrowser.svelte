@@ -10,6 +10,8 @@
   export let currentTime: number = 0;
   export let onSeek: (time: number) => void = () => {};
   export let onHide: () => void = () => {};
+  export let initialLang: string | undefined = undefined;
+  export let onLangChange: ((lang: string) => void) | undefined = undefined;
 
   // Internal state
   let selectedLang: string = '';
@@ -39,14 +41,16 @@
   // Available languages
   $: languages = video.captions_available || [];
 
-  // Auto-select language when video changes
+  // Auto-select language when video changes (prefer initialLang, then 'en', then first)
   $: if (languages.length > 0 && !selectedLang) {
-    selectedLang = languages.includes('en') ? 'en' : languages[0];
+    const pref = initialLang || 'en';
+    selectedLang = languages.includes(pref) ? pref : languages[0];
   }
 
   // Reset when video changes
   $: if (video.video_id) {
-    const newLang = languages.includes('en') ? 'en' : (languages[0] || '');
+    const pref = initialLang || 'en';
+    const newLang = languages.includes(pref) ? pref : (languages[0] || '');
     if (newLang !== selectedLang) {
       selectedLang = newLang;
     }
@@ -246,6 +250,7 @@
   function handleLanguageChange(event: Event) {
     const select = event.target as HTMLSelectElement;
     selectedLang = select.value;
+    onLangChange?.(selectedLang);
   }
 
   onMount(() => {
