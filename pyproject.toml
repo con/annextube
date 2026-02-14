@@ -107,7 +107,7 @@ exclude = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = ["-ra", "--strict-markers", "--strict-config"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "-m", "not network"]
 xfail_strict = true
 testpaths = ["tests"]
 markers = [

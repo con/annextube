@@ -41,6 +41,7 @@ def tmp_git_annex_repo(tmp_path):
 
 
 @pytest.mark.ai_generated
+@pytest.mark.network
 def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> None:
     """Test backup with playlists, captions, comments, and thumbnails enabled.
 
@@ -142,6 +143,7 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
 
 
 @pytest.mark.ai_generated
+@pytest.mark.network
 def test_playlist_backup_creates_symlinks(tmp_git_annex_repo: Path) -> None:
     """Test that playlist backup creates chronologically ordered symlinks.
 

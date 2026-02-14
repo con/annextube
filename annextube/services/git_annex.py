@@ -165,7 +165,7 @@ class GitAnnexService:
         if extra_opts:
             options.extend(extra_opts)
 
-        if options:
+        if options and self.is_annex_repo():
             option_str = " ".join(options)
             subprocess.run(
                 ["git", "config", "annex.youtube-dl-options", option_str],
