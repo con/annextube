@@ -307,8 +307,8 @@
   {#if filtersExpanded}
   <div class="filters-grid">
     <!-- Date Range -->
-    <div class="filter-group">
-      <label class="filter-label">Date Range</label>
+    <div class="filter-group" role="group" aria-label="Date Range">
+      <span class="filter-label">Date Range</span>
       <div class="date-presets">
         <button type="button" class="preset-btn" class:active={activeDatePreset === 'week'} on:click={() => setDateRange('week')}>Last Week</button>
         <button type="button" class="preset-btn" class:active={activeDatePreset === 'month'} on:click={() => setDateRange('month')}>Last Month</button>
@@ -325,13 +325,13 @@
 
     <!-- Channels -->
     <div class="filter-group">
-      <label class="filter-label">
+      <label class="filter-label" for="filter-channels">
         Channels
         {#if selectedChannels.length > 0}
           <span class="count-badge">{selectedChannels.length}</span>
         {/if}
       </label>
-      <select multiple bind:value={selectedChannels} class="multi-select" size="3">
+      <select id="filter-channels" multiple bind:value={selectedChannels} class="multi-select" size="3">
         {#each availableChannels as channel}
           <option value={channel.id}>{channel.name}</option>
         {/each}
@@ -341,13 +341,13 @@
     <!-- Playlists -->
     {#if playlists.length > 0}
       <div class="filter-group">
-        <label class="filter-label">
+        <label class="filter-label" for="filter-playlists">
           Playlists
           {#if selectedPlaylists.length > 0}
             <span class="count-badge">{selectedPlaylists.length}</span>
           {/if}
         </label>
-        <select multiple bind:value={selectedPlaylists} class="multi-select" size="3">
+        <select id="filter-playlists" multiple bind:value={selectedPlaylists} class="multi-select" size="3">
           {#each playlists as playlist}
             <option value={playlist.playlist_id}>
               {playlist.title} ({playlistCounts.get(playlist.playlist_id) || 0})
@@ -360,13 +360,13 @@
     <!-- Tags -->
     {#if availableTags.length > 0}
       <div class="filter-group">
-        <label class="filter-label">
+        <label class="filter-label" for="filter-tags">
           Tags
           {#if selectedTags.length > 0}
             <span class="count-badge">{selectedTags.length}</span>
           {/if}
         </label>
-        <select multiple bind:value={selectedTags} class="multi-select" size="3">
+        <select id="filter-tags" multiple bind:value={selectedTags} class="multi-select" size="3">
           {#each availableTags as tag}
             <option value={tag}>{tag}</option>
           {/each}
@@ -376,8 +376,8 @@
 
     <!-- Download Status -->
     <div class="filter-group">
-      <label class="filter-label">Video Availability</label>
-      <select bind:value={selectedStatusFilter} class="filter-select">
+      <label class="filter-label" for="filter-status">Video Availability</label>
+      <select id="filter-status" bind:value={selectedStatusFilter} class="filter-select">
         <option value="all">All Videos</option>
         <option value="downloaded">Backup Available (Local)</option>
         <option value="metadata_only">Metadata Only</option>
@@ -385,10 +385,10 @@
     </div>
 
     <!-- Sort -->
-    <div class="filter-group">
-      <label class="filter-label">Sort By</label>
+    <div class="filter-group" role="group" aria-label="Sort By">
+      <span class="filter-label">Sort By</span>
       <div class="sort-controls">
-        <select bind:value={sortField} class="sort-select">
+        <select bind:value={sortField} class="sort-select" aria-label="Sort field">
           <option value="date">Date</option>
           <option value="views">Views</option>
           <option value="comments">Comments</option>
@@ -398,7 +398,7 @@
             <option value="relevance">Relevance</option>
           {/if}
         </select>
-        <select bind:value={sortDirection} class="sort-select">
+        <select bind:value={sortDirection} class="sort-select" aria-label="Sort direction">
           <option value="desc">Descending</option>
           <option value="asc">Ascending</option>
         </select>

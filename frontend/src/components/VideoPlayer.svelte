@@ -286,6 +286,7 @@
             </div>
           </div>
         {:else}
+          <!-- svelte-ignore a11y-media-has-caption -->
           <video
             bind:this={videoElement}
             controls
@@ -309,7 +310,7 @@
 
             {#each captionTracks as lang}
               <track
-                kind="subtitles"
+                kind="captions"
                 src={getCaptionPath(lang)}
                 srclang={lang}
                 label={lang.toUpperCase()}

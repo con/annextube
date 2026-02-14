@@ -9,6 +9,8 @@
   import FilterPanel from '@/components/FilterPanel.svelte';
   import ChannelList from '@/components/ChannelList.svelte';
 
+  const appVersion: string = __APP_VERSION__;
+
   let isMultiChannel = false;
   let channels: Channel[] = [];
   let selectedChannel: Channel | null = null;
@@ -167,7 +169,7 @@
           ← Back to channels
         </button>
       {/if}
-      <h1>📹 YouTube Archive Browser <span class="version">v{__APP_VERSION__}</span></h1>
+      <h1>📹 YouTube Archive Browser <span class="version">v{appVersion}</span></h1>
       <p class="subtitle">
         {#if isMultiChannel && !selectedChannel}
           {channels.length} channel{channels.length !== 1 ? 's' : ''} in collection
