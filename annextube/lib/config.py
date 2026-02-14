@@ -115,6 +115,17 @@ class UserConfig:
     # Advanced
     ytdlp_extra_opts: list[str] = field(default_factory=list)  # Extra CLI options for yt-dlp
 
+    def __post_init__(self) -> None:
+        """Apply environment variable overrides (highest precedence)."""
+        if self.cookies_file is None:
+            self.cookies_file = os.environ.get("ANNEXTUBE_COOKIES_FILE") or None
+        if self.cookies_from_browser is None:
+            self.cookies_from_browser = os.environ.get("ANNEXTUBE_COOKIES_FROM_BROWSER") or None
+        if self.api_key is None:
+            self.api_key = os.environ.get("YOUTUBE_API_KEY") or None
+        if self.proxy is None:
+            self.proxy = os.environ.get("ANNEXTUBE_PROXY") or None
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserConfig":
         """Create UserConfig from dictionary (loaded from TOML).

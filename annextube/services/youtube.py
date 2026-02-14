@@ -242,11 +242,11 @@ class YouTubeService:
             opts["extractor_args"] = self.extractor_args
             logger.debug(f"yt-dlp: Using extractor args: {self.extractor_args}")
 
-        # Add remote components (e.g., ejs:github for JS challenge solver with deno)
-        if self.remote_components:
-            # remote_components should be a list in Python API
-            opts["remote_components"] = [self.remote_components]
-            logger.debug(f"yt-dlp: Using remote components: {self.remote_components}")
+        # Enable remote components for JS challenge solver.
+        # Default to ejs:github since deno is a core dependency.
+        remote = self.remote_components or "ejs:github"
+        opts["remote_components"] = [remote]
+        logger.debug(f"yt-dlp: Using remote components: {remote}")
 
         # Log full options for debugging
         logger.debug(f"yt-dlp options: {opts}")
@@ -704,6 +704,42 @@ class YouTubeService:
                 logger.error(f"Failed to fetch playlist metadata: {e}")
                 return None
 
+    def get_videos_metadata(self, video_ids: list[str]) -> list[dict[str, Any]]:
+        """Fetch full metadata for specific video IDs.
+
+        Used to get metadata for playlist-exclusive videos that weren't
+        discovered via channel video listing.
+
+        Args:
+            video_ids: List of YouTube video IDs to fetch metadata for
+
+        Returns:
+            List of video metadata dictionaries (skips failed fetches)
+        """
+        if not video_ids:
+            return []
+
+        logger.info(f"Fetching metadata for {len(video_ids)} individual video(s)")
+
+        ydl_opts = self._get_ydl_opts(download=False)
+        ydl_opts["ignoreerrors"] = True
+
+        videos = []
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            for idx, video_id in enumerate(video_ids, 1):
+                url = f"https://www.youtube.com/watch?v={video_id}"
+                try:
+                    if idx % 10 == 0 or idx == 1 or idx == len(video_ids):
+                        logger.info(f"Fetching metadata [{idx}/{len(video_ids)}]: {video_id}")
+                    info = ydl.extract_info(url, download=False)
+                    if info:
+                        videos.append(info)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+
+        logger.info(f"Successfully fetched metadata for {len(videos)}/{len(video_ids)} video(s)")
+        return videos
+
     def get_channel_playlists(self, channel_url: str) -> list[dict[str, Any]]:
         """Get all playlists from a channel.
 
@@ -741,7 +777,7 @@ class YouTubeService:
 
                         playlists.append({
                             "id": playlist_id or entry.get("id"),
-                            "title": entry.get("title", "Unknown"),
+                            "title": entry.get("title") or "Unknown",
                             "url": url,
                             "video_count": entry.get("playlist_count", 0),
                         })
@@ -790,7 +826,7 @@ class YouTubeService:
 
                         podcasts.append({
                             "id": playlist_id or entry.get("id"),
-                            "title": entry.get("title", "Unknown"),
+                            "title": entry.get("title") or "Unknown",
                             "url": url,
                             "video_count": entry.get("playlist_count", 0),
                         })
@@ -1002,11 +1038,7 @@ class YouTubeService:
 
         try:
             # Get available captions without downloading
-            ydl_opts_info = {
-                "quiet": True,
-                "no_warnings": True,
-                "skip_download": True,
-            }
+            ydl_opts_info = self._get_ydl_opts(download=False)
 
             with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
                 info = ydl.extract_info(video_url, download=False)
@@ -1063,16 +1095,14 @@ class YouTubeService:
             )
 
             # Download selected captions
-            ydl_opts = {
-                "quiet": True,
-                "no_warnings": True,
-                "skip_download": True,
+            ydl_opts = self._get_ydl_opts(download=False)
+            ydl_opts.update({
                 "writesubtitles": True,
                 "writeautomaticsub": True,
                 "subtitleslangs": langs_to_download,
                 "subtitlesformat": "vtt",
                 "outtmpl": str(output_dir / "%(id)s.%(ext)s"),
-            }
+            })
 
             def _download():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -1242,13 +1272,11 @@ class YouTubeService:
         if not comments:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-            ydl_opts: dict[str, Any] = {
-                "quiet": True,
-                "no_warnings": True,
-                "skip_download": True,
+            ydl_opts = self._get_ydl_opts(download=False)
+            ydl_opts.update({
                 "getcomments": True,
                 "writeinfojson": False,  # Don't write info json
-            }
+            })
 
             # Configure comment fetching with reply support
             # Format: [max_parents, max_replies_per_thread, max_total_replies, reserved]

@@ -59,7 +59,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 ["git", "status", "--porcelain"],
                 cwd=output_dir,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
             if result.stdout.strip():
@@ -189,7 +189,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 ["git", "ls-files", "-s", "--", "*.mp4", "*.webm", "*.mkv", "*.jpg", "*.png"],
                 cwd=output_dir,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
             # Filter out symlinks (mode 120000 = git-annex symlinks)
@@ -221,7 +221,7 @@ def check(ctx: click.Context, output_dir: Path, skip_git_status: bool, skip_conf
                 ["git", "annex", "fsck", "--fast", "--quiet"],
                 cwd=output_dir,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 timeout=60
             )
             if result.returncode == 0:

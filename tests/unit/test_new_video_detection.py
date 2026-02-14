@@ -1,6 +1,5 @@
 """Unit tests for new video detection logic."""
 
-import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -9,13 +8,6 @@ import pytest
 from annextube.lib.config import ComponentsConfig, Config
 from annextube.models.video import Video
 from annextube.services.archiver import Archiver
-
-
-@pytest.fixture
-def temp_repo():
-    """Create a temporary directory for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
 
 
 @pytest.fixture
@@ -47,7 +39,7 @@ def test_video():
 
 
 @pytest.mark.ai_generated
-def test_new_video_detected_when_metadata_missing(temp_repo: Path, test_video: Video) -> None:
+def test_new_video_detected_when_metadata_missing(tmp_path: Path, test_video: Video) -> None:
     """Test that a video is detected as NEW when metadata.json doesn't exist."""
     config = Config(components=ComponentsConfig(
         thumbnails=True,
@@ -55,7 +47,7 @@ def test_new_video_detected_when_metadata_missing(temp_repo: Path, test_video: V
         comments_depth=10000
     ))
 
-    archiver = Archiver(temp_repo, config)
+    archiver = Archiver(tmp_path, config)
 
     # Get expected path
     video_path = archiver._get_video_path(test_video)
@@ -70,7 +62,7 @@ def test_new_video_detected_when_metadata_missing(temp_repo: Path, test_video: V
 
 
 @pytest.mark.ai_generated
-def test_existing_video_detected_when_metadata_exists(temp_repo: Path, test_video: Video) -> None:
+def test_existing_video_detected_when_metadata_exists(tmp_path: Path, test_video: Video) -> None:
     """Test that a video is detected as EXISTING when metadata.json exists."""
     config = Config(components=ComponentsConfig(
         thumbnails=True,
@@ -78,7 +70,7 @@ def test_existing_video_detected_when_metadata_exists(temp_repo: Path, test_vide
         comments_depth=10000
     ))
 
-    archiver = Archiver(temp_repo, config)
+    archiver = Archiver(tmp_path, config)
 
     # Get expected path
     video_path = archiver._get_video_path(test_video)

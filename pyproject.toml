@@ -24,6 +24,7 @@ classifiers = [
 dependencies = [
     "datasalad>=0.3.0",
     "yt-dlp>=2026.2.0",  # Requires recent version for challenge solver 0.4.0+
+    "deno>2.6.6",  # JS runtime required by yt-dlp for YouTube extraction
     "click>=8.0.0",
     "jsonschema>=4.0.0",
     "tomli>=2.0.0; python_version < '3.11'",
@@ -38,6 +39,11 @@ test = [
     "pytest-cov>=4.0",
     "pytest-timeout>=2.0",
     "pytest-asyncio>=0.21.0",
+    "annextube[datalad]",
+]
+e2e = [
+    "annextube[test]",
+    "playwright>=1.40",
 ]
 datalad = [
     "datalad>=1.0.0",  # For DataLad dataset creation
@@ -101,7 +107,7 @@ exclude = [
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = ["-ra", "--strict-markers", "--strict-config"]
+addopts = ["-ra", "--strict-markers", "--strict-config", "-m", "not network"]
 xfail_strict = true
 testpaths = ["tests"]
 markers = [

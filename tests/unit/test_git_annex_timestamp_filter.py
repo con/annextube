@@ -2,7 +2,6 @@
 
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -11,20 +10,19 @@ from annextube.services.git_annex import GitAnnexService
 
 
 @pytest.fixture
-def git_repo():
+def git_repo(tmp_path):
     """Create a temporary git repository for testing."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        repo_path = Path(tmpdir)
+    repo_path = tmp_path
 
-        # Initialize git repo
-        subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
-        subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True, capture_output=True)
+    # Initialize git repo
+    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True, capture_output=True)
 
-        # Initialize git-annex
-        subprocess.run(["git", "annex", "init", "test-repo"], cwd=repo_path, check=True, capture_output=True)
+    # Initialize git-annex
+    subprocess.run(["git", "annex", "init", "test-repo"], cwd=repo_path, check=True, capture_output=True)
 
-        yield repo_path
+    return repo_path
 
 
 @pytest.mark.ai_generated

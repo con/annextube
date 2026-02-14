@@ -76,9 +76,11 @@ class Archiver:
         )
 
         self.export = ExportService(repo_path)
-        self._video_id_to_path_cache: dict[str, str] | None = None  # Cache for video ID to path mapping
+        self._video_id_to_path_cache: dict[str, str] | None = None  # Cache for video ID to path mapping (for rename detection)
+        self._video_id_map_cache: dict[str, Path] | None = None  # Cache for _build_video_id_map
         self._processed_video_ids: set[str] = set()  # Track videos processed in current run (avoid duplicates)
         self._current_source_config: SourceConfig | None = None  # Current source being processed (for component overrides)
+        self._is_initial_backup: bool | None = None  # Set at start of backup_channel/backup_playlist
 
         # Configure git-annex with user config settings
         self.git_annex.configure_ytdlp_options(
@@ -261,7 +263,7 @@ class Archiver:
             ["git", "status", "--porcelain"],
             cwd=self.repo_path,
             capture_output=True,
-            text=True,
+            encoding="utf-8",
             check=True
         )
         return bool(result.stdout.strip())
@@ -280,11 +282,11 @@ class Archiver:
 
         logger.info(f"Checkpoint: {videos_processed}/{total_videos} videos processed")
 
-        # Regenerate TSVs to include newly processed videos
+        # Regenerate only videos.tsv during checkpoint (not all playlists TSVs)
         try:
-            self.export.generate_all()
+            self.export.generate_videos_tsv()
         except Exception as e:
-            logger.warning(f"Failed to regenerate TSVs during checkpoint: {e}")
+            logger.warning(f"Failed to regenerate videos.tsv during checkpoint: {e}")
             # Continue with commit anyway - TSVs can be regenerated later
 
         # Commit staged changes
@@ -386,7 +388,7 @@ class Archiver:
                 ["git", "mv", str(existing_path), str(new_path)],
                 cwd=self.repo_path,
                 capture_output=True,
-                text=True,
+                encoding="utf-8",
                 check=True
             )
             logger.debug(f"git mv successful: {result.stdout}")
@@ -521,14 +523,20 @@ class Archiver:
 
         return symlink_name
 
-    def _build_video_id_map(self) -> dict[str, Path]:
+    def _build_video_id_map(self, use_cache: bool = True) -> dict[str, Path]:
         """Build mapping from video_id to video directory path.
 
         Scans all metadata.json files in videos/ directory to build the map.
 
+        Args:
+            use_cache: If True, return cached result if available
+
         Returns:
             Dictionary mapping video_id to absolute video directory Path
         """
+        if use_cache and self._video_id_map_cache is not None:
+            return self._video_id_map_cache
+
         videos_dir = self.repo_path / "videos"
         video_id_map: dict[str, Path] = {}
 
@@ -545,28 +553,50 @@ class Archiver:
             except Exception as e:
                 logger.debug(f"Failed to read {metadata_path}: {e}")
 
+        if use_cache:
+            self._video_id_map_cache = video_id_map
         return video_id_map
 
-    def _rebuild_playlist_symlinks(self, playlist_dir: Path, playlist: Playlist) -> None:
-        """Rebuild all symlinks in a playlist directory from scratch.
+    def _invalidate_video_id_map_cache(self) -> None:
+        """Invalidate the video_id_map cache, forcing a fresh scan on next call."""
+        self._video_id_map_cache = None
 
-        Removes existing symlinks, resolves video_ids to directories,
-        sorts by (published_at, video_id) for chronological ordering,
-        and creates fresh sequential symlinks.
+    def _save_playlist_metadata(self, playlist: Playlist, playlist_dir: Path) -> bool:
+        """Save playlist.json if content changed.
 
         Args:
+            playlist: Playlist model instance
             playlist_dir: Path to playlist directory
-            playlist: Playlist model with video_ids
+
+        Returns:
+            True if saved (new or changed), False if unchanged
         """
-        # Step 1: Remove ALL existing symlinks (but not playlist.json or videos.tsv)
-        for item in playlist_dir.iterdir():
-            if item.is_symlink():
-                item.unlink()
+        metadata_path = playlist_dir / "playlist.json"
+        if metadata_path.exists() and self.update_mode in ["videos-incremental", "all-incremental"]:
+            try:
+                with open(metadata_path) as f:
+                    old_data = json.load(f)
+                old_ids = old_data.get('video_ids', [])
+                if old_ids == playlist.video_ids:
+                    return False
+            except Exception:
+                pass
+        with AtomicFileWriter(metadata_path) as f:
+            json.dump(playlist.to_dict(), f, indent=2)
+        return True
 
-        # Step 2: Build video_id -> video_dir mapping
-        video_id_map = self._build_video_id_map()
+    def _compute_desired_symlinks(
+        self, playlist: Playlist, video_id_map: dict[str, Path]
+    ) -> list[tuple[datetime, str, Path]]:
+        """Compute desired symlink list sorted by (published_at, video_id).
 
-        # Step 3: Collect video dirs with published_at for sorting
+        Args:
+            playlist: Playlist model with video_ids
+            video_id_map: Mapping from video_id to video directory path
+
+        Returns:
+            Sorted list of (published_at, video_id, video_dir) tuples
+        """
         videos_with_dates: list[tuple[datetime, str, Path]] = []
         for video_id in playlist.video_ids:
             video_dir = video_id_map.get(video_id)
@@ -590,21 +620,110 @@ class Archiver:
 
             videos_with_dates.append((published_at, video_id, video_dir))
 
-        # Step 4: Sort by (published_at, video_id) — chronological, oldest first
         videos_with_dates.sort(key=lambda x: (x[0], x[1]))
+        return videos_with_dates
 
-        # Step 5: Create sequential symlinks
-        for index, (_published_at, _video_id, video_dir) in enumerate(videos_with_dates, 1):
+    def _read_existing_symlink_order(self, playlist_dir: Path) -> list[tuple[str, Path]]:
+        """Read existing symlinks in order and extract video_ids from targets.
+
+        Args:
+            playlist_dir: Path to playlist directory
+
+        Returns:
+            List of (video_id, symlink_path) tuples in current order
+        """
+        existing: list[tuple[str, Path]] = []
+        symlinks = sorted(
+            [f for f in playlist_dir.iterdir() if f.is_symlink()],
+            key=lambda p: p.name
+        )
+        for symlink in symlinks:
+            try:
+                target = symlink.resolve()
+                metadata_path = target / "metadata.json"
+                if metadata_path.exists():
+                    with open(metadata_path) as f:
+                        metadata = json.load(f)
+                    video_id = metadata.get("video_id", "")
+                    if video_id:
+                        existing.append((video_id, symlink))
+            except Exception as e:
+                logger.debug(f"Failed to read symlink target {symlink.name}: {e}")
+        return existing
+
+    def _update_playlist_symlinks(
+        self, playlist_dir: Path, playlist: Playlist, video_id_map: dict[str, Path]
+    ) -> bool:
+        """Update playlist symlinks, only changing what's different.
+
+        Compares desired state vs existing state. If unchanged, skips entirely
+        (common case for incremental backups). When different, does a full
+        rebuild since index-based names shift on any insertion/deletion.
+
+        Args:
+            playlist_dir: Path to playlist directory
+            playlist: Playlist model with video_ids
+            video_id_map: Pre-built mapping from video_id to video directory
+
+        Returns:
+            True if symlinks were changed, False if already up-to-date
+        """
+        # Compute desired state
+        desired = self._compute_desired_symlinks(playlist, video_id_map)
+
+        # Read existing symlinks
+        existing = self._read_existing_symlink_order(playlist_dir)
+
+        # Compare ordered video_id lists
+        desired_ids = [vid for _, vid, _ in desired]
+        existing_ids = [vid for vid, _ in existing]
+
+        if desired_ids == existing_ids:
+            logger.info(f"Symlinks unchanged for {playlist_dir.name}")
+            return False
+
+        # Different — remove all old symlinks, recreate all
+        for item in playlist_dir.iterdir():
+            if item.is_symlink():
+                item.unlink()
+
+        for index, (_, _, video_dir) in enumerate(desired, 1):
             symlink_name = self._get_playlist_symlink_name(video_dir, index)
-            symlink_path = playlist_dir / symlink_name
-
-            # Create relative symlink (for repository portability)
             relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
-            symlink_path.symlink_to(relative_target)
-            logger.debug(f"Created symlink: {symlink_name} -> {relative_target}")
+            (playlist_dir / symlink_name).symlink_to(relative_target)
 
         logger.info(
-            f"Rebuilt {len(videos_with_dates)} symlinks in {playlist_dir.name} "
+            f"Updated {len(desired)} symlinks in {playlist_dir.name} "
+            f"(chronological order)"
+        )
+        return True
+
+    def _rebuild_playlist_symlinks(self, playlist_dir: Path, playlist: Playlist) -> None:
+        """Rebuild all symlinks in a playlist directory from scratch.
+
+        Unconditionally removes existing symlinks and recreates them.
+        Uses _compute_desired_symlinks for consistent ordering logic.
+
+        Args:
+            playlist_dir: Path to playlist directory
+            playlist: Playlist model with video_ids
+        """
+        video_id_map = self._build_video_id_map(use_cache=False)
+
+        # Remove all existing symlinks
+        for item in playlist_dir.iterdir():
+            if item.is_symlink():
+                item.unlink()
+
+        # Compute desired order and create symlinks
+        desired = self._compute_desired_symlinks(playlist, video_id_map)
+        for index, (_, _, video_dir) in enumerate(desired, 1):
+            symlink_name = self._get_playlist_symlink_name(video_dir, index)
+            relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
+            (playlist_dir / symlink_name).symlink_to(relative_target)
+
+        logger.info(
+            f"Rebuilt {len(desired)} symlinks in {playlist_dir.name} "
             f"(chronological order)"
         )
 
@@ -641,7 +760,7 @@ class Archiver:
                 try:
                     pattern = re.compile(include_podcasts)
                     original_count = len(podcasts)
-                    podcasts = [p for p in podcasts if pattern.search(p['title'])]
+                    podcasts = [p for p in podcasts if pattern.search(p.get('title') or '')]
                     logger.info(f"Podcast filter '{include_podcasts}' matched {len(podcasts)}/{original_count} podcasts")
                 except re.error as e:
                     logger.error(f"Invalid include_podcasts regex '{include_podcasts}': {e}")
@@ -658,7 +777,7 @@ class Archiver:
             try:
                 pattern = re.compile(include_pattern)
                 original_count = len(playlists)
-                playlists = [p for p in playlists if pattern.search(p['title'])]
+                playlists = [p for p in playlists if pattern.search(p.get('title') or '')]
                 logger.info(f"Include filter '{include_pattern}' matched {len(playlists)}/{original_count} playlists")
             except re.error as e:
                 logger.error(f"Invalid include_playlists regex '{include_pattern}': {e}")
@@ -670,7 +789,7 @@ class Archiver:
             try:
                 pattern = re.compile(exclude_pattern)
                 original_count = len(playlists)
-                playlists = [p for p in playlists if not pattern.search(p['title'])]
+                playlists = [p for p in playlists if not pattern.search(p.get('title') or '')]
                 logger.info(f"Exclude filter '{exclude_pattern}' removed {original_count - len(playlists)} playlists")
             except re.error as e:
                 logger.error(f"Invalid exclude_playlists regex '{exclude_pattern}': {e}")
@@ -686,6 +805,13 @@ class Archiver:
     def backup_channel(self, channel_url: str, source_config: SourceConfig | None = None) -> dict:
         """Backup a YouTube channel.
 
+        Phased flow:
+          Phase 1: Channel video discovery
+          Phase 2: Playlist discovery (identifies playlist-exclusive videos)
+          Phase 3: Video processing (channel + exclusive videos)
+          Phase 4: Playlist composition (save metadata + diff-based symlinks)
+          Phase 5: TSV generation (single generate_all())
+
         Args:
             channel_url: YouTube channel URL
             source_config: Optional source configuration for playlists and component overrides
@@ -695,6 +821,7 @@ class Archiver:
         """
         # Set current source for component overrides
         self._current_source_config = source_config
+        self._is_initial_backup = not (self.repo_path / "videos" / "videos.tsv").exists()
         logger.info(f"Starting backup for channel: {channel_url} (mode: {self.update_mode})")
 
         stats: dict[str, Any] = {
@@ -706,10 +833,10 @@ class Archiver:
             "errors": [],
         }
 
-        # Determine what videos to fetch based on update_mode
+        # ── Phase 1: Channel video discovery ──────────────────────────────
         limit = self.config.filters.limit
         existing_video_ids = None
-        videos_metadata = []
+        videos_metadata: list[dict[str, Any]] = []
 
         # Skip video fetching for component-specific modes that don't need videos
         skip_video_fetch = self.update_mode in ["social", "comments", "captions", "playlists"]
@@ -725,13 +852,10 @@ class Archiver:
 
             if existing_video_ids:
                 logger.info(f"Incremental mode: filtering {len(existing_video_ids)} existing videos")
-                # YouTube service uses two-pass approach: extract_flat for IDs, then full metadata for new only
             else:
                 logger.info("No existing videos.tsv found, performing full initial backup")
 
         # Fetch videos (unless in component-specific mode)
-        # NOTE: In incremental mode, we don't use limit - we fetch until we hit existing videos.
-        # This is more efficient than fetching a fixed number that might all be existing.
         if not skip_video_fetch:
             all_videos = self.youtube.get_channel_videos(
                 channel_url,
@@ -740,9 +864,6 @@ class Archiver:
             )
 
             # Apply date filter only for non-incremental, non-initial backups.
-            # In incremental mode, the two-pass approach already returns only NEW videos
-            # that need backing up regardless of age. The date_from "social window" is for
-            # refreshing social data on existing videos, not for gating new video discovery.
             is_initial_backup = not existing_video_ids
             is_incremental = existing_video_ids is not None and len(existing_video_ids) > 0
             if (self.date_from or self.date_to) and not is_initial_backup and not is_incremental:
@@ -762,7 +883,6 @@ class Archiver:
             videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
 
             if videos_tsv_path.exists():
-                # Read existing videos from TSV
                 total_videos = 0
                 with open(videos_tsv_path, encoding='utf-8') as f:
                     reader = csv.DictReader(f, delimiter='\t')
@@ -771,13 +891,11 @@ class Archiver:
                         video_id = row.get("video_id")
                         video_path_str = row.get("path")
                         if video_id and video_path_str:
-                            # Load metadata from disk
                             video_path = self.repo_path / "videos" / video_path_str
                             metadata_path = video_path / "metadata.json"
                             if metadata_path.exists():
                                 with open(metadata_path) as f:
                                     video_meta = json.load(f)
-                                    # Apply date filter
                                     if self._should_process_video_by_date(video_meta):
                                         videos_metadata.append(video_meta)
 
@@ -789,25 +907,69 @@ class Archiver:
                 logger.warning("No videos.tsv found, cannot process component updates")
                 return stats
 
-        if not videos_metadata:
+        # ── Phase 2: Playlist discovery (BEFORE video processing) ─────────
+        playlists_info: list[tuple[Playlist, Path, str]] = []  # (playlist, playlist_dir, url)
+
+        if (source_config and source_config.include_playlists != "none" and
+                self._should_process_component("playlists")):
+            logger.info("Discovering playlists from channel...")
+            playlist_urls = self._discover_playlists(
+                channel_url,
+                source_config.include_playlists,
+                source_config.exclude_playlists,
+                source_config.include_podcasts
+            )
+
+            # Build set of channel video IDs for exclusive detection
+            channel_video_ids: set[str] = set()
+            for v in videos_metadata:
+                vid = v.get('id') or v.get('video_id')
+                if vid:
+                    channel_video_ids.add(vid)
+
+            exclusive_video_ids: list[str] = []
+
+            for url in playlist_urls:
+                playlist = self.youtube.get_playlist_metadata(url)
+                if not playlist:
+                    logger.warning(f"Failed to fetch playlist metadata for {url}, skipping")
+                    continue
+                playlist_dir = self._get_playlist_path(playlist)
+                playlist_dir.mkdir(parents=True, exist_ok=True)
+                playlists_info.append((playlist, playlist_dir, url))
+
+                # Collect playlist-exclusive video IDs
+                for vid in playlist.video_ids:
+                    if vid not in channel_video_ids:
+                        exclusive_video_ids.append(vid)
+
+            # Deduplicate exclusive IDs (preserve order)
+            exclusive_video_ids = list(dict.fromkeys(exclusive_video_ids))
+
+            # Fetch full metadata for exclusive videos
+            if exclusive_video_ids and self.update_mode != "playlists":
+                logger.info(f"Found {len(exclusive_video_ids)} playlist-exclusive video(s), fetching metadata")
+                exclusive_meta = self.youtube.get_videos_metadata(exclusive_video_ids)
+                videos_metadata.extend(exclusive_meta)
+
+        if not videos_metadata and not playlists_info:
             logger.warning("No videos found")
             return stats
 
-        # Skip video processing entirely in playlists mode - we only need video IDs for playlist linkage
-        if self.update_mode != "playlists":
+        # ── Phase 3: Video processing (ALL videos: channel + exclusive) ───
+        if self.update_mode != "playlists" and videos_metadata:
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
-            # Batch pre-fetch API data for efficiency (instead of per-video API calls)
+            # Batch pre-fetch API data for efficiency
             prefetched_stats: dict[str, dict[str, int]] | None = None
             api_metadata_cache: dict[str, dict] | None = None
 
             if self.youtube.api_client:
-                # For all-incremental mode: batch-fetch statistics for existing videos
                 if self.update_mode == "all-incremental":
                     existing_ids: list[str] = [
                         vid
                         for v in videos_metadata
-                        if v.get("video_id")  # stored metadata has video_id
+                        if v.get("video_id")
                         for vid in [v.get("video_id") or v.get("id")]
                         if vid is not None
                     ]
@@ -819,11 +981,10 @@ class Archiver:
                         except Exception as e:
                             logger.warning(f"Failed to batch-fetch statistics: {e}")
 
-                # For new videos: batch-fetch enhanced API metadata
                 new_video_ids: list[str] = [
                     v["id"]
                     for v in videos_metadata
-                    if v.get("id") and not v.get("video_id")  # yt-dlp metadata (new videos) uses "id"
+                    if v.get("id") and not v.get("video_id")
                 ]
                 if new_video_ids:
                     logger.info(f"Batch-fetching API metadata for {len(new_video_ids)} new video(s)")
@@ -851,7 +1012,7 @@ class Archiver:
                     if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
                         self._checkpoint(channel_url, i, len(videos_metadata))
 
-                # Final commit (if checkpoints disabled or remaining videos after last checkpoint)
+                # Final commit for video work
                 if self._has_uncommitted_changes():
                     self.git_annex.add_and_commit(
                         f"Backup channel: {channel_url} ({stats['videos_processed']} videos)"
@@ -860,11 +1021,9 @@ class Archiver:
             except KeyboardInterrupt:
                 logger.warning("Backup interrupted by user (Ctrl+C)")
 
-                # Auto-commit partial progress if enabled
                 if self.config.backup.auto_commit_on_interrupt and self._has_uncommitted_changes():
                     logger.info(f"Auto-committing partial progress ({stats['videos_processed']} videos processed)...")
                     try:
-                        # Regenerate TSVs to include all processed videos
                         self.export.generate_all()
                         self.git_annex.add_and_commit(
                             f"Partial backup (interrupted): {channel_url} ({stats['videos_processed']} videos)"
@@ -874,39 +1033,33 @@ class Archiver:
                         logger.error(f"Failed to commit partial progress: {e}")
                         logger.info("Uncommitted changes remain. Run 'git status' to inspect.")
 
-                # Re-raise to propagate interruption
                 raise
 
             logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
-        else:
-            logger.info(f"Playlists mode: skipping video processing ({len(videos_metadata)} existing videos available for playlist linkage)")
+        elif self.update_mode == "playlists":
+            logger.info("Playlists mode: skipping video processing")
 
-        # Auto-discover and backup playlists if configured AND mode allows playlist processing
-        # Component-specific modes (comments, captions, social) should not process playlists
-        if (source_config and source_config.include_playlists != "none" and
-                self._should_process_component("playlists")):
-            logger.info("Discovering playlists from channel...")
-            playlist_urls = self._discover_playlists(
-                channel_url,
-                source_config.include_playlists,
-                source_config.exclude_playlists,
-                source_config.include_podcasts
-            )
+        # ── Phase 4: Playlist composition ─────────────────────────────────
+        if playlists_info:
+            self._invalidate_video_id_map_cache()
+            video_id_map = self._build_video_id_map()
 
-            # Playlist errors will propagate (fail-fast)
-            for playlist_url in playlist_urls:
-                playlist_stats = self.backup_playlist(playlist_url, source_config=source_config)
-                stats["videos_processed"] += playlist_stats.get("videos_processed", 0)
-                stats["videos_tracked"] += playlist_stats.get("videos_tracked", 0)
-                stats["metadata_saved"] += playlist_stats.get("metadata_saved", 0)
-                stats["captions_downloaded"] += playlist_stats.get("captions_downloaded", 0)
-                stats["errors"].extend(playlist_stats.get("errors", []))
+            for playlist, playlist_dir, _url in playlists_info:
+                self._save_playlist_metadata(playlist, playlist_dir)
+                self._update_playlist_symlinks(playlist_dir, playlist, video_id_map)
 
-        # Generate TSV metadata files (non-critical, can be regenerated later)
+            # Single commit for all playlist work
+            if self._has_uncommitted_changes():
+                self.git_annex.add_and_commit(
+                    f"Update playlists ({len(playlists_info)} playlists)"
+                )
+
+        # ── Phase 5: TSV generation ───────────────────────────────────────
         try:
             logger.info("Generating TSV metadata files")
             self.export.generate_all()
-            self.git_annex.add_and_commit("Update TSV metadata files")
+            if self._has_uncommitted_changes():
+                self.git_annex.add_and_commit("Update TSV metadata files")
         except Exception as e:
             logger.warning(f"Failed to generate TSV files: {e}")
 
@@ -923,7 +1076,10 @@ class Archiver:
         return stats
 
     def backup_playlist(self, playlist_url: str, source_config: SourceConfig | None = None) -> dict:
-        """Backup a YouTube playlist.
+        """Backup a YouTube playlist (standalone entry point).
+
+        Complete self-contained flow for ad-hoc playlist backup:
+        fetch metadata, process videos, compose symlinks, generate TSVs.
 
         Args:
             playlist_url: YouTube playlist URL
@@ -934,6 +1090,10 @@ class Archiver:
         """
         # Set current source for component overrides
         self._current_source_config = source_config
+        # Use instance-level is_initial_backup if set (by backup_channel),
+        # otherwise check file existence
+        if self._is_initial_backup is None:
+            self._is_initial_backup = not (self.repo_path / "videos" / "videos.tsv").exists()
         logger.info(f"Starting backup for playlist: {playlist_url}")
 
         stats: dict[str, Any] = {
@@ -957,7 +1117,6 @@ class Archiver:
 
         # Get playlist videos
         limit = self.config.filters.limit
-        # Enable incremental mode to skip known unavailable videos
         incremental = self.update_mode in ["videos-incremental", "all-incremental", "playlists"]
         all_videos = self.youtube.get_playlist_videos(
             playlist_url,
@@ -967,16 +1126,14 @@ class Archiver:
         )
 
         # Apply date filter if specified (but NOT on initial backup)
-        # Check if this is initial backup by looking for existing TSV
-        videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
-        is_initial_backup = not videos_tsv_path.exists()
+        is_initial = self._is_initial_backup
 
-        if (self.date_from or self.date_to) and not is_initial_backup:
+        if (self.date_from or self.date_to) and not is_initial:
             videos_metadata = [v for v in all_videos if self._should_process_video_by_date(v)]
             logger.info(f"Filtered {len(all_videos)} videos to {len(videos_metadata)} within date range")
         else:
             videos_metadata = all_videos
-            if is_initial_backup and (self.date_from or self.date_to):
+            if is_initial and (self.date_from or self.date_to):
                 logger.info(f"Skipping date filter on initial backup - processing all {len(all_videos)} videos")
 
         if not videos_metadata:
@@ -985,35 +1142,16 @@ class Archiver:
 
         logger.info(f"Found {len(videos_metadata)} videos in playlist")
 
-        # Check if playlist content changed (for incremental modes)
-        playlist_changed = True
-        metadata_path = playlist_dir / "playlist.json"
-
-        if metadata_path.exists() and self.update_mode in ["videos-incremental", "all-incremental"]:
-            try:
-                with open(metadata_path) as f:
-                    old_data = json.load(f)
-                    old_video_ids = [v['video_id'] for v in old_data.get('videos', [])]
-                    new_video_ids = [v.get('id') for v in videos_metadata if v.get('id')]
-
-                    if old_video_ids == new_video_ids:
-                        playlist_changed = False
-                        logger.info(f"Playlist content unchanged, skipping update: {playlist.title}")
-            except Exception as e:
-                logger.debug(f"Failed to compare playlist content: {e}")
-                playlist_changed = True
-
-        # Only update playlist metadata if content changed
-        if playlist_changed:
-            with AtomicFileWriter(metadata_path) as f:
-                json.dump(playlist.to_dict(), f, indent=2)
-            logger.debug(f"Saved playlist metadata: {metadata_path}")
+        # Save playlist metadata (with change detection)
+        playlist_changed = self._save_playlist_metadata(playlist, playlist_dir)
 
         # Skip video processing in playlists mode if content unchanged
         if not playlist_changed and self.update_mode == "playlists":
             logger.info("Playlist content unchanged, skipping video processing")
-            # Still rebuild symlinks — video directories may have been added from channel backup
-            self._rebuild_playlist_symlinks(playlist_dir, playlist)
+            # Still update symlinks — video directories may have been added from channel backup
+            self._invalidate_video_id_map_cache()
+            video_id_map = self._build_video_id_map()
+            self._update_playlist_symlinks(playlist_dir, playlist, video_id_map)
             return stats
 
         # Process each video with checkpoint support
@@ -1029,7 +1167,6 @@ class Archiver:
                     logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
                 else:
                     logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                    # Process video (creates video directory with content)
                     caption_count = self._process_video(video)
 
                     stats["videos_processed"] += 1
@@ -1041,7 +1178,7 @@ class Archiver:
                 if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
                     self._checkpoint(playlist_url, i, len(videos_metadata))
 
-            # Final commit (if checkpoints disabled or remaining videos after last checkpoint)
+            # Commit video work
             if self._has_uncommitted_changes():
                 self.git_annex.add_and_commit(
                     f"Backup playlist: {playlist.title} ({stats['videos_processed']} videos)"
@@ -1050,11 +1187,9 @@ class Archiver:
         except KeyboardInterrupt:
             logger.warning("Backup interrupted by user (Ctrl+C)")
 
-            # Auto-commit partial progress if enabled
             if self.config.backup.auto_commit_on_interrupt and self._has_uncommitted_changes():
                 logger.info(f"Auto-committing partial progress ({stats['videos_processed']} videos processed)...")
                 try:
-                    # Regenerate TSVs to include all processed videos
                     self.export.generate_all()
                     self.git_annex.add_and_commit(
                         f"Partial backup (interrupted): {playlist.title} ({stats['videos_processed']} videos)"
@@ -1064,19 +1199,21 @@ class Archiver:
                     logger.error(f"Failed to commit partial progress: {e}")
                     logger.info("Uncommitted changes remain. Run 'git status' to inspect.")
 
-            # Re-raise to propagate interruption
             raise
 
         logger.info(f"Backup complete: {stats['videos_processed']} videos processed")
 
-        # Rebuild playlist symlinks from scratch (chronological order)
-        self._rebuild_playlist_symlinks(playlist_dir, playlist)
+        # Compose symlinks
+        self._invalidate_video_id_map_cache()
+        video_id_map = self._build_video_id_map()
+        self._update_playlist_symlinks(playlist_dir, playlist, video_id_map)
 
-        # Generate TSV metadata files (non-critical, can be regenerated later)
+        # Generate TSV metadata files
         try:
             logger.info("Generating TSV metadata files")
             self.export.generate_all()
-            self.git_annex.add_and_commit("Update TSV metadata files")
+            if self._has_uncommitted_changes():
+                self.git_annex.add_and_commit("Update TSV metadata files")
         except Exception as e:
             logger.warning(f"Failed to generate TSV files: {e}")
 
