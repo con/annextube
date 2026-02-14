@@ -242,11 +242,11 @@ class YouTubeService:
             opts["extractor_args"] = self.extractor_args
             logger.debug(f"yt-dlp: Using extractor args: {self.extractor_args}")
 
-        # Add remote components (e.g., ejs:github for JS challenge solver with deno)
-        if self.remote_components:
-            # remote_components should be a list in Python API
-            opts["remote_components"] = [self.remote_components]
-            logger.debug(f"yt-dlp: Using remote components: {self.remote_components}")
+        # Enable remote components for JS challenge solver.
+        # Default to ejs:github since deno is a core dependency.
+        remote = self.remote_components or "ejs:github"
+        opts["remote_components"] = [remote]
+        logger.debug(f"yt-dlp: Using remote components: {remote}")
 
         # Log full options for debugging
         logger.debug(f"yt-dlp options: {opts}")
