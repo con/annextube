@@ -1038,11 +1038,7 @@ class YouTubeService:
 
         try:
             # Get available captions without downloading
-            ydl_opts_info = {
-                "quiet": True,
-                "no_warnings": True,
-                "skip_download": True,
-            }
+            ydl_opts_info = self._get_ydl_opts(download=False)
 
             with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
                 info = ydl.extract_info(video_url, download=False)
@@ -1099,16 +1095,14 @@ class YouTubeService:
             )
 
             # Download selected captions
-            ydl_opts = {
-                "quiet": True,
-                "no_warnings": True,
-                "skip_download": True,
+            ydl_opts = self._get_ydl_opts(download=False)
+            ydl_opts.update({
                 "writesubtitles": True,
                 "writeautomaticsub": True,
                 "subtitleslangs": langs_to_download,
                 "subtitlesformat": "vtt",
                 "outtmpl": str(output_dir / "%(id)s.%(ext)s"),
-            }
+            })
 
             def _download():
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -1278,13 +1272,11 @@ class YouTubeService:
         if not comments:
             video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-            ydl_opts: dict[str, Any] = {
-                "quiet": True,
-                "no_warnings": True,
-                "skip_download": True,
+            ydl_opts = self._get_ydl_opts(download=False)
+            ydl_opts.update({
                 "getcomments": True,
                 "writeinfojson": False,  # Don't write info json
-            }
+            })
 
             # Configure comment fetching with reply support
             # Format: [max_parents, max_replies_per_thread, max_total_replies, reserved]

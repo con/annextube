@@ -256,7 +256,10 @@ class TestE2EBackupFeatures:
         # Verify path is derived from title (not ID)
         # For multi-word titles, at least one word should appear in path
         # For single-word titles, the whole title should match (case-insensitive, sanitized)
-        title_words = [w for w in title_value.split() if len(w) > 3]
+        import re as _re
+        # Sanitize title words same way as path sanitizer (strip non-alnum chars)
+        title_words = [_re.sub(r'[^a-zA-Z0-9]', '', w) for w in title_value.split() if len(w) > 3]
+        title_words = [w for w in title_words if len(w) > 3]
         if title_words:
             # Multi-word title: check if any significant word appears
             assert any(
