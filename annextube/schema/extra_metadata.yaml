@@ -1,0 +1,130 @@
+id: https://github.com/con/annextube/schema/extra-metadata
+name: extra-metadata
+prefixes:
+  linkml: https://w3id.org/linkml/
+  datacite: https://purl.org/datacite/v4.4/
+  schema: http://schema.org/
+
+imports:
+  - linkml:types
+
+classes:
+  ExtraMetadata:
+    description: >-
+      User-provided supplemental metadata for a video.
+      Merged into metadata.json during export (extra fields are additive,
+      never overwrite archiver-managed fields).
+    attributes:
+      related_resources:
+        range: RelatedResource
+        multivalued: true
+        description: Related resources (slides, papers, code, etc.)
+        inlined_as_list: true
+
+  RelatedResource:
+    description: >-
+      A resource related to the video, using DataCite relationType
+      and resourceTypeGeneral controlled vocabularies.
+    attributes:
+      url:
+        range: uri
+        required: true
+        description: URL of the related resource
+      title:
+        range: string
+        description: Human-readable title
+      relation_type:
+        range: RelationType
+        description: >-
+          Relationship of this resource to the video.
+          DataCite Metadata Schema v4.6 relationType vocabulary.
+      resource_type_general:
+        range: ResourceTypeGeneral
+        description: >-
+          General type of the resource.
+          DataCite Metadata Schema v4.6 resourceTypeGeneral vocabulary.
+      resource_type:
+        range: string
+        description: >-
+          Specific type of the resource (free text).
+          E.g. "Presentation slides", "Conference paper", "Closed captions".
+          Pairs with resource_type_general for granularity.
+
+enums:
+  RelationType:
+    description: >-
+      DataCite Metadata Schema v4.6 relation types (subset relevant to
+      video-resource relationships). Full list at
+      https://datacite-metadata-schema.readthedocs.io/en/4.6/appendices/appendix-1/relationType/
+    permissible_values:
+      IsSupplementedBy:
+        description: "A has supplement B (e.g. video has slides)"
+      IsSupplementTo:
+        description: "A is supplement to B"
+      IsDocumentedBy:
+        description: "B is documentation about/explaining A"
+      Documents:
+        description: "A is documentation about B"
+      IsDescribedBy:
+        description: "B provides a description of A"
+      Describes:
+        description: "A describes B"
+      References:
+        description: "A uses B as information source"
+      IsReferencedBy:
+        description: "B uses A as information source"
+      IsDerivedFrom:
+        description: "A is derived from B"
+      IsSourceOf:
+        description: "A is source of B"
+      HasPart:
+        description: "A includes B"
+      IsPartOf:
+        description: "A is portion of B"
+      IsVariantFormOf:
+        description: "A is variant of B (e.g. translated slides)"
+      IsOriginalFormOf:
+        description: "A is original form of B"
+      Cites:
+        description: "A includes B in a citation"
+      IsCitedBy:
+        description: "B includes A in a citation"
+      IsNewVersionOf:
+        description: "A is newer edition of B"
+      IsPreviousVersionOf:
+        description: "A is older edition of B"
+
+  ResourceTypeGeneral:
+    description: >-
+      DataCite Metadata Schema v4.6 resource types (subset relevant to
+      video-related resources). Full list at
+      https://datacite-metadata-schema.readthedocs.io/en/4.6/appendices/appendix-1/resourceTypeGeneral/
+    permissible_values:
+      Audiovisual:
+        description: "Video, film, etc."
+      Book:
+        description: "A book or monograph"
+      BookChapter:
+        description: "A chapter of a book"
+      Collection:
+        description: "Aggregation of resources"
+      ComputationalNotebook:
+        description: "Jupyter notebooks, etc."
+      ConferencePaper:
+        description: "Conference paper"
+      Dataset:
+        description: "Structured data"
+      Image:
+        description: "Visual representation (poster, diagram)"
+      JournalArticle:
+        description: "Journal article"
+      Preprint:
+        description: "Pre-peer-review paper"
+      Report:
+        description: "Organized information document"
+      Software:
+        description: "Computer program or source code"
+      Text:
+        description: "General text (slides, blog posts, etc.)"
+      Other:
+        description: "Catch-all for uncategorized resources"
