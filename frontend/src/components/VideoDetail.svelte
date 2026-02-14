@@ -23,6 +23,11 @@
   const initialTab = (urlParams.tab === 'local' || urlParams.tab === 'youtube') ? urlParams.tab : undefined;
   const initialTime = urlParams.t ? Number(urlParams.t) : undefined;
   const initialLang = urlParams.lang || undefined;
+  const initialSearchQuery = urlParams.q || undefined;
+  const initialCaseSensitive = urlParams.cs === '1';
+  const initialUseRegex = urlParams.re === '1';
+  const initialFilterMode = urlParams.filter === '1';
+  const initialMatchPos = urlParams.match ? Number(urlParams.match) : undefined;
 
   let playerRef: VideoPlayer;
   let currentTime: number = 0;
@@ -48,6 +53,11 @@
   // Track current state for URL params
   let currentTab: 'local' | 'youtube' = initialTab || 'local';
   let currentLang: string | undefined = initialLang;
+  let currentSearchQuery = initialSearchQuery || '';
+  let currentCaseSensitive = initialCaseSensitive;
+  let currentUseRegex = initialUseRegex;
+  let currentFilterMode = initialFilterMode;
+  let currentMatchPos = initialMatchPos || 0;
 
   function updateVideoParams() {
     const params = new URLSearchParams();
@@ -57,6 +67,11 @@
     const t = Math.floor(currentTime);
     if (t > 0) params.set('t', String(t));
     if (currentLang && currentLang !== 'en') params.set('lang', currentLang);
+    if (currentSearchQuery) params.set('q', currentSearchQuery);
+    if (currentCaseSensitive) params.set('cs', '1');
+    if (currentUseRegex) params.set('re', '1');
+    if (currentFilterMode) params.set('filter', '1');
+    if (currentMatchPos > 0) params.set('match', String(currentMatchPos));
 
     const hash = window.location.hash;
     const qIdx = hash.indexOf('?');
@@ -154,9 +169,22 @@
         {channelDir}
         {currentTime}
         {initialLang}
+        {initialSearchQuery}
+        {initialCaseSensitive}
+        {initialUseRegex}
+        {initialFilterMode}
+        {initialMatchPos}
         onSeek={(time) => { playerRef?.seekTo(time); updateVideoParams(); }}
         onHide={() => { captionVisible = false; updateVideoParams(); }}
         onLangChange={(lang) => { currentLang = lang; updateVideoParams(); }}
+        onSearchStateChange={(state) => {
+          currentSearchQuery = state.query;
+          currentCaseSensitive = state.caseSensitive;
+          currentUseRegex = state.useRegex;
+          currentFilterMode = state.filterMode;
+          currentMatchPos = state.matchPos;
+          updateVideoParams();
+        }}
       />
     {/if}
   </div>

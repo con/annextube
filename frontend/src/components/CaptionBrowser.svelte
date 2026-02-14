@@ -12,18 +12,28 @@
   export let onHide: () => void = () => {};
   export let initialLang: string | undefined = undefined;
   export let onLangChange: ((lang: string) => void) | undefined = undefined;
+  export let initialSearchQuery: string | undefined = undefined;
+  export let initialCaseSensitive: boolean = false;
+  export let initialUseRegex: boolean = false;
+  export let initialFilterMode: boolean = false;
+  export let initialMatchPos: number | undefined = undefined;
+  export let onSearchStateChange: ((state: { query: string; caseSensitive: boolean; useRegex: boolean; filterMode: boolean; matchPos: number }) => void) | undefined = undefined;
 
   // Internal state
   let selectedLang: string = '';
   let cues: VttCue[] = [];
   let loading = false;
   let error = '';
-  let searchQuery = '';
+  let searchQuery = initialSearchQuery || '';
   let autoScroll = true;
   let activeCueIndex = -1;
-  let caseSensitive = false;
-  let useRegex = false;
-  let filterMode = false; // true = hide non-matching cues; false = dim them
+  let caseSensitive = initialCaseSensitive;
+  let useRegex = initialUseRegex;
+  let filterMode = initialFilterMode; // true = hide non-matching cues; false = dim them
+
+  function notifySearchStateChange() {
+    onSearchStateChange?.({ query: searchQuery, caseSensitive, useRegex, filterMode, matchPos: currentMatchPos });
+  }
 
   function toggleFilterMode() {
     filterMode = !filterMode;
@@ -32,6 +42,7 @@
     if (!filterMode && matchCount > 0) {
       scrollToMatch(currentMatchPos);
     }
+    notifySearchStateChange();
   }
 
   // DOM refs
@@ -95,10 +106,19 @@
 
   // Current search match navigation
   let currentMatchPos = 0;
+  let searchInitialized = false;
   $: if (matchingIndices.length > 0) {
-    // Reset to first match and scroll to it
-    currentMatchPos = 0;
-    scrollToMatch(0);
+    if (!searchInitialized && initialMatchPos != null && initialMatchPos >= 0 && initialMatchPos < matchingIndices.length) {
+      // First match computation with a restored position from URL
+      currentMatchPos = initialMatchPos;
+      scrollToMatch(initialMatchPos);
+      searchInitialized = true;
+    } else {
+      // Normal behavior: reset to first match
+      currentMatchPos = 0;
+      scrollToMatch(0);
+      searchInitialized = true;
+    }
   } else {
     currentMatchPos = 0;
   }
@@ -208,6 +228,7 @@
     if (matchCount === 0) return;
     currentMatchPos = (currentMatchPos + direction + matchCount) % matchCount;
     scrollToMatch(currentMatchPos);
+    notifySearchStateChange();
   }
 
   function handleSearchKeydown(event: KeyboardEvent) {
@@ -294,19 +315,20 @@
         class="search-input"
         placeholder="Search (Enter/Shift+Enter to navigate)"
         bind:value={searchQuery}
+        on:input={notifySearchStateChange}
         on:keydown={handleSearchKeydown}
       />
       <button
         class="option-btn"
         class:active={caseSensitive}
-        on:click={() => caseSensitive = !caseSensitive}
+        on:click={() => { caseSensitive = !caseSensitive; notifySearchStateChange(); }}
         title="Case sensitive"
         aria-pressed={caseSensitive}
       >C</button>
       <button
         class="option-btn"
         class:active={useRegex}
-        on:click={() => useRegex = !useRegex}
+        on:click={() => { useRegex = !useRegex; notifySearchStateChange(); }}
         title="Regular expression"
         aria-pressed={useRegex}
       >.*</button>
