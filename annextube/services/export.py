@@ -458,6 +458,8 @@ class ExportService:
         Args:
             output_path: Path to output file
         """
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\t"
                     "duration\tview_count\tlike_count\tcomment_count\t"
