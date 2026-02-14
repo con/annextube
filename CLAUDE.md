@@ -72,8 +72,11 @@ specs/001-youtube-backup/     # Feature specification and planning
 # Install dependencies
 uv pip install -e ".[devel]"
 
-# Run tests
-pytest tests/
+# Run all non-network tests (default: -m "not network")
+uv run tox -e py3
+
+# Run network tests too (requires deno + cookies, see below)
+uv run pytest tests/ -m ""
 
 # Lint
 ruff check annextube/ tests/
@@ -85,6 +88,19 @@ mypy annextube/
 cd frontend && npm test
 cd frontend && npm run test:e2e
 ```
+
+**Full test sweep** (network + e2e):
+
+yt-dlp requires a JavaScript runtime (deno) and YouTube cookies to avoid
+bot detection. To run the full test suite including network tests:
+
+1. Install deno: `pip install deno` (or via conda/miniconda)
+2. Set `ANNEXTUBE_COOKIES_FILE` to a Netscape-format cookies.txt exported
+   from a browser session where you are logged in to YouTube
+3. Run: `uv run tox -e py3 -- -m ""`
+
+Without cookies, network tests will fail with "Sign in to confirm you're
+not a bot" errors. Non-network tests always work without cookies.
 
 **CLI Usage**:
 ```bash
