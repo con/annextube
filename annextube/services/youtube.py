@@ -777,7 +777,7 @@ class YouTubeService:
 
                         playlists.append({
                             "id": playlist_id or entry.get("id"),
-                            "title": entry.get("title", "Unknown"),
+                            "title": entry.get("title") or "Unknown",
                             "url": url,
                             "video_count": entry.get("playlist_count", 0),
                         })
@@ -826,7 +826,7 @@ class YouTubeService:
 
                         podcasts.append({
                             "id": playlist_id or entry.get("id"),
-                            "title": entry.get("title", "Unknown"),
+                            "title": entry.get("title") or "Unknown",
                             "url": url,
                             "video_count": entry.get("playlist_count", 0),
                         })

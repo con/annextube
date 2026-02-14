@@ -760,7 +760,7 @@ class Archiver:
                 try:
                     pattern = re.compile(include_podcasts)
                     original_count = len(podcasts)
-                    podcasts = [p for p in podcasts if pattern.search(p['title'])]
+                    podcasts = [p for p in podcasts if pattern.search(p.get('title') or '')]
                     logger.info(f"Podcast filter '{include_podcasts}' matched {len(podcasts)}/{original_count} podcasts")
                 except re.error as e:
                     logger.error(f"Invalid include_podcasts regex '{include_podcasts}': {e}")
@@ -777,7 +777,7 @@ class Archiver:
             try:
                 pattern = re.compile(include_pattern)
                 original_count = len(playlists)
-                playlists = [p for p in playlists if pattern.search(p['title'])]
+                playlists = [p for p in playlists if pattern.search(p.get('title') or '')]
                 logger.info(f"Include filter '{include_pattern}' matched {len(playlists)}/{original_count} playlists")
             except re.error as e:
                 logger.error(f"Invalid include_playlists regex '{include_pattern}': {e}")
@@ -789,7 +789,7 @@ class Archiver:
             try:
                 pattern = re.compile(exclude_pattern)
                 original_count = len(playlists)
-                playlists = [p for p in playlists if not pattern.search(p['title'])]
+                playlists = [p for p in playlists if not pattern.search(p.get('title') or '')]
                 logger.info(f"Exclude filter '{exclude_pattern}' removed {original_count - len(playlists)} playlists")
             except re.error as e:
                 logger.error(f"Invalid exclude_playlists regex '{exclude_pattern}': {e}")
