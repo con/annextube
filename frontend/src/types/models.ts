@@ -33,6 +33,14 @@ export interface Channel {
   channel_dir?: string; // Relative path to channel directory (for multi-channel collections)
 }
 
+export interface RelatedResource {
+  url: string;
+  title?: string;
+  relation_type?: string;
+  resource_type_general?: string;
+  resource_type?: string;
+}
+
 export interface Video {
   video_id: string;
   title: string;
@@ -59,6 +67,7 @@ export interface Video {
   source_url: string;
   fetched_at: string; // ISO 8601 datetime
   updated_at: string; // ISO 8601 datetime
+  related_resources?: RelatedResource[];
 }
 
 export interface Playlist {

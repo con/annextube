@@ -246,6 +246,25 @@
             {#if fullMetadata.captions_available.length > 0}
               <div><strong>Captions:</strong> {fullMetadata.captions_available.join(', ')}</div>
             {/if}
+            {#if fullMetadata.related_resources && fullMetadata.related_resources.length > 0}
+              <div>
+                <strong>Related Resources:</strong>
+                <ul class="related-resources">
+                  {#each fullMetadata.related_resources as res}
+                    <li>
+                      {#if res.resource_type}
+                        <span class="resource-type">[{res.resource_type}]</span>
+                      {:else if res.resource_type_general}
+                        <span class="resource-type">[{res.resource_type_general}]</span>
+                      {/if}
+                      <a href={res.url} target="_blank" rel="noopener noreferrer">
+                        {res.title || res.url}
+                      </a>
+                    </li>
+                  {/each}
+                </ul>
+              </div>
+            {/if}
             {#if fullMetadata.description}
               <div class="description-text">
                 <strong>Description:</strong>
@@ -454,6 +473,31 @@
 
   .details-meta strong {
     font-weight: 500;
+  }
+
+  .related-resources {
+    margin: 4px 0 0 0;
+    padding-left: 20px;
+    list-style: none;
+  }
+
+  .related-resources li {
+    margin: 4px 0;
+  }
+
+  .related-resources a {
+    color: #065fd4;
+    text-decoration: none;
+  }
+
+  .related-resources a:hover {
+    text-decoration: underline;
+  }
+
+  .resource-type {
+    color: #606060;
+    font-size: 13px;
+    margin-right: 4px;
   }
 
   .description-text {
