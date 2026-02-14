@@ -3,6 +3,7 @@
   import type { Video } from '@/types/models';
   import { checkVideoAvailability } from '@/services/availability';
   import { dataLoader } from '@/services/data-loader';
+  import { formatCaptionLang } from '@/utils/format';
 
   export let video: Video;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
@@ -312,7 +313,7 @@
                 kind="subtitles"
                 src={getCaptionPath(lang)}
                 srclang={lang}
-                label={lang.toUpperCase()}
+                label={formatCaptionLang(lang)}
               />
             {/each}
 

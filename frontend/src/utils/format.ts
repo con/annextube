@@ -120,3 +120,44 @@ export function formatCommentCount(count: number): string {
   }
   return `${count} comment${count !== 1 ? 's' : ''}`;
 }
+
+/**
+ * Known caption variant suffixes produced by yt-dlp.
+ *
+ * yt-dlp appends these to the base language code when multiple caption
+ * tracks exist for the same language (e.g., both curated and original).
+ */
+const VARIANT_LABELS: Record<string, string> = {
+  'orig': 'original',
+  'cur1': 'curated',
+  'cur2': 'curated 2',
+  'cur3': 'curated 3',
+};
+
+/**
+ * Format a caption language code for display.
+ *
+ * Handles both simple codes ("en" -> "EN") and yt-dlp variant codes
+ * ("en-cur1" -> "EN (curated)").  Unknown suffixes are shown as-is
+ * ("en-xyz" -> "EN-XYZ").
+ *
+ * @param code - Language code from captions_available (e.g., "en", "en-cur1", "pt-BR")
+ * @returns Human-readable label
+ */
+export function formatCaptionLang(code: string): string {
+  // Try to match a known variant suffix after the base language.
+  // yt-dlp variant pattern: <lang>-<variant>  (e.g., en-cur1, en-orig)
+  // Must distinguish from standard BCP 47 subtags (pt-BR, zh-Hans).
+  const hyphenIdx = code.indexOf('-');
+  if (hyphenIdx > 0) {
+    const suffix = code.slice(hyphenIdx + 1);
+    const label = VARIANT_LABELS[suffix];
+    if (label) {
+      const baseLang = code.slice(0, hyphenIdx).toUpperCase();
+      return `${baseLang} (${label})`;
+    }
+  }
+
+  // No known variant -- just uppercase the whole code.
+  return code.toUpperCase();
+}

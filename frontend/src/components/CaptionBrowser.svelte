@@ -2,7 +2,7 @@
   import { onMount, afterUpdate } from 'svelte';
   import type { Video } from '@/types/models';
   import { parseVtt, type VttCue } from '@/utils/vtt-parser';
-  import { formatDuration } from '@/utils/format';
+  import { formatDuration, formatCaptionLang } from '@/utils/format';
   import { dataLoader } from '@/services/data-loader';
 
   export let video: Video;
@@ -292,20 +292,32 @@
           on:change={handleLanguageChange}
         >
           {#each languages as lang}
-            <option value={lang}>{lang.toUpperCase()}</option>
+            <option value={lang}>{formatCaptionLang(lang)}</option>
           {/each}
         </select>
       {:else if languages.length === 1}
-        <span class="lang-badge">{languages[0].toUpperCase()}</span>
+        <span class="lang-badge">{formatCaptionLang(languages[0])}</span>
       {/if}
     </div>
-    <button
-      class="toggle-btn"
-      on:click={onHide}
-      title="Hide transcript"
-    >
-      Hide
-    </button>
+    <div class="header-right">
+      {#if selectedLang}
+        <a
+          class="download-btn"
+          href={getCaptionUrl(selectedLang)}
+          download="video.{selectedLang}.vtt"
+          title="Download VTT caption file"
+        >
+          Download
+        </a>
+      {/if}
+      <button
+        class="toggle-btn"
+        on:click={onHide}
+        title="Hide transcript"
+      >
+        Hide
+      </button>
+    </div>
   </div>
 
   <div class="search-bar">
@@ -457,6 +469,29 @@
     background: #e8e8e8;
     padding: 2px 6px;
     border-radius: 3px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .download-btn {
+    background: none;
+    border: 1px solid #ccc;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #606060;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s;
+  }
+
+  .download-btn:hover {
+    background: #e8e8e8;
+    color: #030303;
   }
 
   .toggle-btn {
