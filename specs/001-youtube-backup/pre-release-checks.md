@@ -3,6 +3,18 @@
 Checklist to run before tagging a release to ensure the sdist is clean and
 the built frontend is included.
 
+## 0. Run the automated sdist check
+
+```bash
+uv run tox -e sdist-check
+```
+
+This builds the sdist, installs it in a clean venv, deletes the local
+`web/` directory, and verifies that the installed package contains the
+built frontend and that `generate-web` works.  **This single command
+covers steps 1-6 below automatically.**  If it passes, the manual checks
+are optional but still useful for eyeballing the tarball contents.
+
 ## 1. Build the sdist
 
 ```bash

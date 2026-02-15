@@ -185,13 +185,14 @@ These patterns are in `.gitignore` to prevent accidental commits.
 
 ## Pre-release Checks
 
-Before tagging a release, verify the sdist is clean by following the checklist
-in `specs/001-youtube-backup/pre-release-checks.md`.  Key checks:
+Before tagging a release, run the automated sdist check and verify manually:
 
-1. Build sdist with `uv run python -m build --sdist` and verify the build
-   hook prints "Frontend build complete!"
-2. Tarball should be under 500KB
-3. Must contain `web/index.html`, `web/assets/index.js`, `web/assets/index.css`
-4. Must NOT contain `frontend/`, `node_modules/`, `specs/`, `tools/`,
-   `playwright-report/`, `.mp4` files, or `package-lock.json`
+```bash
+uv run tox -e sdist-check
+```
+
+This builds the sdist, installs from it in a clean venv, and verifies the
+built frontend is included and `generate-web` works.  See
+`specs/001-youtube-backup/pre-release-checks.md` for the full checklist
+including manual tarball inspection.
 <!-- MANUAL ADDITIONS END -->
