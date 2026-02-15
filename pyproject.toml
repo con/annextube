@@ -114,8 +114,30 @@ exclude = [
     ".pki",
     ".ssh",
     ".vim",
-    # Project non-dist directories
+    # Frontend test artifacts and reports
+    "frontend/playwright-report",
+    "frontend/test-results",
+    "frontend/test-video-seeking.spec.ts",
+    "frontend/tests",
+    # Dev tools (contains test .mp4 files, API credentials, etc.)
+    "tools",
+    # Planning/spec docs (not needed for building)
+    "specs",
+    "docs",
+    ".claude",
+    ".specify",
+    ".datalad",
+    # Container/CI files
+    "Containerfile",
+    ".containerignore",
+    "docker-compose.yml",
+    ".github",
+    "scripts",
+    # Misc non-dist files
     "test-archives",
+    "caption.png",
+    "COOKIE_DEMO_README.md",
+    ".noannex",
 ]
 
 [tool.pytest.ini_options]
