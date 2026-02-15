@@ -182,4 +182,16 @@ This prevents large, hard-to-review diffs and ensures each change is properly at
   - Any scratch/temporary markdown files created during development
 
 These patterns are in `.gitignore` to prevent accidental commits.
+
+## Pre-release Checks
+
+Before tagging a release, verify the sdist is clean by following the checklist
+in `specs/001-youtube-backup/pre-release-checks.md`.  Key checks:
+
+1. Build sdist with `uv run python -m build --sdist` and verify the build
+   hook prints "Frontend build complete!"
+2. Tarball should be under 500KB
+3. Must contain `web/index.html`, `web/assets/index.js`, `web/assets/index.css`
+4. Must NOT contain `frontend/`, `node_modules/`, `specs/`, `tools/`,
+   `playwright-report/`, `.mp4` files, or `package-lock.json`
 <!-- MANUAL ADDITIONS END -->
