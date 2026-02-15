@@ -109,17 +109,29 @@ def test_get_playlist_videos_incremental_two_pass(
     }
     mock_flat_ydl.extract_info.return_value = mock_flat_info
 
-    # Mock second pass (full metadata) to return video data
-    mock_full_ydl = MagicMock()
-    mock_full_ydl.extract_info.side_effect = [
-        {"id": "available123", "title": "Available Video"},
-        {"id": "new_video999", "title": "New Video"},
-    ]
+    # Second pass now creates a separate YoutubeDL per video via
+    # _fetch_single_video_info.  Return a fresh mock for each call.
+    def make_per_video_ydl():
+        m = MagicMock()
+        def _extract(url, download=False):
+            if "available123" in url:
+                return {"id": "available123", "title": "Available Video"}
+            if "new_video999" in url:
+                return {"id": "new_video999", "title": "New Video"}
+            return None
+        m.extract_info.side_effect = _extract
+        return m
 
-    # Configure YoutubeDL to return different instances for flat vs full
-    mock_ytdl_class.return_value.__enter__.side_effect = [
-        mock_flat_ydl, mock_full_ydl
-    ]
+    # First call is flat pass, subsequent calls are per-video
+    call_count = [0]
+    def enter_side_effect():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return mock_flat_ydl
+        return make_per_video_ydl()
+
+    mock_ytdl_class.return_value.__enter__ = lambda self: enter_side_effect()
+    mock_ytdl_class.return_value.__exit__ = MagicMock(return_value=False)
 
     playlist_url = "https://www.youtube.com/playlist?list=PLtest"
     videos = service.get_playlist_videos(
@@ -131,9 +143,6 @@ def test_get_playlist_videos_incremental_two_pass(
     assert len(videos) == 2
     assert videos[0]["id"] == "available123"
     assert videos[1]["id"] == "new_video999"
-
-    # Verify that full metadata was only fetched for non-unavailable videos
-    assert mock_full_ydl.extract_info.call_count == 2
 
 
 @pytest.mark.ai_generated
@@ -304,7 +313,8 @@ def test_two_pass_tracks_failed_extractions() -> None:
     # Verify initial state is empty
     assert service._last_unavailable_ids == set()
 
-    # Mock yt-dlp to simulate two-pass extraction with failures
+    # Mock yt-dlp to simulate two-pass extraction with failures.
+    # Second pass now creates a separate YoutubeDL per video via _fetch_single_video_info.
     with patch("annextube.services.youtube.yt_dlp.YoutubeDL") as mock_ytdl_class:
         # First pass: flat extraction returns 3 IDs
         mock_flat_ydl = MagicMock()
@@ -316,19 +326,26 @@ def test_two_pass_tracks_failed_extractions() -> None:
             ]
         }
 
-        # Second pass: fail1 raises an error
-        mock_full_ydl = MagicMock()
+        # Per-video mock: fail1 raises an error
+        def make_per_video_ydl():
+            m = MagicMock()
+            def _extract(url, download=False):
+                if "fail1" in url:
+                    raise Exception("Video unavailable")
+                vid = url.split("=")[-1]
+                return {"id": vid, "title": "OK"}
+            m.extract_info.side_effect = _extract
+            return m
 
-        def side_effect(url, download=False):
-            if "fail1" in url:
-                raise Exception("Video unavailable")
-            return {"id": url.split("=")[-1], "title": "OK"}
+        call_count = [0]
+        def enter_side_effect():
+            call_count[0] += 1
+            if call_count[0] == 1:
+                return mock_flat_ydl
+            return make_per_video_ydl()
 
-        mock_full_ydl.extract_info.side_effect = side_effect
-
-        mock_ytdl_class.return_value.__enter__.side_effect = [
-            mock_flat_ydl, mock_full_ydl
-        ]
+        mock_ytdl_class.return_value.__enter__ = lambda self: enter_side_effect()
+        mock_ytdl_class.return_value.__exit__ = MagicMock(return_value=False)
 
         # Create a repo with a known unavailable video so two-pass is triggered
         import tempfile

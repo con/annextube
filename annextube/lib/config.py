@@ -115,6 +115,10 @@ class UserConfig:
     # Advanced
     ytdlp_extra_opts: list[str] = field(default_factory=list)  # Extra CLI options for yt-dlp
 
+    # Rate-limit / concurrency
+    rate_limit_max_wait_seconds: int = 7200  # Max wait time for rate-limit retry (2 h)
+    yt_dlp_max_parallel: int = 1  # Max parallel yt-dlp calls per cookie file
+
     def __post_init__(self) -> None:
         """Apply environment variable overrides (highest precedence)."""
         if self.cookies_file is None:
@@ -126,6 +130,20 @@ class UserConfig:
         if self.proxy is None:
             self.proxy = os.environ.get("ANNEXTUBE_PROXY") or None
 
+        # Rate-limit / concurrency env overrides
+        env_max_wait = os.environ.get("ANNEXTUBE_RATE_LIMIT_MAX_WAIT")
+        if env_max_wait:
+            try:
+                self.rate_limit_max_wait_seconds = int(env_max_wait)
+            except ValueError:
+                pass
+        env_max_parallel = os.environ.get("ANNEXTUBE_YTDLP_MAX_PARALLEL")
+        if env_max_parallel:
+            try:
+                self.yt_dlp_max_parallel = int(env_max_parallel)
+            except ValueError:
+                pass
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "UserConfig":
         """Create UserConfig from dictionary (loaded from TOML).
@@ -135,16 +153,32 @@ class UserConfig:
         # Try [youtube] section first (current format), fall back to top-level (legacy)
         youtube_section = data.get("youtube", {})
 
-        return cls(
-            cookies_file=youtube_section.get("cookies_file") or data.get("cookies_file"),
-            cookies_from_browser=youtube_section.get("cookies_from_browser") or data.get("cookies_from_browser"),
-            api_key=youtube_section.get("api_key") or data.get("api_key"),
-            proxy=youtube_section.get("proxy") or data.get("proxy"),
-            limit_rate=youtube_section.get("limit_rate") or data.get("limit_rate"),
-            sleep_interval=youtube_section.get("sleep_interval") or data.get("sleep_interval"),
-            max_sleep_interval=youtube_section.get("max_sleep_interval") or data.get("max_sleep_interval"),
-            ytdlp_extra_opts=youtube_section.get("ytdlp_extra_opts") or data.get("ytdlp_extra_opts", []),
+        # Rate-limit / concurrency settings (from [youtube] section)
+        rate_limit_max_wait = (
+            youtube_section.get("rate_limit_max_wait_seconds")
+            or data.get("rate_limit_max_wait_seconds")
         )
+        yt_dlp_max_parallel = (
+            youtube_section.get("yt_dlp_max_parallel")
+            or data.get("yt_dlp_max_parallel")
+        )
+
+        kwargs: dict[str, Any] = {
+            "cookies_file": youtube_section.get("cookies_file") or data.get("cookies_file"),
+            "cookies_from_browser": youtube_section.get("cookies_from_browser") or data.get("cookies_from_browser"),
+            "api_key": youtube_section.get("api_key") or data.get("api_key"),
+            "proxy": youtube_section.get("proxy") or data.get("proxy"),
+            "limit_rate": youtube_section.get("limit_rate") or data.get("limit_rate"),
+            "sleep_interval": youtube_section.get("sleep_interval") or data.get("sleep_interval"),
+            "max_sleep_interval": youtube_section.get("max_sleep_interval") or data.get("max_sleep_interval"),
+            "ytdlp_extra_opts": youtube_section.get("ytdlp_extra_opts") or data.get("ytdlp_extra_opts", []),
+        }
+        if rate_limit_max_wait is not None:
+            kwargs["rate_limit_max_wait_seconds"] = int(rate_limit_max_wait)
+        if yt_dlp_max_parallel is not None:
+            kwargs["yt_dlp_max_parallel"] = int(yt_dlp_max_parallel)
+
+        return cls(**kwargs)
 
 
 @dataclass

@@ -8,7 +8,6 @@ the build configuration that would silently drop the frontend.
 
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 

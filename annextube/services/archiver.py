@@ -73,6 +73,8 @@ class Archiver:
             extractor_args=extractor_args,
             remote_components=remote_components,
             youtube_api_key=config.user.api_key,
+            rate_limit_max_wait_seconds=config.user.rate_limit_max_wait_seconds,
+            yt_dlp_max_parallel=config.user.yt_dlp_max_parallel,
         )
 
         self.export = ExportService(repo_path)

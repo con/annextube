@@ -2,7 +2,6 @@
 
 import json
 import re
-import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -11,6 +10,12 @@ import yt_dlp
 
 from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
+from annextube.lib.process_semaphore import CookieFileSemaphore
+from annextube.lib.ytdlp_ratelimit import (
+    RateLimitDetector,
+    YouTubeRateLimitError,
+    retry_on_ytdlp_rate_limit,
+)
 from annextube.models.playlist import Playlist
 from annextube.models.video import Video
 from annextube.services.youtube_api import (
@@ -19,11 +24,6 @@ from annextube.services.youtube_api import (
 )
 
 logger = get_logger(__name__)
-
-# Retry configuration for rate limits
-MAX_RETRIES = 3
-INITIAL_BACKOFF = 5  # seconds
-BACKOFF_MULTIPLIER = 2
 
 
 class YouTubeService:
@@ -41,6 +41,8 @@ class YouTubeService:
         extractor_args: dict[str, Any] | None = None,
         remote_components: str | None = None,
         youtube_api_key: str | None = None,
+        rate_limit_max_wait_seconds: int = 7200,
+        yt_dlp_max_parallel: int = 1,
     ):
         """Initialize YouTubeService.
 
@@ -55,6 +57,8 @@ class YouTubeService:
             extractor_args: Extractor-specific arguments (e.g., {"youtube": {"player_client": ["android"]}})
             remote_components: Remote components to enable (e.g., "ejs:github" for JS challenge solver)
             youtube_api_key: YouTube Data API v3 key for enhanced metadata (optional)
+            rate_limit_max_wait_seconds: Max seconds to wait on rate-limit retry (default 7200)
+            yt_dlp_max_parallel: Max concurrent yt-dlp calls per cookie file (default 1)
         """
         # Ensure deno is in PATH for EJS solver (if installed)
         import os
@@ -85,94 +89,91 @@ class YouTubeService:
         # Create YouTube API client for enhanced metadata if key provided
         self.api_client = create_api_client(youtube_api_key)
 
+        # Rate-limit / concurrency settings
+        self._rate_limit_max_wait_seconds = rate_limit_max_wait_seconds
+        self._semaphore: CookieFileSemaphore | None = None
+        if yt_dlp_max_parallel > 0:
+            self._semaphore = CookieFileSemaphore(
+                cookies_file=cookies_file,
+                max_parallel=yt_dlp_max_parallel,
+            )
+
         # Debug: Show what config was passed to YouTubeService
         logger.debug(f"YouTubeService initialized with: cookies_file={cookies_file}, cookies_from_browser={cookies_from_browser}, proxy={proxy}, api_key={'***' if youtube_api_key else None}")
 
-    def _retry_on_rate_limit(self, func, *args, **kwargs):
-        """Retry function on rate limit errors with exponential backoff.
+    def _make_rate_limit_detector(self, base_logger: Any) -> RateLimitDetector:
+        """Create a RateLimitDetector wrapping *base_logger*."""
+        return RateLimitDetector(base_logger)
 
-        Respects Retry-After header if present in response.
+    def _with_rate_limit_retry(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        """Call *func* with automatic rate-limit detection and retry.
 
-        Args:
-            func: Function to retry
-            *args: Arguments to pass to function
-            **kwargs: Keyword arguments to pass to function
-
-        Returns:
-            Function result
-
-        Raises:
-            Exception: If all retries exhausted
+        Wraps ``retry_on_ytdlp_rate_limit`` with instance-level settings.
         """
-        backoff = INITIAL_BACKOFF
-        for attempt in range(MAX_RETRIES):
-            try:
-                return func(*args, **kwargs)
-            except Exception as e:
-                error_str = str(e)
+        return retry_on_ytdlp_rate_limit(
+            func,
+            *args,
+            max_retries=3,
+            max_wait_seconds=self._rate_limit_max_wait_seconds,
+            cookies_file=self.cookies_file,
+            **kwargs,
+        )
 
-                # Log full error details for debugging
-                logger.debug(f"YouTube API error (attempt {attempt + 1}/{MAX_RETRIES}): {error_str}")
+    def _check_detector(self, detector: RateLimitDetector) -> None:
+        """Raise YouTubeRateLimitError if *detector* flagged a rate limit."""
+        if detector.rate_limited:
+            raise YouTubeRateLimitError(
+                detector.rate_limit_message,
+                detector.wait_seconds,
+            )
 
-                # Try to extract HTTP status code and headers from exception
-                status_code = None
-                if hasattr(e, 'code'):
-                    status_code = e.code
-                elif "429" in error_str or "Too Many Requests" in error_str:
-                    status_code = 429
-                elif "403" in error_str or "Forbidden" in error_str:
-                    status_code = 403
+    def _extract_info_checked(
+        self,
+        url: str,
+        extra_opts: dict[str, Any] | None = None,
+        download: bool = False,
+    ) -> dict[str, Any] | None:
+        """Run ``extract_info`` with rate-limit detection.
 
-                # Log response headers if available
-                if hasattr(e, 'headers'):
-                    logger.warning(f"HTTP {status_code} Response Headers: {dict(e.headers)}")
-                elif hasattr(e, 'response') and hasattr(e.response, 'headers'):
-                    logger.warning(f"HTTP {status_code} Response Headers: {dict(e.response.headers)}")
-                else:
-                    # yt-dlp embeds headers in error message, try to extract
-                    if "headers:" in error_str.lower():
-                        logger.warning(f"Error details: {error_str}")
+        Creates a fresh ``RateLimitDetector``, injects it into yt-dlp opts,
+        and raises ``YouTubeRateLimitError`` if a ban pattern is logged.
+        """
+        import logging as stdlib_logging
+        base_logger = stdlib_logging.getLogger("yt_dlp")
+        detector = self._make_rate_limit_detector(base_logger)
+        opts = self._get_ydl_opts(download=download, rate_limit_detector=detector)
+        if extra_opts:
+            opts.update(extra_opts)
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(url, download=download)
+        self._check_detector(detector)
+        result: dict[str, Any] | None = info
+        return result
 
-                # Check if it's a rate limit error (429)
-                if status_code == 429 or "429" in error_str or "Too Many Requests" in error_str:
-                    if attempt < MAX_RETRIES - 1:
-                        # Try to extract Retry-After from error message or headers
-                        retry_after = None
+    def _fetch_single_video_info(self, video_id: str) -> dict[str, Any] | None:
+        """Fetch full metadata for one video with rate-limit retry.
 
-                        # First try exception attributes
-                        if hasattr(e, 'headers') and 'Retry-After' in e.headers:
-                            try:
-                                retry_after = int(e.headers['Retry-After'])
-                            except (ValueError, KeyError):
-                                pass
+        Used by per-video loops.  Each call creates its own yt-dlp instance
+        so a fresh ``RateLimitDetector`` is wired in.
+        """
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
+        result: dict[str, Any] | None = self._with_rate_limit_retry(
+            self._extract_info_checked,
+            video_url,
+            extra_opts={"ignoreerrors": True},
+        )
+        return result
 
-                        # Fall back to parsing error message
-                        if retry_after is None and "Retry-After:" in error_str:
-                            try:
-                                # Extract number from "Retry-After: XX"
-                                parts = error_str.split("Retry-After:")
-                                if len(parts) > 1:
-                                    retry_after = int(parts[1].strip().split()[0])
-                            except (ValueError, IndexError):
-                                pass
-
-                        wait_time = retry_after if retry_after else backoff
-                        logger.warning(
-                            f"Rate limit hit, retrying in {wait_time}s "
-                            f"(attempt {attempt + 1}/{MAX_RETRIES})"
-                            f"{' (from Retry-After header)' if retry_after else ''}"
-                        )
-                        time.sleep(wait_time)
-                        backoff *= BACKOFF_MULTIPLIER
-                        continue
-                # Not a rate limit error or exhausted retries
-                raise
-
-    def _get_ydl_opts(self, download: bool = False) -> dict[str, Any]:
+    def _get_ydl_opts(
+        self, download: bool = False, rate_limit_detector: RateLimitDetector | None = None
+    ) -> dict[str, Any]:
         """Get yt-dlp options including user config settings.
 
         Args:
             download: Whether to download video content
+            rate_limit_detector: Optional detector to inject as the yt-dlp logger.
+                When provided, it wraps the normal yt-dlp logger and watches
+                for rate-limit messages.
 
         Returns:
             yt-dlp options dictionary
@@ -202,11 +203,14 @@ class YouTubeService:
                 ytdlp_logger.addHandler(handler)
             ytdlp_logger.propagate = False
 
+        # Use rate-limit detector as the yt-dlp logger when provided
+        effective_logger: Any = rate_limit_detector if rate_limit_detector else ytdlp_logger
+
         opts: dict[str, Any] = {
             "quiet": not enable_ytdlp_verbose,  # Disable quiet in debug mode
             "no_warnings": not enable_ytdlp_verbose,  # Show warnings in debug mode
             "verbose": enable_ytdlp_verbose,  # Enable yt-dlp's verbose output
-            "logger": ytdlp_logger,  # Use Python logger for yt-dlp output (includes datetime + logger name)
+            "logger": effective_logger,  # Use Python logger (or detector wrapper)
             "extract_flat": False,  # Get full metadata
             "skip_download": not download,
         }
@@ -289,7 +293,10 @@ class YouTubeService:
         if use_two_pass:
             assert existing_video_ids is not None  # Type narrowing for mypy
             # First pass: Get just IDs with extract_flat
-            flat_opts = ydl_opts.copy()
+            import logging as stdlib_logging
+            _base_logger = stdlib_logging.getLogger("yt_dlp")
+            _detector = self._make_rate_limit_detector(_base_logger)
+            flat_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector)
             flat_opts.update({
                 "extract_flat": "in_playlist",  # Just get video IDs, no metadata
                 "playlistend": limit if limit else None,
@@ -300,6 +307,7 @@ class YouTubeService:
             with yt_dlp.YoutubeDL(flat_opts) as ydl_flat:
                 try:
                     info = ydl_flat.extract_info(channel_url, download=False)
+                    self._check_detector(_detector)
                     if not info or not info.get("entries"):
                         logger.warning("No videos found in channel")
                         return []
@@ -342,31 +350,29 @@ class YouTubeService:
 
             # Second pass: Fetch full metadata only for new videos (outside the flat extraction context)
             if use_two_pass:
-                full_opts = ydl_opts.copy()
-                full_opts.update({
-                    "ignoreerrors": True,
-                    "no_warnings": False,
-                })
-
                 videos = []
                 total_new = len(new_video_ids)
-                with yt_dlp.YoutubeDL(full_opts) as ydl_full:
-                    for idx, video_id in enumerate(new_video_ids, 1):
-                        try:
-                            # Progress indicator for each video
-                            logger.info(f"Fetching metadata [{idx}/{total_new}]: {video_id}")
-                            video_url = f"https://www.youtube.com/watch?v={video_id}"
-                            video_info = ydl_full.extract_info(video_url, download=False)
-                            if video_info:
-                                videos.append(video_info)
-                        except Exception as e:
-                            logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+                for idx, video_id in enumerate(new_video_ids, 1):
+                    try:
+                        logger.info(f"Fetching metadata [{idx}/{total_new}]: {video_id}")
+                        video_info = self._fetch_single_video_info(video_id)
+                        if video_info:
+                            videos.append(video_info)
+                    except YouTubeRateLimitError:
+                        logger.error("Rate limit persisted after retries, stopping video fetch")
+                        break
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
 
                 logger.info(f"Successfully fetched metadata for {len(videos)}/{total_new} new video(s)")
                 return videos
 
         # Regular extraction (initial backup or fallback)
         logger.info("Fetching videos (this may take several minutes for large channels)...")
+        import logging as stdlib_logging
+        _base_logger2 = stdlib_logging.getLogger("yt_dlp")
+        _detector2 = self._make_rate_limit_detector(_base_logger2)
+        ydl_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector2)
         ydl_opts.update(
             {
                 "playlistend": limit if limit else None,
@@ -380,6 +386,7 @@ class YouTubeService:
             try:
                 # Extract channel info (this gets the uploads playlist with full metadata)
                 info = ydl.extract_info(channel_url, download=False)
+                self._check_detector(_detector2)
 
                 if not info:
                     logger.warning(f"No information found for channel: {channel_url}")
@@ -479,7 +486,10 @@ class YouTubeService:
 
         if use_two_pass:
             # First pass: Get just video IDs with extract_flat (fast, no metadata fetching)
-            flat_opts = self._get_ydl_opts(download=False)
+            import logging as stdlib_logging
+            _base_logger_pl = stdlib_logging.getLogger("yt_dlp")
+            _detector_pl = self._make_rate_limit_detector(_base_logger_pl)
+            flat_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector_pl)
             flat_opts.update({
                 "extract_flat": "in_playlist",  # Just get video IDs, no metadata
                 "playlistend": limit if limit else None,
@@ -490,6 +500,7 @@ class YouTubeService:
             with yt_dlp.YoutubeDL(flat_opts) as ydl_flat:
                 try:
                     info = ydl_flat.extract_info(playlist_url, download=False)
+                    self._check_detector(_detector_pl)
                     if not info or not info.get("entries"):
                         logger.warning("No videos found in playlist")
                         return []
@@ -530,29 +541,23 @@ class YouTubeService:
 
             # Second pass: Fetch full metadata only for available videos
             if use_two_pass:
-                full_opts = self._get_ydl_opts(download=False)
-                full_opts.update({
-                    "ignoreerrors": True,
-                    "no_warnings": False,
-                })
-
                 videos = []
                 total_to_fetch = len(video_ids_to_fetch)
-                with yt_dlp.YoutubeDL(full_opts) as ydl_full:
-                    for idx, video_id in enumerate(video_ids_to_fetch, 1):
-                        try:
-                            # Progress indicator
-                            if idx % 100 == 0 or idx == 1 or idx == total_to_fetch:
-                                logger.info(f"Fetching metadata [{idx}/{total_to_fetch}]: {video_id}")
-                            video_url = f"https://www.youtube.com/watch?v={video_id}"
-                            video_info = ydl_full.extract_info(video_url, download=False)
-                            if video_info:
-                                videos.append(video_info)
-                            else:
-                                logger.warning(f"No metadata returned for {video_id}")
-                        except Exception as e:
-                            logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
-                            self._last_unavailable_ids.add(video_id)
+                for idx, video_id in enumerate(video_ids_to_fetch, 1):
+                    try:
+                        if idx % 100 == 0 or idx == 1 or idx == total_to_fetch:
+                            logger.info(f"Fetching metadata [{idx}/{total_to_fetch}]: {video_id}")
+                        video_info = self._fetch_single_video_info(video_id)
+                        if video_info:
+                            videos.append(video_info)
+                        else:
+                            logger.warning(f"No metadata returned for {video_id}")
+                    except YouTubeRateLimitError:
+                        logger.error("Rate limit persisted after retries, stopping video fetch")
+                        break
+                    except Exception as e:
+                        logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+                        self._last_unavailable_ids.add(video_id)
 
                 logger.info(f"Successfully fetched metadata for {len(videos)}/{total_to_fetch} video(s)")
                 if self._last_unavailable_ids:
@@ -560,7 +565,10 @@ class YouTubeService:
                 return videos
 
         # Regular extraction (non-incremental or no unavailable videos)
-        ydl_opts = self._get_ydl_opts(download=False)
+        import logging as stdlib_logging
+        _base_logger_plr = stdlib_logging.getLogger("yt_dlp")
+        _detector_plr = self._make_rate_limit_detector(_base_logger_plr)
+        ydl_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector_plr)
         ydl_opts.update(
             {
                 "playlistend": limit if limit else None,
@@ -575,6 +583,7 @@ class YouTubeService:
                 logger.info("Fetching playlist metadata (this may take several minutes for large playlists)...")
                 logger.debug(f"Calling yt-dlp: extract_info('{playlist_url}', download=False)")
                 info = ydl.extract_info(playlist_url, download=False)
+                self._check_detector(_detector_plr)
 
                 if not info:
                     logger.warning(f"No information found for playlist: {playlist_url}")
@@ -680,47 +689,54 @@ class YouTubeService:
         """
         logger.debug(f"Fetching playlist metadata: {playlist_url}")
 
-        ydl_opts = self._get_ydl_opts(download=False)
-        ydl_opts["extract_flat"] = True  # Don't fetch individual videos
+        try:
+            info = self._with_rate_limit_retry(
+                self._extract_info_checked,
+                playlist_url,
+                extra_opts={"extract_flat": True},
+            )
+        except YouTubeRateLimitError:
+            logger.error(f"Rate limit fetching playlist metadata: {playlist_url}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to fetch playlist metadata: {e}")
+            return None
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(playlist_url, download=False)
+        if not info:
+            return None
 
-                if not info:
-                    return None
+        try:
+            # Parse last modified date if available
+            last_modified = None
+            if info.get("modified_date"):
+                try:
+                    last_modified = datetime.strptime(info["modified_date"], "%Y%m%d")
+                except ValueError:
+                    pass
 
-                # Parse last modified date if available
-                last_modified = None
-                if info.get("modified_date"):
-                    try:
-                        last_modified = datetime.strptime(info["modified_date"], "%Y%m%d")
-                    except ValueError:
-                        pass
+            # Get video IDs from entries
+            video_ids = []
+            for entry in info.get("entries", []):
+                if entry and entry.get("id"):
+                    video_ids.append(entry["id"])
 
-                # Get video IDs from entries
-                video_ids = []
-                for entry in info.get("entries", []):
-                    if entry and entry.get("id"):
-                        video_ids.append(entry["id"])
+            return Playlist(
+                playlist_id=info["id"],
+                title=info.get("title", "Unknown"),
+                description=info.get("description", ""),
+                channel_id=info.get("channel_id", info.get("uploader_id", "")),
+                channel_name=info.get("channel", info.get("uploader", "")),
+                video_count=info.get("playlist_count", len(video_ids)),
+                privacy_status=info.get("availability", "public"),
+                last_modified=last_modified,
+                video_ids=video_ids,
+                thumbnail_url=info.get("thumbnail"),
+                fetched_at=datetime.now(),
+            )
 
-                return Playlist(
-                    playlist_id=info["id"],
-                    title=info.get("title", "Unknown"),
-                    description=info.get("description", ""),
-                    channel_id=info.get("channel_id", info.get("uploader_id", "")),
-                    channel_name=info.get("channel", info.get("uploader", "")),
-                    video_count=info.get("playlist_count", len(video_ids)),
-                    privacy_status=info.get("availability", "public"),
-                    last_modified=last_modified,
-                    video_ids=video_ids,
-                    thumbnail_url=info.get("thumbnail"),
-                    fetched_at=datetime.now(),
-                )
-
-            except Exception as e:
-                logger.error(f"Failed to fetch playlist metadata: {e}")
-                return None
+        except Exception as e:
+            logger.error(f"Failed to fetch playlist metadata: {e}")
+            return None
 
     def get_videos_metadata(self, video_ids: list[str]) -> list[dict[str, Any]]:
         """Fetch full metadata for specific video IDs.
@@ -739,21 +755,19 @@ class YouTubeService:
 
         logger.info(f"Fetching metadata for {len(video_ids)} individual video(s)")
 
-        ydl_opts = self._get_ydl_opts(download=False)
-        ydl_opts["ignoreerrors"] = True
-
         videos = []
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            for idx, video_id in enumerate(video_ids, 1):
-                url = f"https://www.youtube.com/watch?v={video_id}"
-                try:
-                    if idx % 10 == 0 or idx == 1 or idx == len(video_ids):
-                        logger.info(f"Fetching metadata [{idx}/{len(video_ids)}]: {video_id}")
-                    info = ydl.extract_info(url, download=False)
-                    if info:
-                        videos.append(info)
-                except Exception as e:
-                    logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+        for idx, video_id in enumerate(video_ids, 1):
+            try:
+                if idx % 10 == 0 or idx == 1 or idx == len(video_ids):
+                    logger.info(f"Fetching metadata [{idx}/{len(video_ids)}]: {video_id}")
+                info = self._fetch_single_video_info(video_id)
+                if info:
+                    videos.append(info)
+            except YouTubeRateLimitError:
+                logger.error("Rate limit persisted after retries, stopping metadata fetch")
+                break
+            except Exception as e:
+                logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
 
         logger.info(f"Successfully fetched metadata for {len(videos)}/{len(video_ids)} video(s)")
         return videos
@@ -772,40 +786,40 @@ class YouTubeService:
         # Construct playlists tab URL
         playlists_url = channel_url.rstrip("/") + "/playlists"
 
-        ydl_opts = self._get_ydl_opts(download=False)
-        ydl_opts["extract_flat"] = True  # Don't fetch individual playlist videos
-
-        playlists = []
-
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(playlists_url, download=False)
-
-                if not info or "entries" not in info:
-                    logger.warning(f"No playlists found for channel: {channel_url}")
-                    return []
-
-                for entry in info["entries"]:
-                    if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
-                        # Extract playlist ID from URL
-                        playlist_id = None
-                        url = entry.get("url", "")
-                        if "list=" in url:
-                            playlist_id = url.split("list=")[1].split("&")[0]
-
-                        playlists.append({
-                            "id": playlist_id or entry.get("id"),
-                            "title": entry.get("title") or "Unknown",
-                            "url": url,
-                            "video_count": entry.get("playlist_count", 0),
-                        })
-
-                logger.info(f"Discovered {len(playlists)} playlists from {channel_url}")
-                return playlists
-
+            info = self._with_rate_limit_retry(
+                self._extract_info_checked,
+                playlists_url,
+                extra_opts={"extract_flat": True},
+            )
+        except YouTubeRateLimitError:
+            logger.error(f"Rate limit fetching playlists for: {channel_url}")
+            return []
         except Exception as e:
             logger.error(f"Failed to fetch channel playlists: {e}")
             return []
+
+        if not info or "entries" not in info:
+            logger.warning(f"No playlists found for channel: {channel_url}")
+            return []
+
+        playlists = []
+        for entry in info["entries"]:
+            if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
+                playlist_id = None
+                url = entry.get("url", "")
+                if "list=" in url:
+                    playlist_id = url.split("list=")[1].split("&")[0]
+
+                playlists.append({
+                    "id": playlist_id or entry.get("id"),
+                    "title": entry.get("title") or "Unknown",
+                    "url": url,
+                    "video_count": entry.get("playlist_count", 0),
+                })
+
+        logger.info(f"Discovered {len(playlists)} playlists from {channel_url}")
+        return playlists
 
     def get_channel_podcasts(self, channel_url: str) -> list[dict[str, Any]]:
         """Get all podcasts from a channel's Podcasts tab.
@@ -821,40 +835,40 @@ class YouTubeService:
         # Construct podcasts tab URL
         podcasts_url = channel_url.rstrip("/") + "/podcasts"
 
-        ydl_opts = self._get_ydl_opts(download=False)
-        ydl_opts["extract_flat"] = True
-
-        podcasts = []
-
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(podcasts_url, download=False)
-
-                if not info or "entries" not in info:
-                    logger.debug(f"No podcasts found for channel: {channel_url}")
-                    return []
-
-                for entry in info["entries"]:
-                    if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
-                        # Extract playlist ID from URL
-                        playlist_id = None
-                        url = entry.get("url", "")
-                        if "list=" in url:
-                            playlist_id = url.split("list=")[1].split("&")[0]
-
-                        podcasts.append({
-                            "id": playlist_id or entry.get("id"),
-                            "title": entry.get("title") or "Unknown",
-                            "url": url,
-                            "video_count": entry.get("playlist_count", 0),
-                        })
-
-                logger.info(f"Discovered {len(podcasts)} podcasts from {channel_url}")
-                return podcasts
-
+            info = self._with_rate_limit_retry(
+                self._extract_info_checked,
+                podcasts_url,
+                extra_opts={"extract_flat": True},
+            )
+        except YouTubeRateLimitError:
+            logger.error(f"Rate limit fetching podcasts for: {channel_url}")
+            return []
         except Exception as e:
             logger.debug(f"Failed to fetch channel podcasts (may not have podcasts): {e}")
             return []
+
+        if not info or "entries" not in info:
+            logger.debug(f"No podcasts found for channel: {channel_url}")
+            return []
+
+        podcasts = []
+        for entry in info["entries"]:
+            if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
+                playlist_id = None
+                url = entry.get("url", "")
+                if "list=" in url:
+                    playlist_id = url.split("list=")[1].split("&")[0]
+
+                podcasts.append({
+                    "id": playlist_id or entry.get("id"),
+                    "title": entry.get("title") or "Unknown",
+                    "url": url,
+                    "video_count": entry.get("playlist_count", 0),
+                })
+
+        logger.info(f"Discovered {len(podcasts)} podcasts from {channel_url}")
+        return podcasts
 
     def get_channel_metadata(self, channel_url: str) -> dict[str, Any]:
         """Extract channel-level metadata (description, avatar, subscribers).
@@ -870,55 +884,56 @@ class YouTubeService:
         """
         logger.debug(f"Extracting channel metadata from: {channel_url}")
 
-        ydl_opts = self._get_ydl_opts(download=False)
-        ydl_opts["extract_flat"] = True  # Fast extraction
+        try:
+            info = self._with_rate_limit_retry(
+                self._extract_info_checked,
+                channel_url,
+                extra_opts={"extract_flat": True},
+            )
+        except YouTubeRateLimitError:
+            logger.error(f"Rate limit extracting channel metadata: {channel_url}")
+            return {}
+        except Exception as e:
+            logger.error(f"Failed to extract channel metadata: {e}")
+            return {}
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(channel_url, download=False)
+        if not info:
+            logger.warning(f"No information found for channel: {channel_url}")
+            return {}
 
-                if not info:
-                    logger.warning(f"No information found for channel: {channel_url}")
-                    return {}
+        # Extract avatar URL (use highest resolution available)
+        avatar_url = ""
+        thumbnails = info.get("thumbnails", [])
+        if thumbnails:
+            sorted_thumbs = sorted(
+                thumbnails,
+                key=lambda t: t.get("width", 0) * t.get("height", 0),
+                reverse=True
+            )
+            avatar_url = sorted_thumbs[0].get("url", "")
 
-                # Extract avatar URL (use highest resolution available)
-                avatar_url = ""
-                thumbnails = info.get("thumbnails", [])
-                if thumbnails:
-                    # Sort by resolution and pick highest
-                    sorted_thumbs = sorted(
-                        thumbnails,
-                        key=lambda t: t.get("width", 0) * t.get("height", 0),
-                        reverse=True
-                    )
-                    avatar_url = sorted_thumbs[0].get("url", "")
+        # Parse custom URL from original_url or channel_url
+        custom_url = ""
+        original_url = info.get("original_url", channel_url)
+        if "@" in original_url:
+            custom_url = original_url.split("@")[-1].split("/")[0].split("?")[0]
 
-                # Parse custom URL from original_url or channel_url
-                custom_url = ""
-                original_url = info.get("original_url", channel_url)
-                if "@" in original_url:
-                    custom_url = original_url.split("@")[-1].split("/")[0].split("?")[0]
+        metadata = {
+            "channel_id": info.get("channel_id") or info.get("uploader_id", ""),
+            "channel_name": info.get("channel") or info.get("uploader", ""),
+            "description": info.get("description", ""),
+            "custom_url": custom_url,
+            "avatar_url": avatar_url,
+            "subscriber_count": info.get("channel_follower_count") or 0,
+            "video_count": info.get("playlist_count", 0),
+        }
 
-                metadata = {
-                    "channel_id": info.get("channel_id") or info.get("uploader_id", ""),
-                    "channel_name": info.get("channel") or info.get("uploader", ""),
-                    "description": info.get("description", ""),
-                    "custom_url": custom_url,
-                    "avatar_url": avatar_url,
-                    "subscriber_count": info.get("channel_follower_count") or 0,
-                    "video_count": info.get("playlist_count", 0),  # Total videos on channel
-                }
-
-                logger.info(
-                    f"Extracted channel metadata: {metadata['channel_name']} "
-                    f"({metadata['subscriber_count']} subscribers, "
-                    f"{metadata['video_count']} videos)"
-                )
-                return metadata
-
-            except Exception as e:
-                logger.error(f"Failed to extract channel metadata: {e}")
-                return {}
+        logger.info(
+            f"Extracted channel metadata: {metadata['channel_name']} "
+            f"({metadata['subscriber_count']} subscribers, "
+            f"{metadata['video_count']} videos)"
+        )
+        return metadata
 
     def get_video_metadata(self, video_url: str) -> dict[str, Any] | None:
         """Get metadata for a single video.
@@ -935,48 +950,49 @@ class YouTubeService:
         """
         logger.debug(f"Fetching metadata for: {video_url}")
 
-        ydl_opts = self._get_ydl_opts(download=False)
+        try:
+            info = self._with_rate_limit_retry(
+                self._extract_info_checked, video_url,
+            )
+            return cast(dict[str, Any] | None, info)
+        except YouTubeRateLimitError:
+            logger.error(f"Rate limit fetching video metadata: {video_url}")
+            return None
+        except yt_dlp.utils.DownloadError as e:
+            error_msg = str(e).lower()
 
-        logger.debug(f"Calling yt-dlp: extract_info('{video_url}', download=False) with opts={ydl_opts}")
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            try:
-                info = ydl.extract_info(video_url, download=False)
-                return cast(dict[str, Any] | None, info)
-            except yt_dlp.utils.DownloadError as e:
-                error_msg = str(e).lower()
+            # Extract video ID from URL
+            video_id = None
+            if 'v=' in video_url:
+                video_id = video_url.split('v=')[1].split('&')[0]
+            elif '/' in video_url:
+                video_id = video_url.split('/')[-1]
 
-                # Extract video ID from URL
-                video_id = None
-                if 'v=' in video_url:
-                    video_id = video_url.split('v=')[1].split('&')[0]
-                elif '/' in video_url:
-                    video_id = video_url.split('/')[-1]
-
-                # Detect specific error types
-                if 'private video' in error_msg or 'this video is private' in error_msg:
-                    logger.warning(f"Video is private: {video_url}")
-                    return {
-                        'id': video_id,
-                        'availability': 'private',
-                        'privacy_status': 'non-public',
-                        'title': f'Private Video ({video_id})',
-                        'was_available': True,
-                    }
-                elif 'video has been removed' in error_msg or 'unavailable' in error_msg or 'deleted' in error_msg:
-                    logger.warning(f"Video has been removed: {video_url}")
-                    return {
-                        'id': video_id,
-                        'availability': 'removed',
-                        'privacy_status': 'removed',
-                        'title': f'Removed Video ({video_id})',
-                        'was_available': True,
-                    }
-                else:
-                    logger.error(f"Failed to fetch video metadata: {e}")
-                    return None
-            except Exception as e:
+            # Detect specific error types
+            if 'private video' in error_msg or 'this video is private' in error_msg:
+                logger.warning(f"Video is private: {video_url}")
+                return {
+                    'id': video_id,
+                    'availability': 'private',
+                    'privacy_status': 'non-public',
+                    'title': f'Private Video ({video_id})',
+                    'was_available': True,
+                }
+            elif 'video has been removed' in error_msg or 'unavailable' in error_msg or 'deleted' in error_msg:
+                logger.warning(f"Video has been removed: {video_url}")
+                return {
+                    'id': video_id,
+                    'availability': 'removed',
+                    'privacy_status': 'removed',
+                    'title': f'Removed Video ({video_id})',
+                    'was_available': True,
+                }
+            else:
                 logger.error(f"Failed to fetch video metadata: {e}")
                 return None
+        except Exception as e:
+            logger.error(f"Failed to fetch video metadata: {e}")
+            return None
 
     def extract_video_url(self, video_id: str) -> str | None:
         """Extract direct video URL for git-annex tracking.
@@ -1055,11 +1071,10 @@ class YouTubeService:
         video_url = f"https://www.youtube.com/watch?v={video_id}"
 
         try:
-            # Get available captions without downloading
-            ydl_opts_info = self._get_ydl_opts(download=False)
-
-            with yt_dlp.YoutubeDL(ydl_opts_info) as ydl:
-                info = ydl.extract_info(video_url, download=False)
+            # Get available captions without downloading (with rate-limit detection)
+            info = self._with_rate_limit_retry(
+                self._extract_info_checked, video_url,
+            )
 
             if not info:
                 logger.warning(f"No info available for video: {video_id}")
@@ -1127,7 +1142,7 @@ class YouTubeService:
                     ydl.download([video_url])
 
             # Retry on rate limits
-            self._retry_on_rate_limit(_download)
+            self._with_rate_limit_retry(_download)
 
             # Find downloaded caption files (yt-dlp uses video_id in filename)
             caption_files = list(output_dir.glob(f"{video_id}.*.vtt"))
@@ -1317,7 +1332,7 @@ class YouTubeService:
 
             try:
                 # Retry on rate limits
-                info = self._retry_on_rate_limit(_download)
+                info = self._with_rate_limit_retry(_download)
 
                 if not info:
                     logger.warning(f"No info available for video: {video_id}")
