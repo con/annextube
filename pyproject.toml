@@ -79,6 +79,15 @@ source = "vcs"
 # Clean semver format: 0.2.0 on tag, 0.2.0.post1+gc6bd677 after tag
 raw-options = { version_scheme = "post-release", local_scheme = "node-and-date" }
 
+[tool.hatch.build]
+# web/ is gitignored but contains the built Svelte frontend (created by
+# hatch_build.py hook).  Force-include bypasses the directory walk so it
+# works even with skip-excluded-dirs (which prunes gitignored dirs).
+artifacts = ["web/**/*"]
+
+[tool.hatch.build.force-include]
+"web" = "web"
+
 [tool.hatch.build.hooks.vcs]
 version-file = "annextube/_version.py"
 
@@ -87,10 +96,6 @@ path = "hatch_build.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["annextube"]
-# Include built frontend in distribution
-include = [
-    "web/**/*",
-]
 
 [tool.hatch.build.targets.sdist]
 # Without this, hatchling walks INTO excluded dirs checking each file individually,
@@ -114,11 +119,8 @@ exclude = [
     ".pki",
     ".ssh",
     ".vim",
-    # Frontend test artifacts and reports
-    "frontend/playwright-report",
-    "frontend/test-results",
-    "frontend/test-video-seeking.spec.ts",
-    "frontend/tests",
+    # Frontend source (built output is in web/ instead)
+    "frontend",
     # Dev tools (contains test .mp4 files, API credentials, etc.)
     "tools",
     # Planning/spec docs (not needed for building)
