@@ -79,6 +79,9 @@ class YouTubeService:
         self.extractor_args = extractor_args or {}
         self.remote_components = remote_components
 
+        # Track unavailable video IDs discovered during playlist extraction
+        self._last_unavailable_ids: set[str] = set()
+
         # Create YouTube API client for enhanced metadata if key provided
         self.api_client = create_api_client(youtube_api_key)
 
@@ -461,6 +464,9 @@ class YouTubeService:
         """
         logger.info(f"Fetching videos from playlist: {playlist_url}")
 
+        # Reset per-call tracking of unavailable IDs
+        self._last_unavailable_ids = set()
+
         # In incremental mode, load known unavailable videos first
         unavailable_videos: set[str] = set()
         if incremental and repo_path:
@@ -546,9 +552,11 @@ class YouTubeService:
                                 logger.warning(f"No metadata returned for {video_id}")
                         except Exception as e:
                             logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
-                            # Video might have become unavailable - will be caught on next run
+                            self._last_unavailable_ids.add(video_id)
 
                 logger.info(f"Successfully fetched metadata for {len(videos)}/{total_to_fetch} video(s)")
+                if self._last_unavailable_ids:
+                    logger.info(f"Detected {len(self._last_unavailable_ids)} newly unavailable video(s)")
                 return videos
 
         # Regular extraction (non-incremental or no unavailable videos)
@@ -614,8 +622,9 @@ class YouTubeService:
     def _load_unavailable_videos(self, repo_path: Path) -> set[str]:
         """Load video IDs of known unavailable videos from archive.
 
-        Scans all metadata.json files in videos/ directory and returns
-        set of video IDs with non-public availability status.
+        Reads from two sources:
+        1. .annextube/unavailable_videos.json (centralized registry)
+        2. videos/**/metadata.json with non-public availability (legacy/explicit)
 
         Args:
             repo_path: Path to archive repository
@@ -624,30 +633,39 @@ class YouTubeService:
             Set of video IDs known to be unavailable
         """
         unavailable: set[str] = set()
-        videos_dir = repo_path / "videos"
 
-        if not videos_dir.exists():
-            return unavailable
-
-        # Find all metadata.json files
-        metadata_files = list(videos_dir.glob("**/metadata.json"))
-
-        for metadata_file in metadata_files:
+        # Source 1: centralized unavailable_videos.json (fast)
+        unavail_path = repo_path / ".annextube" / "unavailable_videos.json"
+        if unavail_path.exists():
             try:
-                with open(metadata_file, encoding='utf-8') as f:
-                    metadata = json.load(f)
-
-                video_id = metadata.get("video_id")
-                availability = metadata.get("availability", "public")
-
-                # Consider video unavailable if not public
-                # Possible values: 'public', 'private', 'removed', 'unavailable', 'unlisted'
-                if video_id and availability in ['private', 'removed', 'unavailable']:
-                    unavailable.add(video_id)
-                    logger.debug(f"Found unavailable video: {video_id} (status: {availability})")
+                with open(unavail_path, encoding="utf-8") as f:
+                    data = json.load(f)
+                unavailable.update(data.keys())
+                logger.debug(f"Loaded {len(data)} unavailable IDs from {unavail_path.name}")
             except Exception as e:
-                logger.debug(f"Failed to parse metadata file {metadata_file}: {e}")
-                continue
+                logger.warning(f"Failed to load {unavail_path}: {e}")
+
+        # Source 2: scan metadata.json files for explicit unavailability
+        videos_dir = repo_path / "videos"
+        if videos_dir.exists():
+            metadata_files = list(videos_dir.glob("**/metadata.json"))
+
+            for metadata_file in metadata_files:
+                try:
+                    with open(metadata_file, encoding='utf-8') as f:
+                        metadata = json.load(f)
+
+                    video_id = metadata.get("video_id")
+                    availability = metadata.get("availability", "public")
+
+                    # Consider video unavailable if not public
+                    # Possible values: 'public', 'private', 'removed', 'unavailable', 'unlisted'
+                    if video_id and availability in ['private', 'removed', 'unavailable']:
+                        unavailable.add(video_id)
+                        logger.debug(f"Found unavailable video: {video_id} (status: {availability})")
+                except Exception as e:
+                    logger.debug(f"Failed to parse metadata file {metadata_file}: {e}")
+                    continue
 
         return unavailable
 

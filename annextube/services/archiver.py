@@ -1125,6 +1125,14 @@ class Archiver:
             incremental=incremental
         )
 
+        # Record unavailable videos so they're skipped on future runs
+        fetched_ids: set[str] = set()
+        for v in all_videos:
+            vid = v.get("id") or v.get("video_id")
+            if vid:
+                fetched_ids.add(vid)
+        self._save_unavailable_stubs(playlist, fetched_ids)
+
         # Apply date filter if specified (but NOT on initial backup)
         is_initial = self._is_initial_backup
 
@@ -1218,6 +1226,72 @@ class Archiver:
             logger.warning(f"Failed to generate TSV files: {e}")
 
         return stats
+
+    def _save_unavailable_stubs(self, playlist: Playlist, fetched_video_ids: set[str]) -> int:
+        """Record unavailable playlist videos in .annextube/unavailable_videos.json.
+
+        Compares playlist.video_ids against fetched + already-archived IDs
+        to find unavailable videos and records them so
+        _load_unavailable_videos() will skip them on subsequent runs.
+
+        Args:
+            playlist: Playlist model with full video_ids list
+            fetched_video_ids: Set of video IDs that were successfully fetched
+
+        Returns:
+            Number of newly recorded unavailable video IDs
+        """
+        # Collect IDs that were explicitly detected as unavailable during extraction
+        newly_unavailable = set(self.youtube._last_unavailable_ids)
+
+        # Also find IDs in the playlist that weren't fetched and don't have metadata
+        all_playlist_ids = set(playlist.video_ids)
+        missing_ids = all_playlist_ids - fetched_video_ids
+
+        # Check which missing IDs already have metadata.json in the archive
+        video_id_map = self._build_video_id_map()
+
+        for video_id in missing_ids:
+            if video_id not in video_id_map:
+                newly_unavailable.add(video_id)
+
+        if not newly_unavailable:
+            return 0
+
+        # Load existing unavailable_videos.json
+        unavail_path = self.repo_path / ".annextube" / "unavailable_videos.json"
+        existing: dict[str, dict] = {}
+        if unavail_path.exists():
+            try:
+                with open(unavail_path, encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load {unavail_path}: {e}")
+
+        # Add new entries (skip already-recorded IDs)
+        now = datetime.now().isoformat()
+        new_count = 0
+        for video_id in newly_unavailable:
+            if video_id in existing:
+                continue
+            existing[video_id] = {
+                "detected_at": now,
+                "reason": "unavailable",
+                "playlist_id": playlist.playlist_id,
+            }
+            new_count += 1
+            logger.debug(f"Recorded unavailable video: {video_id}")
+
+        if new_count == 0:
+            return 0
+
+        # Write updated file
+        unavail_path.parent.mkdir(parents=True, exist_ok=True)
+        with AtomicFileWriter(unavail_path) as f:
+            json.dump(existing, f, indent=2)
+
+        logger.info(f"Recorded {new_count} newly unavailable video(s) in {unavail_path.name}")
+        return new_count
 
     def _process_video(self, video: Video, prefetched_stats: dict[str, dict[str, int]] | None = None) -> int:
         """Process a single video.

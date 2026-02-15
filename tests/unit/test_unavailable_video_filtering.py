@@ -6,6 +6,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from annextube.lib.config import Config
+from annextube.models.playlist import Playlist
+from annextube.services.archiver import Archiver
 from annextube.services.youtube import YouTubeService
 
 
@@ -199,3 +202,148 @@ def test_load_unavailable_videos_corrupted_metadata(tmp_path: Path) -> None:
     # Should only find the valid unavailable video
     assert len(unavailable) == 1
     assert "valid123" in unavailable
+
+
+@pytest.fixture
+def playlist_with_unavailable() -> Playlist:
+    """Create a playlist that includes both available and unavailable video IDs."""
+    return Playlist(
+        playlist_id="PLtest123",
+        title="Test Playlist",
+        description="",
+        channel_id="UCtest",
+        channel_name="Test Channel",
+        video_count=4,
+        privacy_status="public",
+        last_modified=None,
+        video_ids=["avail1", "avail2", "gone1", "gone2"],
+    )
+
+
+@pytest.mark.ai_generated
+def test_save_unavailable_stubs_creates_json(
+    tmp_path: Path, playlist_with_unavailable: Playlist
+) -> None:
+    """Unavailable video IDs are recorded in .annextube/unavailable_videos.json."""
+    config = Config()
+    archiver = Archiver(tmp_path, config)
+
+    # Only avail1 and avail2 were successfully fetched
+    fetched_ids = {"avail1", "avail2"}
+    new_count = archiver._save_unavailable_stubs(playlist_with_unavailable, fetched_ids)
+
+    assert new_count == 2
+
+    # Verify the centralized JSON file
+    unavail_path = tmp_path / ".annextube" / "unavailable_videos.json"
+    assert unavail_path.exists()
+
+    with open(unavail_path) as f:
+        data = json.load(f)
+
+    assert set(data.keys()) == {"gone1", "gone2"}
+    for _vid, entry in data.items():
+        assert "detected_at" in entry
+        assert entry["reason"] == "unavailable"
+        assert entry["playlist_id"] == "PLtest123"
+
+    # No stub metadata.json should exist in videos/
+    videos_dir = tmp_path / "videos"
+    assert not list(videos_dir.rglob("metadata.json")) if videos_dir.exists() else True
+
+
+@pytest.mark.ai_generated
+def test_load_unavailable_finds_json_entries(
+    tmp_path: Path, playlist_with_unavailable: Playlist
+) -> None:
+    """_load_unavailable_videos() finds entries from unavailable_videos.json."""
+    config = Config()
+    archiver = Archiver(tmp_path, config)
+
+    # Record unavailable videos
+    archiver._save_unavailable_stubs(playlist_with_unavailable, {"avail1", "avail2"})
+
+    # Now _load_unavailable_videos should find them
+    service = YouTubeService()
+    unavailable = service._load_unavailable_videos(tmp_path)
+
+    assert "gone1" in unavailable
+    assert "gone2" in unavailable
+    assert "avail1" not in unavailable
+    assert "avail2" not in unavailable
+
+
+@pytest.mark.ai_generated
+def test_save_unavailable_stubs_is_idempotent(
+    tmp_path: Path, playlist_with_unavailable: Playlist
+) -> None:
+    """Running _save_unavailable_stubs twice does not duplicate entries."""
+    config = Config()
+    archiver = Archiver(tmp_path, config)
+
+    # Record once
+    count1 = archiver._save_unavailable_stubs(playlist_with_unavailable, {"avail1", "avail2"})
+    assert count1 == 2
+
+    # Record again — should add zero new entries
+    count2 = archiver._save_unavailable_stubs(playlist_with_unavailable, {"avail1", "avail2"})
+    assert count2 == 0
+
+    # File should still have exactly 2 entries
+    unavail_path = tmp_path / ".annextube" / "unavailable_videos.json"
+    with open(unavail_path) as f:
+        data = json.load(f)
+    assert len(data) == 2
+
+
+@pytest.mark.ai_generated
+def test_two_pass_tracks_failed_extractions() -> None:
+    """Two-pass path adds failed video IDs to _last_unavailable_ids."""
+    service = YouTubeService()
+
+    # Verify initial state is empty
+    assert service._last_unavailable_ids == set()
+
+    # Mock yt-dlp to simulate two-pass extraction with failures
+    with patch("annextube.services.youtube.yt_dlp.YoutubeDL") as mock_ytdl_class:
+        # First pass: flat extraction returns 3 IDs
+        mock_flat_ydl = MagicMock()
+        mock_flat_ydl.extract_info.return_value = {
+            "entries": [
+                {"id": "ok1"},
+                {"id": "fail1"},
+                {"id": "ok2"},
+            ]
+        }
+
+        # Second pass: fail1 raises an error
+        mock_full_ydl = MagicMock()
+
+        def side_effect(url, download=False):
+            if "fail1" in url:
+                raise Exception("Video unavailable")
+            return {"id": url.split("=")[-1], "title": "OK"}
+
+        mock_full_ydl.extract_info.side_effect = side_effect
+
+        mock_ytdl_class.return_value.__enter__.side_effect = [
+            mock_flat_ydl, mock_full_ydl
+        ]
+
+        # Create a repo with a known unavailable video so two-pass is triggered
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            repo_path = Path(tmpdir)
+            videos_dir = repo_path / "videos" / "dummy"
+            videos_dir.mkdir(parents=True)
+            with open(videos_dir / "metadata.json", "w") as f:
+                json.dump({"video_id": "old_unavail", "availability": "unavailable"}, f)
+
+            videos = service.get_playlist_videos(
+                "https://www.youtube.com/playlist?list=PLtest",
+                repo_path=repo_path,
+                incremental=True,
+            )
+
+        assert len(videos) == 2
+        assert "fail1" in service._last_unavailable_ids
