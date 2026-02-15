@@ -93,15 +93,28 @@ include = [
 ]
 
 [tool.hatch.build.targets.sdist]
+# Without this, hatchling walks INTO excluded dirs checking each file individually,
+# which is catastrophically slow with e.g. .cache (17GB/1.3M files in containers).
+skip-excluded-dirs = true
 exclude = [
+    # Build/dev tool caches
+    ".cache",
     ".venv",
     ".tox",
-    ".cache",
+    ".npm",
+    ".deno",
+    ".duct",
+    "node_modules",
+    # User/container home directory artifacts
     ".config",
     ".local",
-    ".deno",
     ".worktrees",
-    ".duct",
+    ".anaconda",
+    ".conda",
+    ".pki",
+    ".ssh",
+    ".vim",
+    # Project non-dist directories
     "test-archives",
 ]
 
