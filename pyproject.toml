@@ -44,6 +44,7 @@ test = [
 e2e = [
     "annextube[test]",
     "playwright>=1.40",
+    "pytest-playwright>=0.4.0",
 ]
 datalad = [
     "datalad>=1.0.0",  # For DataLad dataset creation
