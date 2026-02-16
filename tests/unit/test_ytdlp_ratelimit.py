@@ -50,6 +50,22 @@ class TestParseWaitSeconds:
     def test_zero_becomes_one(self):
         assert parse_wait_seconds("retry after 0") == 1
 
+    def test_english_an_hour(self):
+        assert parse_wait_seconds("for up to an hour") == 3600
+
+    def test_english_30_minutes(self):
+        assert parse_wait_seconds("for up to 30 minutes") == 1800
+
+    def test_english_2_hours(self):
+        assert parse_wait_seconds("for up to 2 hours") == 7200
+
+    def test_english_full_ytdlp_message(self):
+        msg = (
+            "This content isn't available, try again later. "
+            "Your account has been rate-limited by YouTube for up to an hour."
+        )
+        assert parse_wait_seconds(msg) == 3600
+
 
 # ---------------------------------------------------------------------------
 # is_rate_limit_message

@@ -32,6 +32,12 @@ _WAIT_SECONDS_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+# English duration phrases like "for up to an hour", "for up to 30 minutes"
+_DURATION_WORDS_PATTERN = re.compile(
+    r"for (?:up to )?(?:an? )?(\d+)?\s*(hour|minute)s?",
+    re.IGNORECASE,
+)
+
 # Default wait when YouTube bans the session (~1 hour)
 DEFAULT_BAN_WAIT_SECONDS = 3600
 
@@ -47,6 +53,9 @@ class YouTubeRateLimitError(Exception):
 def parse_wait_seconds(message: str) -> int:
     """Extract wait duration from an error message.
 
+    Handles both numeric patterns (``retry after 3600``) and English
+    duration phrases (``for up to an hour``, ``for up to 30 minutes``).
+
     Falls back to DEFAULT_BAN_WAIT_SECONDS if nothing parseable is found.
 
     Args:
@@ -55,12 +64,23 @@ def parse_wait_seconds(message: str) -> int:
     Returns:
         Number of seconds to wait before retrying.
     """
+    # Try numeric pattern first (e.g. "retry after 3600")
     m = _WAIT_SECONDS_PATTERN.search(message)
     if m:
         try:
             return max(int(m.group(1)), 1)
         except (ValueError, OverflowError):
             pass
+
+    # Try English duration phrases (e.g. "for up to an hour")
+    m = _DURATION_WORDS_PATTERN.search(message)
+    if m:
+        multipliers = {"hour": 3600, "minute": 60}
+        digit_str = m.group(1)  # may be None for "an hour"
+        unit = m.group(2).lower()
+        count = int(digit_str) if digit_str else 1
+        return max(count * multipliers[unit], 1)
+
     return DEFAULT_BAN_WAIT_SECONDS
 
 

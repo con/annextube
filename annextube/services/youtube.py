@@ -2,6 +2,8 @@
 
 import json
 import re
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -101,6 +103,17 @@ class YouTubeService:
         # Debug: Show what config was passed to YouTubeService
         logger.debug(f"YouTubeService initialized with: cookies_file={cookies_file}, cookies_from_browser={cookies_from_browser}, proxy={proxy}, api_key={'***' if youtube_api_key else None}")
 
+    @contextmanager
+    def _semaphore_guard(self) -> Generator[None, None, None]:
+        """Acquire/release the cross-process semaphore if configured."""
+        if self._semaphore:
+            self._semaphore.acquire()
+        try:
+            yield
+        finally:
+            if self._semaphore:
+                self._semaphore.release()
+
     def _make_rate_limit_detector(self, base_logger: Any) -> RateLimitDetector:
         """Create a RateLimitDetector wrapping *base_logger*."""
         return RateLimitDetector(base_logger)
@@ -144,8 +157,9 @@ class YouTubeService:
         opts = self._get_ydl_opts(download=download, rate_limit_detector=detector)
         if extra_opts:
             opts.update(extra_opts)
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=download)
+        with self._semaphore_guard():
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=download)
         self._check_detector(detector)
         result: dict[str, Any] | None = info
         return result
@@ -306,7 +320,8 @@ class YouTubeService:
             logger.info("First pass: fetching video list (this may take a minute for large playlists)...")
             with yt_dlp.YoutubeDL(flat_opts) as ydl_flat:
                 try:
-                    info = ydl_flat.extract_info(channel_url, download=False)
+                    with self._semaphore_guard():
+                        info = ydl_flat.extract_info(channel_url, download=False)
                     self._check_detector(_detector)
                     if not info or not info.get("entries"):
                         logger.warning("No videos found in channel")
@@ -385,7 +400,8 @@ class YouTubeService:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             try:
                 # Extract channel info (this gets the uploads playlist with full metadata)
-                info = ydl.extract_info(channel_url, download=False)
+                with self._semaphore_guard():
+                    info = ydl.extract_info(channel_url, download=False)
                 self._check_detector(_detector2)
 
                 if not info:
@@ -499,7 +515,8 @@ class YouTubeService:
             logger.info("First pass: fetching video ID list (fast)...")
             with yt_dlp.YoutubeDL(flat_opts) as ydl_flat:
                 try:
-                    info = ydl_flat.extract_info(playlist_url, download=False)
+                    with self._semaphore_guard():
+                        info = ydl_flat.extract_info(playlist_url, download=False)
                     self._check_detector(_detector_pl)
                     if not info or not info.get("entries"):
                         logger.warning("No videos found in playlist")
@@ -582,7 +599,8 @@ class YouTubeService:
                 # Extract playlist info (gets full metadata for all videos)
                 logger.info("Fetching playlist metadata (this may take several minutes for large playlists)...")
                 logger.debug(f"Calling yt-dlp: extract_info('{playlist_url}', download=False)")
-                info = ydl.extract_info(playlist_url, download=False)
+                with self._semaphore_guard():
+                    info = ydl.extract_info(playlist_url, download=False)
                 self._check_detector(_detector_plr)
 
                 if not info:
@@ -1138,8 +1156,9 @@ class YouTubeService:
             })
 
             def _download():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    ydl.download([video_url])
+                with self._semaphore_guard():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        ydl.download([video_url])
 
             # Retry on rate limits
             self._with_rate_limit_retry(_download)
@@ -1325,10 +1344,11 @@ class YouTubeService:
                 }
 
             def _download():
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    # Extract info with comments
-                    info = ydl.extract_info(video_url, download=False)
-                    return info
+                with self._semaphore_guard():
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        # Extract info with comments
+                        info = ydl.extract_info(video_url, download=False)
+                        return info
 
             try:
                 # Retry on rate limits

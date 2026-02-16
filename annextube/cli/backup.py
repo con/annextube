@@ -58,13 +58,19 @@ logger = get_logger(__name__)
     help="Override comments depth: -1=unlimited, 0=disabled, N=limit to N",
 )
 @click.option(
+    "--yt-dlp-max-parallel",
+    type=int,
+    default=None,
+    help="Max parallel yt-dlp calls per cookie file (default: 1)",
+)
+@click.option(
     "--skip-existing",
     is_flag=True,
     hidden=True,  # Deprecated, replaced by --update=all-incremental
     help="(Deprecated: use --update=all-incremental instead)",
 )
 @click.pass_context
-def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, skip_existing: bool):
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, yt_dlp_max_parallel: int | None, skip_existing: bool):
     """Backup YouTube channel or playlist.
 
     If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
@@ -121,6 +127,10 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             # Convert -1 (unlimited) to None, same as init does
             config.components.comments_depth = None if comments_depth == -1 else comments_depth
             click.echo(f"Comments depth override: {comments_depth} ({'unlimited' if comments_depth == -1 else 'disabled' if comments_depth == 0 else f'up to {comments_depth}'})")
+
+        # Override yt_dlp_max_parallel if specified
+        if yt_dlp_max_parallel is not None:
+            config.user.yt_dlp_max_parallel = yt_dlp_max_parallel
 
         # Handle deprecated --skip-existing flag
         if skip_existing:
