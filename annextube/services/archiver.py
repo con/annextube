@@ -1686,6 +1686,92 @@ class Archiver:
         except Exception as e:
             logger.warning(f"Failed to download thumbnail: {e}")
 
+    def _curate_captions(
+        self, video: Video, video_dir: Path, captions_metadata: list[dict]
+    ) -> list[dict]:
+        """Auto-curate downloaded captions if curation is enabled.
+
+        Args:
+            video: Video model instance
+            video_dir: Video directory path
+            captions_metadata: List of caption metadata dicts from download
+
+        Returns:
+            List of curated caption metadata entries (for appending to captions.tsv)
+        """
+        # Check if curation is enabled (global + per-source override)
+        curation_enabled = self.config.curation.enabled
+        if self._current_source_config and self._current_source_config.curation is not None:
+            curation_enabled = self._current_source_config.curation
+        if not curation_enabled:
+            return []
+
+        # Load merged glossary
+        from annextube.models.curation import Glossary
+
+        user_glossary_path = None
+        if self.config.user.glossary_path:
+            user_glossary_path = Path(self.config.user.glossary_path).expanduser()
+
+        _archive_glossary = self.repo_path / ".annextube" / "glossary.yaml"
+        archive_glossary_path: Path | None = _archive_glossary if _archive_glossary.exists() else None
+
+        glossary = Glossary.load_merged(user_glossary_path, archive_glossary_path)
+        if not glossary.terms:
+            logger.debug("No glossary terms found, skipping curation")
+            return []
+
+        from annextube.services.caption_curator import CaptionCurator, load_corrections
+
+        curator = CaptionCurator(self.config.curation)
+        curated_entries: list[dict] = []
+        curated_suffix = self.config.curation.curated_suffix
+
+        for caption in captions_metadata:
+            # Only curate auto-generated (non-translated) captions
+            if not caption.get("auto_generated") or caption.get("auto_translated"):
+                continue
+
+            vtt_path = self.repo_path / caption["file_path"]
+            if not vtt_path.exists():
+                continue
+
+            lang = caption["language_code"]
+            # Build output path: video.en.vtt -> video.en-curated.vtt
+            stem = vtt_path.stem  # e.g., "video.en"
+            output_path = vtt_path.parent / f"{stem}-{curated_suffix}.vtt"
+
+            # Load per-video corrections if they exist
+            corrections: dict[str, str] = {}
+            llm_corr_path = video_dir / "llm_corrections.json"
+            if llm_corr_path.exists():
+                corrections = load_corrections(llm_corr_path)
+
+            try:
+                result = curator.curate_vtt_file(
+                    vtt_path, output_path, glossary, corrections
+                )
+                if result.segments:
+                    curated_lang = f"{lang}-{curated_suffix}"
+                    curated_entries.append({
+                        "language_code": curated_lang,
+                        "auto_generated": False,
+                        "auto_translated": False,
+                        "file_path": str(
+                            output_path.relative_to(self.repo_path)
+                        ),
+                        "fetched_at": result.curated_at,
+                        "curated_from": lang,
+                    })
+                    logger.info(
+                        f"Curated {lang} captions for {video.video_id}: "
+                        f"{result.original_word_count} words -> {len(result.segments)} cues"
+                    )
+            except Exception as e:
+                logger.warning(f"Failed to curate {lang} captions for {video.video_id}: {e}")
+
+        return curated_entries
+
     def _download_captions(self, video: Video, video_dir: Path) -> list[str]:
         """Download video captions, generate captions.tsv, and set git-annex metadata.
 
@@ -1724,8 +1810,8 @@ class Archiver:
                 # Create captions.tsv with metadata
                 captions_tsv_path = video_dir / "captions.tsv"
                 with AtomicFileWriter(captions_tsv_path) as f:
-                    # Write header (added auto_translated column)
-                    f.write("language_code\tauto_generated\tauto_translated\tfile_path\tfetched_at\n")
+                    # Write header (includes curated_from for curated entries)
+                    f.write("language_code\tauto_generated\tauto_translated\tfile_path\tfetched_at\tcurated_from\n")
                     # Write caption rows and set git-annex metadata
                     for caption in captions_metadata:
                         f.write(
@@ -1733,7 +1819,8 @@ class Archiver:
                             f"{caption['auto_generated']}\t"
                             f"{caption.get('auto_translated', False)}\t"
                             f"{caption['file_path']}\t"
-                            f"{caption['fetched_at']}\n"
+                            f"{caption['fetched_at']}\t"
+                            f"{caption.get('curated_from', '')}\n"
                         )
 
                         # Set git-annex metadata for each caption file
@@ -1751,6 +1838,22 @@ class Archiver:
                             'auto_translated': str(caption.get('auto_translated', False)),
                         }
                         self.git_annex.set_metadata_if_changed(caption_file_path, metadata)
+
+                # Auto-curate captions if enabled
+                curated_entries = self._curate_captions(video, video_dir, captions_metadata)
+                if curated_entries:
+                    # Append curated entries to captions.tsv
+                    with open(captions_tsv_path, "a") as fa:
+                        for entry in curated_entries:
+                            fa.write(
+                                f"{entry['language_code']}\t"
+                                f"{entry['auto_generated']}\t"
+                                f"{entry.get('auto_translated', False)}\t"
+                                f"{entry['file_path']}\t"
+                                f"{entry['fetched_at']}\t"
+                                f"{entry.get('curated_from', '')}\n"
+                            )
+                    captions_metadata.extend(curated_entries)
 
                 logger.debug(f"Downloaded {len(captions_metadata)} caption files and created captions.tsv")
                 # Return list of language codes

@@ -26,6 +26,27 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class CurationConfig:
+    """Configuration for caption curation pipeline."""
+
+    enabled: bool = True  # Auto-curate during backup
+    curated_suffix: str = "curated"  # video.en-curated.vtt
+    max_words_per_cue: int = 12
+    min_orphan_words: int = 3
+    filler_removal: bool = True
+    command_quoting: bool = True
+    fuzzy_enabled: bool = True
+    fuzzy_threshold: float = 0.82
+    # LLM settings
+    llm_provider: str | None = None  # "ollama", "openai", "anthropic"
+    llm_model: str | None = None
+    llm_base_url: str | None = None  # For Ollama
+    # Audio alignment (optional)
+    audio_align_method: str | None = None  # "stable-ts" or "ctc"
+    audio_align_model: str | None = None  # Whisper model name
+
+
+@dataclass
 class SourceConfig:
     """Configuration for a YouTube source (channel or playlist)."""
 
@@ -42,6 +63,7 @@ class SourceConfig:
     comments_depth: int | None = None  # Override: Comments depth
     captions: bool | None = None  # Override: Download captions
     thumbnails: bool | None = None  # Override: Download thumbnails
+    curation: bool | None = None  # Override: Auto-curate captions
 
 
 @dataclass
@@ -112,6 +134,9 @@ class UserConfig:
     sleep_interval: int | None = None  # Min seconds between downloads
     max_sleep_interval: int | None = None  # Max seconds between downloads
 
+    # Glossary
+    glossary_path: str | None = None  # User-wide glossary YAML path
+
     # Advanced
     ytdlp_extra_opts: list[str] = field(default_factory=list)  # Extra CLI options for yt-dlp
 
@@ -172,6 +197,7 @@ class UserConfig:
             "sleep_interval": youtube_section.get("sleep_interval") or data.get("sleep_interval"),
             "max_sleep_interval": youtube_section.get("max_sleep_interval") or data.get("max_sleep_interval"),
             "ytdlp_extra_opts": youtube_section.get("ytdlp_extra_opts") or data.get("ytdlp_extra_opts", []),
+            "glossary_path": data.get("glossary_path"),
         }
         if rate_limit_max_wait is not None:
             kwargs["rate_limit_max_wait_seconds"] = int(rate_limit_max_wait)
@@ -194,6 +220,7 @@ class Config:
     filters: FiltersConfig = field(default_factory=FiltersConfig)
     organization: OrganizationConfig = field(default_factory=OrganizationConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
+    curation: CurationConfig = field(default_factory=CurationConfig)
 
     # Convenience properties for backward compatibility
     @property
@@ -236,6 +263,7 @@ class Config:
                 comments_depth=s.get("comments_depth"),
                 captions=s.get("captions"),
                 thumbnails=s.get("thumbnails"),
+                curation=s.get("curation"),
             )
             for s in data.get("sources", [])
         ]
@@ -283,11 +311,24 @@ class Config:
             video_filename=organization_data.get("video_filename", "video.mkv"),
         )
 
+        curation_data = data.get("curation", {})
+        curation_kwargs: dict[str, Any] = {}
+        for key in (
+            "enabled", "curated_suffix", "max_words_per_cue", "min_orphan_words",
+            "filler_removal", "command_quoting", "fuzzy_enabled", "fuzzy_threshold",
+            "llm_provider", "llm_model", "llm_base_url",
+            "audio_align_method", "audio_align_model",
+        ):
+            if key in curation_data:
+                curation_kwargs[key] = curation_data[key]
+        curation = CurationConfig(**curation_kwargs)
+
         return cls(
             sources=sources,
             components=components,
             filters=filters,
             organization=organization,
+            curation=curation,
         )
 
 
