@@ -364,3 +364,106 @@ def test_two_pass_tracks_failed_extractions() -> None:
 
         assert len(videos) == 2
         assert "fail1" in service._last_unavailable_ids
+
+
+@pytest.mark.ai_generated
+@patch("annextube.services.youtube.yt_dlp.YoutubeDL")
+def test_get_playlist_videos_skips_existing_video_ids(
+    mock_ytdl_class: MagicMock,
+) -> None:
+    """Test that existing_video_ids are skipped during incremental playlist backup."""
+    service = YouTubeService()
+
+    # Mock first pass (flat extraction) to return video IDs
+    mock_flat_ydl = MagicMock()
+    mock_flat_ydl.extract_info.return_value = {
+        "entries": [
+            {"id": "existing1"},   # Already in archive - skip
+            {"id": "existing2"},   # Already in archive - skip
+            {"id": "new_video1"},  # New - will fetch
+            {"id": "new_video2"},  # New - will fetch
+        ]
+    }
+
+    # Per-video mock for second pass
+    def make_per_video_ydl():
+        m = MagicMock()
+        def _extract(url, download=False):
+            vid = url.split("=")[-1]
+            return {"id": vid, "title": f"Video {vid}"}
+        m.extract_info.side_effect = _extract
+        return m
+
+    call_count = [0]
+    def enter_side_effect():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return mock_flat_ydl
+        return make_per_video_ydl()
+
+    mock_ytdl_class.return_value.__enter__ = lambda self: enter_side_effect()
+    mock_ytdl_class.return_value.__exit__ = MagicMock(return_value=False)
+
+    existing_ids = {"existing1", "existing2"}
+    videos = service.get_playlist_videos(
+        "https://www.youtube.com/playlist?list=PLtest",
+        incremental=True,
+        existing_video_ids=existing_ids,
+    )
+
+    # Should only fetch metadata for the 2 new videos
+    assert len(videos) == 2
+    fetched_ids = {v["id"] for v in videos}
+    assert "new_video1" in fetched_ids
+    assert "new_video2" in fetched_ids
+    assert "existing1" not in fetched_ids
+    assert "existing2" not in fetched_ids
+
+
+@pytest.mark.ai_generated
+@patch("annextube.services.youtube.yt_dlp.YoutubeDL")
+def test_get_playlist_videos_skips_both_existing_and_unavailable(
+    mock_ytdl_class: MagicMock, mock_repo_path: Path
+) -> None:
+    """Test that both existing and unavailable videos are skipped together."""
+    service = YouTubeService()
+
+    # mock_repo_path has private456 and removed789 as unavailable
+    mock_flat_ydl = MagicMock()
+    mock_flat_ydl.extract_info.return_value = {
+        "entries": [
+            {"id": "existing1"},    # Already archived - skip
+            {"id": "private456"},   # Unavailable - skip
+            {"id": "removed789"},   # Unavailable - skip
+            {"id": "brand_new"},    # New - will fetch
+        ]
+    }
+
+    def make_per_video_ydl():
+        m = MagicMock()
+        def _extract(url, download=False):
+            return {"id": "brand_new", "title": "Brand New Video"}
+        m.extract_info.side_effect = _extract
+        return m
+
+    call_count = [0]
+    def enter_side_effect():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return mock_flat_ydl
+        return make_per_video_ydl()
+
+    mock_ytdl_class.return_value.__enter__ = lambda self: enter_side_effect()
+    mock_ytdl_class.return_value.__exit__ = MagicMock(return_value=False)
+
+    existing_ids = {"existing1"}
+    videos = service.get_playlist_videos(
+        "https://www.youtube.com/playlist?list=PLtest",
+        repo_path=mock_repo_path,
+        incremental=True,
+        existing_video_ids=existing_ids,
+    )
+
+    # Should only fetch brand_new (skip 1 existing + 2 unavailable)
+    assert len(videos) == 1
+    assert videos[0]["id"] == "brand_new"

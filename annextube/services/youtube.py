@@ -467,20 +467,23 @@ class YouTubeService:
 
     def get_playlist_videos(
         self, playlist_url: str, limit: int | None = None,
-        repo_path: Path | None = None, incremental: bool = False
+        repo_path: Path | None = None, incremental: bool = False,
+        existing_video_ids: set[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Get videos from a playlist.
 
-        In incremental mode with known unavailable videos, uses two-pass approach:
+        In incremental mode, uses two-pass approach:
         1. First pass: extract_flat to get just video IDs (fast)
-        2. Filter out known unavailable videos
-        3. Second pass: fetch full metadata only for available videos
+        2. Filter out known unavailable videos and already-archived videos
+        3. Second pass: fetch full metadata only for remaining videos
 
         Args:
             playlist_url: YouTube playlist URL
             limit: Optional limit for number of videos (most recent)
             repo_path: Optional path to archive repository (for incremental mode)
             incremental: If True, skip videos known to be unavailable
+            existing_video_ids: Optional set of video IDs already in archive
+                (skipped during incremental two-pass filtering)
 
         Returns:
             List of video metadata dictionaries
@@ -497,8 +500,8 @@ class YouTubeService:
             if unavailable_videos:
                 logger.info(f"Loaded {len(unavailable_videos)} known unavailable video(s) from archive")
 
-        # Use two-pass approach if we have unavailable videos to filter
-        use_two_pass = incremental and len(unavailable_videos) > 0
+        # Use two-pass approach in incremental mode when we have videos to skip
+        use_two_pass = incremental and (len(unavailable_videos) > 0 or bool(existing_video_ids))
 
         if use_two_pass:
             # First pass: Get just video IDs with extract_flat (fast, no metadata fetching)
@@ -526,9 +529,10 @@ class YouTubeService:
                     all_entries = list(info.get("entries", []))
                     logger.info(f"Found {len(all_entries)} video(s) in playlist")
 
-                    # Filter to find videos to fetch (exclude known unavailable)
+                    # Filter to find videos to fetch (exclude known unavailable and existing)
                     video_ids_to_fetch: list[str] = []
                     skipped_unavailable = 0
+                    skipped_existing = 0
 
                     for entry in all_entries:
                         if not entry or not entry.get("id"):
@@ -540,13 +544,20 @@ class YouTubeService:
                             skipped_unavailable += 1
                             continue
 
+                        if existing_video_ids and video_id in existing_video_ids:
+                            logger.debug(f"Skipping already-archived video: {video_id}")
+                            skipped_existing += 1
+                            continue
+
                         video_ids_to_fetch.append(video_id)
 
                     if skipped_unavailable > 0:
                         logger.info(f"Skipped {skipped_unavailable} video(s) known to be unavailable")
+                    if skipped_existing > 0:
+                        logger.info(f"Skipped {skipped_existing} existing video(s) already in archive")
 
                     if not video_ids_to_fetch:
-                        logger.info("No new videos to fetch (all known unavailable)")
+                        logger.info("No new videos to fetch (all already archived or unavailable)")
                         return []
 
                     logger.info(f"Will fetch full metadata for {len(video_ids_to_fetch)} video(s)")

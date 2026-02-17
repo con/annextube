@@ -1120,11 +1120,22 @@ class Archiver:
         # Get playlist videos
         limit = self.config.filters.limit
         incremental = self.update_mode in ["videos-incremental", "all-incremental", "playlists"]
+
+        # In incremental mode, load existing video IDs to skip re-fetching
+        existing_video_ids = None
+        if incremental:
+            from .tsv_reader import TSVReader
+            videos_tsv_path = self.repo_path / "videos" / "videos.tsv"
+            existing_video_ids = TSVReader.get_existing_video_ids(videos_tsv_path)
+            if existing_video_ids:
+                logger.info(f"Incremental playlist mode: {len(existing_video_ids)} existing videos to skip")
+
         all_videos = self.youtube.get_playlist_videos(
             playlist_url,
             limit=limit,
             repo_path=self.repo_path,
-            incremental=incremental
+            incremental=incremental,
+            existing_video_ids=existing_video_ids,
         )
 
         # Record unavailable videos so they're skipped on future runs
