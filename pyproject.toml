@@ -31,6 +31,7 @@ dependencies = [
     "google-api-python-client>=2.0.0",  # For YouTube Data API v3 comment fetching
     "platformdirs>=4.0.0",  # Cross-platform config directory discovery
     "python-magic>=0.4.27",  # MIME type detection for downloaded files
+    "pyyaml>=6.0",  # YAML glossary parsing for caption curation
 ]
 
 [project.optional-dependencies]
@@ -48,6 +49,10 @@ e2e = [
 ]
 datalad = [
     "datalad>=1.0.0",  # For DataLad dataset creation
+]
+audio-align = [
+    "stable-ts>=2.15.0",
+    "openai-whisper>=20231117",
 ]
 devel = [
     "annextube[test]",

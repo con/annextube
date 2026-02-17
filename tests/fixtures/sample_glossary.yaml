@@ -1,0 +1,37 @@
+# Test glossary for caption curation tests
+project_names:
+  - term: "DataLad"
+    patterns: ["data lad", "data glad", "data lard", "data lab", "datalad"]
+  - term: "NeuroDebian"
+    patterns: ["neuro debian", "neuro-debian", "neurodebian"]
+  - term: "ReproNim"
+    patterns: ["repro nim", "repro-nim", "repronim", "repro name"]
+  - term: "git-annex"
+    patterns: ["git annex", "git anex", "get annex"]
+  - term: "fMRIPrep"
+    patterns: ["f mri prep", "fmri prep", "fmriprep"]
+
+commands:
+  - term: "datalad run"
+    patterns: ["data lad run", "data glad run"]
+  - term: "datalad containers-run"
+    patterns: ["data lad containers run", "data glad containers run"]
+
+acronyms:
+  - term: "BIDS"
+    expansion: "Brain Imaging Data Structure"
+    patterns: ["bids", "beds", "bits"]
+  - term: "fMRI"
+    expansion: "functional Magnetic Resonance Imaging"
+    patterns: ["f mri", "f m r i", "fmri"]
+  - term: "YODA"
+    expansion: "YODAs Organigram on Data Analysis"
+    patterns: ["yoda"]
+
+technical_terms:
+  - term: "neuroimaging"
+    patterns: ["neuro imaging", "neuro-imaging"]
+  - term: "subdataset"
+    patterns: ["sub dataset", "sub data set", "sub-dataset"]
+  - term: "dataset"
+    patterns: ["data set"]
