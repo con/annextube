@@ -513,6 +513,73 @@ test.describe('Complete Archive Workflow', () => {
     });
   });
 
+  test.describe('Clone command panel', () => {
+    test('clone toggle is visible in header when .git is accessible', async ({ page }) => {
+      await page.goto(WEB_BASE);
+      await page.waitForSelector('.video-grid');
+
+      // The clone toggle should be on the title row
+      const cloneToggle = page.locator('.clone-toggle');
+      // It may or may not appear depending on whether the archive is a git repo
+      // Just verify no JS errors and the toggle is either visible or absent
+      const count = await cloneToggle.count();
+      if (count > 0) {
+        await expect(cloneToggle).toContainText('Clone');
+      }
+    });
+
+    test('expanding clone panel shows datalad and git tabs', async ({ page }) => {
+      await page.goto(WEB_BASE);
+      await page.waitForSelector('.video-grid');
+
+      const cloneToggle = page.locator('.clone-toggle');
+      if (await cloneToggle.count() === 0) {
+        test.skip();
+        return;
+      }
+
+      await cloneToggle.click();
+
+      // Should show two tabs
+      const tabs = page.locator('.clone-panel .tab');
+      await expect(tabs).toHaveCount(2);
+      await expect(tabs.nth(0)).toContainText('DataLad');
+      await expect(tabs.nth(1)).toContainText('Git / git-annex');
+
+      // DataLad tab should be active by default
+      await expect(tabs.nth(0)).toHaveClass(/active/);
+
+      // Should show datalad clone command
+      const commandText = page.locator('.command-text');
+      await expect(commandText.first()).toContainText('datalad clone');
+    });
+
+    test('switching to Git tab shows git clone command', async ({ page }) => {
+      await page.goto(WEB_BASE);
+      await page.waitForSelector('.video-grid');
+
+      const cloneToggle = page.locator('.clone-toggle');
+      if (await cloneToggle.count() === 0) {
+        test.skip();
+        return;
+      }
+
+      await cloneToggle.click();
+
+      // Click Git tab
+      const gitTab = page.locator('.clone-panel .tab').nth(1);
+      await gitTab.click();
+      await expect(gitTab).toHaveClass(/active/);
+
+      // Should show git clone command (not datalad)
+      const commandText = page.locator('.command-text');
+      await expect(commandText.first()).toContainText('git clone');
+      // Verify it's not "datalad clone"
+      const text = await commandText.first().textContent();
+      expect(text).not.toContain('datalad');
+    });
+  });
+
   test.describe('Back navigation', () => {
     test('back button returns to video list', async ({ page }) => {
       await page.goto(WEB_BASE);

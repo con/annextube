@@ -170,7 +170,15 @@
           ← Back to channels
         </button>
       {/if}
-      <h1><a href="https://github.com/con/annextube" target="_blank" rel="noopener noreferrer" class="app-link">AnnexTube</a> <span class="version">v{appVersion}</span></h1>
+      <div class="title-row">
+        <h1><a href="https://github.com/con/annextube" target="_blank" rel="noopener noreferrer" class="app-link">AnnexTube</a> <span class="version">v{appVersion}</span></h1>
+        <CloneCommand
+          baseUrl={dataLoader.baseUrl}
+          channelDir={selectedChannel?.channel_dir ?? currentRoute.params.channel_dir ?? null}
+          videoFilePath={selectedVideo?.file_path ?? null}
+          {isMultiChannel}
+        />
+      </div>
       <p class="subtitle">
         {#if isMultiChannel && !selectedChannel}
           {channels.length} channel{channels.length !== 1 ? 's' : ''} in collection
@@ -178,14 +186,6 @@
           {allVideos.length} video{allVideos.length !== 1 ? 's' : ''} archived
         {/if}
       </p>
-    </div>
-    <div class="header-content">
-      <CloneCommand
-        baseUrl={dataLoader.baseUrl}
-        channelDir={selectedChannel?.channel_dir ?? currentRoute.params.channel_dir ?? null}
-        videoFilePath={selectedVideo?.file_path ?? null}
-        {isMultiChannel}
-      />
     </div>
   </header>
 
@@ -261,6 +261,13 @@
 
   .back-button:hover {
     text-decoration: underline;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 1rem;
+    position: relative;
   }
 
   h1 {

@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { probeGitUrl } from '@/services/git-discovery';
 
   export let baseUrl: string;
@@ -11,6 +10,25 @@
   let expanded = false;
   let activeTab: 'datalad' | 'git' = 'datalad';
   let copiedIndex: number | null = null;
+
+  // Re-probe when channelDir changes
+  let lastProbeKey = '';
+  $: probeKey = `${baseUrl}|${channelDir}|${isMultiChannel}`;
+  $: if (probeKey !== lastProbeKey) {
+    lastProbeKey = probeKey;
+    probeGit(baseUrl, channelDir, isMultiChannel);
+  }
+
+  async function probeGit(base: string, channel: string | null, multi: boolean) {
+    if (multi && channel) {
+      gitUrl = await probeGitUrl(`${base}/${channel}`);
+      if (!gitUrl) {
+        gitUrl = await probeGitUrl(base);
+      }
+    } else {
+      gitUrl = await probeGitUrl(base);
+    }
+  }
 
   // Derive the directory name from the clone URL
   // e.g. "https://example.com/archive/.git" → "archive"
@@ -27,35 +45,30 @@
     return `videos/${videoFilePath}/`;
   })();
 
-  // Commands for each tab
-  $: dataladCommands = gitUrl ? buildCommands('datalad') : [];
-  $: gitCommands = gitUrl ? buildCommands('git') : [];
-
   interface Command {
     text: string;
   }
 
-  function buildCommands(tab: 'datalad' | 'git'): Command[] {
-    if (!gitUrl) return [];
+  // Build commands reactively, listing all dependencies explicitly
+  $: commands = buildCommands(activeTab, gitUrl, videoRelPath, dirname);
+
+  function buildCommands(tab: 'datalad' | 'git', url: string | null, relPath: string | null, dir: string): Command[] {
+    if (!url) return [];
     const cmds: Command[] = [];
 
     if (tab === 'datalad') {
-      cmds.push({ text: `datalad clone ${gitUrl}` });
-      if (videoRelPath) {
-        cmds.push({ text: `cd ${dirname} && datalad get ${videoRelPath}` });
+      cmds.push({ text: `datalad clone ${url}` });
+      if (relPath) {
+        cmds.push({ text: `cd ${dir} && datalad get ${relPath}` });
       }
     } else {
-      cmds.push({ text: `git clone ${gitUrl}` });
-      if (videoRelPath) {
-        cmds.push({ text: `cd ${dirname} && git annex get ${videoRelPath}` });
+      cmds.push({ text: `git clone ${url}` });
+      if (relPath) {
+        cmds.push({ text: `cd ${dir} && git annex get ${relPath}` });
       }
     }
 
     return cmds;
-  }
-
-  function currentCommands(): Command[] {
-    return activeTab === 'datalad' ? dataladCommands : gitCommands;
   }
 
   async function copyToClipboard(text: string, index: number) {
@@ -69,18 +82,6 @@
       // Fallback: select text (clipboard API may not be available on file://)
     }
   }
-
-  onMount(async () => {
-    // For multi-channel + channel page, try channel subdataset first
-    if (isMultiChannel && channelDir) {
-      gitUrl = await probeGitUrl(`${baseUrl}/${channelDir}`);
-      if (!gitUrl) {
-        gitUrl = await probeGitUrl(baseUrl);
-      }
-    } else {
-      gitUrl = await probeGitUrl(baseUrl);
-    }
-  });
 </script>
 
 {#if gitUrl}
@@ -89,13 +90,14 @@
       class="clone-toggle"
       on:click={() => (expanded = !expanded)}
       aria-expanded={expanded}
+      aria-controls="clone-panel"
     >
       <span class="toggle-icon">{expanded ? '\u25BC' : '\u25B6'}</span>
-      Clone this archive
+      Clone
     </button>
 
     {#if expanded}
-      <div class="clone-panel">
+      <div id="clone-panel" class="clone-panel" role="region" aria-label="Clone commands">
         <div class="tab-bar" role="tablist">
           <button
             class="tab"
@@ -119,7 +121,7 @@
         </div>
 
         <div class="commands">
-          {#each currentCommands() as cmd, i}
+          {#each commands as cmd, i}
             <div class="command-line">
               <code class="command-text">$ {cmd.text}</code>
               <button
@@ -147,7 +149,7 @@
 
 <style>
   .clone-section {
-    margin-top: 8px;
+    margin-left: auto;
   }
 
   .clone-toggle {
@@ -160,6 +162,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    white-space: nowrap;
   }
 
   .clone-toggle:hover {
@@ -173,11 +176,17 @@
   }
 
   .clone-panel {
-    margin-top: 8px;
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 4px;
     background: #f5f5f5;
     border: 1px solid #e0e0e0;
     border-radius: 6px;
     overflow: hidden;
+    min-width: 420px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 200;
   }
 
   .tab-bar {
@@ -252,5 +261,12 @@
     font-size: 11px;
     color: #188038;
     font-weight: 500;
+  }
+
+  @media (max-width: 768px) {
+    .clone-panel {
+      min-width: 300px;
+      right: -16px;
+    }
   }
 </style>
