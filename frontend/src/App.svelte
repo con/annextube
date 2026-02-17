@@ -8,6 +8,7 @@
   import VideoDetail from '@/components/VideoDetail.svelte';
   import FilterPanel from '@/components/FilterPanel.svelte';
   import ChannelList from '@/components/ChannelList.svelte';
+  import CloneCommand from '@/components/CloneCommand.svelte';
 
   const appVersion: string = __APP_VERSION__;
 
@@ -177,6 +178,14 @@
           {allVideos.length} video{allVideos.length !== 1 ? 's' : ''} archived
         {/if}
       </p>
+    </div>
+    <div class="header-content">
+      <CloneCommand
+        baseUrl={dataLoader.baseUrl}
+        channelDir={selectedChannel?.channel_dir ?? currentRoute.params.channel_dir ?? null}
+        videoFilePath={selectedVideo?.file_path ?? null}
+        {isMultiChannel}
+      />
     </div>
   </header>
 
