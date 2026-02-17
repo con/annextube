@@ -41,6 +41,9 @@ class CurationConfig:
     llm_provider: str | None = None  # "ollama", "openai", "anthropic"
     llm_model: str | None = None
     llm_base_url: str | None = None  # For Ollama
+    # Glossary discovery
+    glossary_path: str | None = None  # Relative path, e.g. ".annextube/captions-glossary.yaml"
+    glossary_collate_parents: bool = False  # Walk up parent dirs, merge all found
     # Audio alignment (optional)
     audio_align_method: str | None = None  # "stable-ts" or "ctc"
     audio_align_model: str | None = None  # Whisper model name
@@ -316,6 +319,7 @@ class Config:
         for key in (
             "enabled", "curated_suffix", "max_words_per_cue", "min_orphan_words",
             "filler_removal", "command_quoting", "fuzzy_enabled", "fuzzy_threshold",
+            "glossary_path", "glossary_collate_parents",
             "llm_provider", "llm_model", "llm_base_url",
             "audio_align_method", "audio_align_model",
         ):

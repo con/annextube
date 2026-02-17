@@ -1706,17 +1706,27 @@ class Archiver:
         if not curation_enabled:
             return []
 
-        # Load merged glossary
+        # Load glossary via configured discovery
         from annextube.models.curation import Glossary
 
-        user_glossary_path = None
+        curation_cfg = self.config.curation
+        glossary = Glossary()
+
+        # User-wide glossary
         if self.config.user.glossary_path:
-            user_glossary_path = Path(self.config.user.glossary_path).expanduser()
+            user_path = Path(self.config.user.glossary_path).expanduser()
+            if user_path.exists():
+                glossary = Glossary.from_yaml(user_path)
 
-        _archive_glossary = self.repo_path / ".annextube" / "glossary.yaml"
-        archive_glossary_path: Path | None = _archive_glossary if _archive_glossary.exists() else None
+        # Discover via glossary_path config
+        if curation_cfg.glossary_path:
+            discovered = Glossary.discover(
+                video_dir,
+                curation_cfg.glossary_path,
+                collate_parents=curation_cfg.glossary_collate_parents,
+            )
+            glossary = glossary.merge(discovered)
 
-        glossary = Glossary.load_merged(user_glossary_path, archive_glossary_path)
         if not glossary.terms:
             logger.debug("No glossary terms found, skipping curation")
             return []

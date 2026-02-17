@@ -22,6 +22,8 @@ class TestCurationConfigDefaults:
         assert config.command_quoting is True
         assert config.fuzzy_enabled is True
         assert config.fuzzy_threshold == 0.82
+        assert config.glossary_path is None
+        assert config.glossary_collate_parents is False
         assert config.llm_provider is None
         assert config.llm_model is None
         assert config.llm_base_url is None
@@ -73,6 +75,18 @@ class TestCurationConfigFromDict:
         # Other fields should be defaults
         assert config.curation.curated_suffix == "curated"
         assert config.curation.max_words_per_cue == 12
+
+    def test_glossary_path_and_collate(self) -> None:
+        """Config.from_dict should parse glossary_path and glossary_collate_parents."""
+        data = {
+            "curation": {
+                "glossary_path": ".annextube/captions-glossary.yaml",
+                "glossary_collate_parents": True,
+            }
+        }
+        config = Config.from_dict(data)
+        assert config.curation.glossary_path == ".annextube/captions-glossary.yaml"
+        assert config.curation.glossary_collate_parents is True
 
     def test_source_curation_override(self) -> None:
         """Per-source curation override should be parsed."""

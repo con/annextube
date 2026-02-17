@@ -89,6 +89,48 @@ class Glossary:
             result = result.merge(archive_glossary)
         return result
 
+    @classmethod
+    def discover(
+        cls,
+        start_dir: Path,
+        glossary_path: str,
+        collate_parents: bool = False,
+    ) -> Glossary:
+        """Discover and load glossaries by searching for glossary_path.
+
+        Parameters
+        ----------
+        start_dir
+            Directory to start searching from.
+        glossary_path
+            Relative path to look for (e.g. ".annextube/captions-glossary.yaml").
+        collate_parents
+            If True, walk up parent directories collecting all matches.
+            More-specific (closer to start_dir) terms override less-specific.
+        """
+        found: list[Path] = []
+        current = start_dir.resolve()
+        while True:
+            candidate = current / glossary_path
+            if candidate.is_file():
+                found.append(candidate)
+                if not collate_parents:
+                    break
+            parent = current.parent
+            if parent == current:
+                break
+            current = parent
+
+        if not found:
+            return cls()
+
+        # Merge from farthest (least specific) to closest (most specific)
+        # so closer glossaries override farther ones.
+        result = cls()
+        for path in reversed(found):
+            result = result.merge(cls.from_yaml(path))
+        return result
+
 
 @dataclass
 class CurationResult:

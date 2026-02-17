@@ -142,6 +142,88 @@ class TestGlossaryLoading:
         assert len(glossary.terms) > 0
 
 
+# ── Glossary Discovery ───────────────────────────────────────────────────
+
+
+@pytest.mark.ai_generated
+class TestGlossaryDiscover:
+    """Test Glossary.discover() with glossary_path + collate_parents."""
+
+    def test_discover_in_current_dir(self, tmp_path: Path) -> None:
+        """Discover glossary in the start directory itself."""
+        glossary_dir = tmp_path / ".annextube"
+        glossary_dir.mkdir()
+        glossary_file = glossary_dir / "captions-glossary.yaml"
+        glossary_file.write_text(
+            "terms:\n  - term: DataLad\n    patterns: ['data lad']\n"
+        )
+        result = Glossary.discover(tmp_path, ".annextube/captions-glossary.yaml")
+        assert len(result.terms) == 1
+        assert result.terms[0].canonical == "DataLad"
+
+    def test_discover_in_parent(self, tmp_path: Path) -> None:
+        """Discover glossary in a parent directory with collate_parents."""
+        glossary_dir = tmp_path / ".annextube"
+        glossary_dir.mkdir()
+        glossary_file = glossary_dir / "glossary.yaml"
+        glossary_file.write_text(
+            "terms:\n  - term: fMRI\n    patterns: ['f mri']\n"
+        )
+        child = tmp_path / "channel" / "videos" / "2026"
+        child.mkdir(parents=True)
+
+        result = Glossary.discover(child, ".annextube/glossary.yaml", collate_parents=True)
+        assert len(result.terms) == 1
+        assert result.terms[0].canonical == "fMRI"
+
+    def test_discover_collate_merges_multiple(self, tmp_path: Path) -> None:
+        """Collate merges glossaries from multiple ancestor levels."""
+        # Parent glossary
+        parent_dir = tmp_path / ".annextube"
+        parent_dir.mkdir()
+        (parent_dir / "g.yaml").write_text(
+            "terms:\n"
+            "  - term: DataLad\n    patterns: ['data lad']\n"
+            "  - term: fMRI\n    patterns: ['f mri']\n"
+        )
+        # Child glossary — overrides DataLad, adds BIDS
+        child = tmp_path / "sub"
+        child_dir = child / ".annextube"
+        child_dir.mkdir(parents=True)
+        (child_dir / "g.yaml").write_text(
+            "terms:\n"
+            "  - term: DataLad\n    patterns: ['data lad', 'data glad']\n"
+            "  - term: BIDS\n    patterns: ['bids']\n"
+        )
+        result = Glossary.discover(child, ".annextube/g.yaml", collate_parents=True)
+        by_name = {t.canonical: t for t in result.terms}
+        assert set(by_name.keys()) == {"DataLad", "fMRI", "BIDS"}
+        # Child's DataLad overrides parent's
+        assert "data glad" in by_name["DataLad"].patterns
+
+    def test_discover_no_collate_stops_at_first(self, tmp_path: Path) -> None:
+        """Without collate_parents, only the first (closest) match is used."""
+        parent_dir = tmp_path / ".annextube"
+        parent_dir.mkdir()
+        (parent_dir / "g.yaml").write_text(
+            "terms:\n  - term: fMRI\n    patterns: ['f mri']\n"
+        )
+        child = tmp_path / "sub"
+        child_dir = child / ".annextube"
+        child_dir.mkdir(parents=True)
+        (child_dir / "g.yaml").write_text(
+            "terms:\n  - term: DataLad\n    patterns: ['data lad']\n"
+        )
+        result = Glossary.discover(child, ".annextube/g.yaml", collate_parents=False)
+        assert len(result.terms) == 1
+        assert result.terms[0].canonical == "DataLad"
+
+    def test_discover_not_found_returns_empty(self, tmp_path: Path) -> None:
+        """No glossary found anywhere returns empty."""
+        result = Glossary.discover(tmp_path, "nonexistent.yaml", collate_parents=True)
+        assert len(result.terms) == 0
+
+
 # ── Stage 1: Glossary Regex ──────────────────────────────────────────────
 
 
