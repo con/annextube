@@ -58,12 +58,15 @@
     selectedLang = languages.includes(pref) ? pref : languages[0];
   }
 
-  // Reset when video changes
-  $: if (video.video_id) {
-    const pref = initialLang || 'en';
-    const newLang = languages.includes(pref) ? pref : (languages[0] || '');
-    if (newLang !== selectedLang) {
-      selectedLang = newLang;
+  // Reset when video changes (track previous ID so we don't depend on selectedLang,
+  // which would cause this block to revert user language picks)
+  let prevVideoId = video.video_id;
+  $: {
+    const vid = video.video_id;
+    if (vid && vid !== prevVideoId) {
+      prevVideoId = vid;
+      const pref = initialLang || 'en';
+      selectedLang = languages.includes(pref) ? pref : (languages[0] || '');
     }
   }
 
