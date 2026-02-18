@@ -32,6 +32,7 @@ dependencies = [
     "platformdirs>=4.0.0",  # Cross-platform config directory discovery
     "python-magic>=0.4.27",  # MIME type detection for downloaded files
     "pyyaml>=6.0",  # YAML glossary parsing for caption curation
+    "tomlkit>=0.12.0",  # Comment-preserving TOML editing for embed-config
 ]
 
 [project.optional-dependencies]
@@ -59,6 +60,7 @@ devel = [
     "ruff>=0.1.0",
     "mypy>=1.0",
     "types-requests",
+    "types-PyYAML",
     "tox>=4.0",
     "tox-uv>=1.0",
 ]
