@@ -632,6 +632,39 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
                           #   "en|es|fr" - English, Spanish, French only
                           #   "en-US" - US English only
 
+# Caption curation (ASR auto-correction pipeline)
+# Runs automatically during backup when enabled
+[curation]
+# enabled = true              # Auto-curate captions during backup
+# curated_suffix = "curated"  # Output: video.en-curated.vtt
+
+# Glossary: YAML file with domain-specific terms for correction
+# glossary_path = ".annextube/captions-glossary.yaml"
+# glossary_collate_parents = false  # true = walk up parent dirs, merge all glossaries found
+#                                   # Useful for multi-channel setups: put a shared glossary
+#                                   # in the parent dir, channel-specific ones in each channel
+
+# Cue merging / splitting
+# max_words_per_cue = 12      # Split cues longer than this
+# min_orphan_words = 3        # Merge short trailing cues
+
+# Text normalization
+# filler_removal = true       # Remove "um", "uh", etc.
+# command_quoting = true      # Add backtick quoting around command-like tokens
+
+# Fuzzy glossary matching
+# fuzzy_enabled = true        # Use fuzzy matching for glossary terms
+# fuzzy_threshold = 0.82      # Similarity threshold (0-1)
+
+# LLM-based correction (optional, requires API key/server)
+# llm_provider = "ollama"     # "ollama", "openai", or "anthropic"
+# llm_model = "llama3"        # Model name
+# llm_base_url = "http://localhost:11434"  # For Ollama
+
+# Audio-based alignment (optional, requires stable-ts or ctc)
+# audio_align_method = "stable-ts"  # "stable-ts" or "ctc"
+# audio_align_model = "base"        # Whisper model name
+
 {organization_section}{filters_section}
 # Optional date range filter
 # date_start = "2024-01-01"  # ISO 8601 date
