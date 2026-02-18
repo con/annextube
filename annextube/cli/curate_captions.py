@@ -372,11 +372,20 @@ def _curate_video_dir(
     dry_run: bool,
 ) -> None:
     """Curate VTT files in a standalone video directory."""
-    from annextube.lib.config import CurationConfig, load_user_config
+    from annextube.lib.config import load_config, load_user_config
     from annextube.services.caption_curator import CaptionCurator, load_corrections
 
-    user_config = load_user_config()
-    curation_config = CurationConfig()
+    # Try to load archive config (for [curation] settings like glossary_path)
+    config_path = ctx.obj.get("config_path")
+    try:
+        config = load_config(config_path)
+    except (FileNotFoundError, ValueError):
+        from annextube.lib.config import Config
+        config = Config()
+        config.user = load_user_config()
+
+    user_config = config.user
+    curation_config = config.curation
 
     merged_glossary = _load_glossary(
         ctx, curation_config, video_dir, glossary_extra,
