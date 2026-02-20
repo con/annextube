@@ -5,6 +5,47 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-02-18
+
+### Added
+
+- **`embed-config` command**: Propagate shared TOML settings (e.g. `[curation]` glossary) from a super-dataset config into subdataset configs with comment-preserving deep merge. Supports `--existing keep` (default) and `--existing update` modes. Skips `[[sources]]` (per-subdataset)
+- **Caption curation design spec**: Planning document for the curation pipeline
+- **`[curation]` section in config template**: Generated configs now include documented curation settings (glossary, fuzzy matching, LLM, audio alignment)
+- **Glossary discovery with parent collation**: `glossary_path` + `glossary_collate_parents` in `[curation]` config for multi-channel setups — walk up parent dirs and merge all glossaries found
+- **Caption curation pipeline**: 8-stage ASR correction (`curate-captions` command) — glossary regex, LLM corrections, fuzzy matching, filler removal, ASR artifact fixes, sentence segmentation, cue chunking, timestamp restoration
+- **Clone command panel**: Web UI header button to clone the archive repository
+- **`tomlkit` dependency**: Comment-preserving TOML editing for `embed-config`
+- **`types-PyYAML` dev dependency**: Fix mypy type checking for yaml imports
+
+### Fixed
+
+- **`curate-captions` ignoring archive config for VIDEO_PATH**: Direct video directory mode was creating bare `CurationConfig()` defaults instead of loading `.annextube/config.toml`, silently ignoring `glossary_path` and other `[curation]` settings
+- **Transcript language selector reverting**: Fixed CaptionBrowser resetting user language picks on reactive updates
+- **Clone command UI**: Fixed reactive updates, tab switching, and inline layout
+- **Curated captions not default in transcript browser**: CaptionBrowser now auto-selects the curated variant (e.g. `en-curated`) over the base language; `en-curated` displays as "EN (curated)"
+
+### Changed
+
+- **Skip already-archived videos during playlist backup**: Incremental playlist backup no longer re-processes existing videos
+
+## [0.8.0] - 2026-02-16
+
+### Added
+
+- **yt-dlp rate-limit detection and concurrency limiting**: Detects YouTube 429/rate-limit responses and retries with exponential backoff. Cross-process concurrency limiting via file locks prevents parallel yt-dlp calls from triggering rate limits
+- **`tox -e sdist-check`**: Automated pre-release verification — builds sdist, installs in clean venv, verifies built frontend is included and `generate-web` works
+- **`tox -e full`**: Run all non-network tests with all optional deps (including playwright)
+- **Pre-release sdist verification checklist**: Documented manual tarball inspection steps
+
+### Fixed
+
+- **Catastrophically slow sdist build**: `skip-excluded-dirs = true` prevents hatchling from walking into multi-GB cache directories (201s → 0.04s)
+- **Built frontend missing from sdist**: `force-include` and `artifacts` config ensures `web/` is included; dropped frontend source from sdist
+- **Skip known-unavailable videos during playlist backup**: Avoid re-attempting videos that are known to be unavailable
+- **Rate-limit and concurrency implementation gaps**: Fixed three issues in the initial rate-limit implementation
+- **e2e test fixture**: Added pytest-playwright dependency
+
 ## [0.7.0] - 2026-02-14
 
 ### Added
