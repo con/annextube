@@ -129,6 +129,7 @@ export function formatCommentCount(count: number): string {
  */
 const VARIANT_LABELS: Record<string, string> = {
   'orig': 'original',
+  'curated': 'curated',
   'cur1': 'curated',
   'cur2': 'curated 2',
   'cur3': 'curated 3',

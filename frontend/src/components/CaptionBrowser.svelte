@@ -52,10 +52,9 @@
   // Available languages
   $: languages = video.captions_available || [];
 
-  // Auto-select language when video changes (prefer initialLang, then 'en', then first)
+  // Auto-select language when video changes (prefer curated variant, then base lang, then first)
   $: if (languages.length > 0 && !selectedLang) {
-    const pref = initialLang || 'en';
-    selectedLang = languages.includes(pref) ? pref : languages[0];
+    selectedLang = pickPreferredLang(languages, initialLang || 'en');
   }
 
   // Reset when video changes (track previous ID so we don't depend on selectedLang,
@@ -65,9 +64,17 @@
     const vid = video.video_id;
     if (vid && vid !== prevVideoId) {
       prevVideoId = vid;
-      const pref = initialLang || 'en';
-      selectedLang = languages.includes(pref) ? pref : (languages[0] || '');
+      selectedLang = pickPreferredLang(languages, initialLang || 'en');
     }
+  }
+
+  /** Pick the best caption language: prefer curated variant of the preferred lang. */
+  function pickPreferredLang(langs: string[], pref: string): string {
+    // Look for curated variant first (e.g., "en-curated" for pref "en")
+    const curated = langs.find(l => l.startsWith(pref + '-') && l.includes('curated'));
+    if (curated) return curated;
+    if (langs.includes(pref)) return pref;
+    return langs[0] || '';
   }
 
   // Load captions when language changes
