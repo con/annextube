@@ -272,6 +272,22 @@ class Archiver:
         )
         return bool(result.stdout.strip())
 
+    def _generate_and_commit_tsvs(self) -> None:
+        """Generate TSV metadata files and commit them.
+
+        Errors are recorded in ``_current_run_errors`` but never raised,
+        so the caller can continue with other work.
+        """
+        try:
+            logger.info("Generating TSV metadata files")
+            tsv_files = list(self.export.generate_all())
+            if self._has_uncommitted_changes():
+                self.git_annex.add_and_commit("Update TSV metadata files", files=tsv_files)
+        except Exception as e:
+            error_detail = format_subprocess_error(e)
+            logger.error(f"Failed to generate/commit TSV files: {error_detail}")
+            self._current_run_errors.append(f"TSV generation: {error_detail}")
+
     def _checkpoint(self, channel_url: str, videos_processed: int, total_videos: int) -> None:
         """Create a checkpoint by regenerating TSVs and committing progress.
 
@@ -1066,15 +1082,7 @@ class Archiver:
                 )
 
         # ── Phase 5: TSV generation ───────────────────────────────────────
-        try:
-            logger.info("Generating TSV metadata files")
-            self.export.generate_all()
-            if self._has_uncommitted_changes():
-                self.git_annex.add_and_commit("Update TSV metadata files")
-        except Exception as e:
-            error_detail = format_subprocess_error(e)
-            logger.error(f"Failed to generate/commit TSV files: {error_detail}")
-            self._current_run_errors.append(f"TSV generation: {error_detail}")
+        self._generate_and_commit_tsvs()
 
         # Log API quota usage summary
         if self.youtube.api_client:
@@ -1246,15 +1254,7 @@ class Archiver:
         self._update_playlist_symlinks(playlist_dir, playlist, video_id_map)
 
         # Generate TSV metadata files
-        try:
-            logger.info("Generating TSV metadata files")
-            self.export.generate_all()
-            if self._has_uncommitted_changes():
-                self.git_annex.add_and_commit("Update TSV metadata files")
-        except Exception as e:
-            error_detail = format_subprocess_error(e)
-            logger.error(f"Failed to generate/commit TSV files: {error_detail}")
-            self._current_run_errors.append(f"TSV generation: {error_detail}")
+        self._generate_and_commit_tsvs()
 
         stats["errors"] = list(self._current_run_errors)
         return stats

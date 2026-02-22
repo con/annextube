@@ -547,7 +547,8 @@ class GitAnnexService:
             return True
         except subprocess.CalledProcessError as e:
             # Check if it's just "nothing to commit"
-            if "nothing to commit" in e.stdout or "nothing to commit" in e.stderr:
+            combined = (e.stdout or "") + (e.stderr or "")
+            if "nothing to commit" in combined or "no changes added to commit" in combined:
                 logger.debug("No changes to commit")
                 return False
             # Re-raise if it's a real error
