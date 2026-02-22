@@ -184,6 +184,9 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Initialize archiver with update mode and date filters
         archiver = Archiver(output_dir, config, update_mode=update, date_from=date_from, date_to=date_to)
 
+        # Collect all errors across sources for final summary
+        all_errors: list[str] = []
+
         # Determine what to backup
         if url:
             # Ad-hoc mode: backup single URL
@@ -197,6 +200,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             else:
                 stats = archiver.backup_channel(url)
             _print_stats(stats)
+            all_errors.extend(stats["errors"])
 
             # Generate channel.json for multi-channel collection integration
             try:
@@ -257,6 +261,8 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             if total_stats["errors"]:
                 click.echo(f"  Errors: {len(total_stats['errors'])}")
 
+            all_errors.extend(total_stats["errors"])
+
         # Generate channel.json for multi-channel collection integration
         try:
             exporter = ExportService(output_dir)
@@ -267,7 +273,17 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             logger.warning(f"Could not generate channel.json: {e}")
 
         click.echo()
-        click.echo("[ok] Backup complete!")
+        if all_errors:
+            n = len(all_errors)
+            click.echo(f"[!] Backup completed with {n} error(s):", err=True)
+            max_shown = 10
+            for err_msg in all_errors[:max_shown]:
+                click.echo(f"  - {err_msg}", err=True)
+            if n > max_shown:
+                click.echo(f"  ... and {n - max_shown} more (check logs for details)", err=True)
+            ctx.exit(1)
+        else:
+            click.echo("[ok] Backup complete!")
 
     except FileNotFoundError as e:
         click.echo(f"Error: {e}", err=True)
@@ -295,6 +311,8 @@ def _print_stats(stats: dict, prefix: str = ""):
 
     if stats["errors"]:
         click.echo(f"{prefix}  [!] Errors: {len(stats['errors'])}")
+        for err_msg in stats["errors"]:
+            click.echo(f"{prefix}    - {err_msg}")
 
 
 def _is_playlist_url(url: str) -> bool:
