@@ -264,7 +264,6 @@ class ExportService:
             Path to generated channel.json
         """
         import csv
-        from datetime import datetime
 
         from annextube.lib.config import load_config
 
@@ -355,8 +354,6 @@ class ExportService:
         }
 
         # Build channel.json combining fresh metadata and archive stats
-        now = datetime.now().isoformat()
-
         channel_data = {
             "channel_id": channel_meta.get("channel_id", ""),
             "name": channel_meta.get("channel_name", ""),
@@ -369,8 +366,6 @@ class ExportService:
             "banner_url": channel_meta.get("banner_url", ""),
             "country": channel_meta.get("country", ""),
             "created_at": channel_meta.get("created_at", ""),
-            "last_sync": now,
-            "fetched_at": now,
             "archive_stats": archive_stats,
         }
 

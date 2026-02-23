@@ -27,10 +27,10 @@ class Channel:
     avatar_url: str
     videos: list[str]
     playlists: list[str]
-    last_sync: datetime
     created_at: datetime
-    fetched_at: datetime
     custom_url: str | None = None
+    last_sync: datetime | None = None
+    fetched_at: datetime | None = None
     banner_url: str | None = None
     country: str | None = None
     archive_stats: ArchiveStats = field(default_factory=ArchiveStats)  # Stats from local archive
@@ -49,9 +49,7 @@ class Channel:
             "country": self.country,
             "videos": self.videos,
             "playlists": self.playlists,
-            "last_sync": self.last_sync.isoformat(),
             "created_at": self.created_at.isoformat(),
-            "fetched_at": self.fetched_at.isoformat(),
             "archive_stats": self.archive_stats,
         }
 
@@ -70,8 +68,8 @@ class Channel:
             country=data.get("country"),
             videos=data["videos"],
             playlists=data["playlists"],
-            last_sync=datetime.fromisoformat(data["last_sync"]),
             created_at=datetime.fromisoformat(data["created_at"]),
-            fetched_at=datetime.fromisoformat(data["fetched_at"]),
+            last_sync=datetime.fromisoformat(data["last_sync"]) if "last_sync" in data else None,
+            fetched_at=datetime.fromisoformat(data["fetched_at"]) if "fetched_at" in data else None,
             archive_stats=data.get("archive_stats", {}),
         )
