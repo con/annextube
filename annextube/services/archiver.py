@@ -608,7 +608,7 @@ class Archiver:
             except Exception:
                 pass
         with AtomicFileWriter(metadata_path) as f:
-            json.dump(playlist.to_dict(), f, indent=2)
+            json.dump(playlist.to_dict(), f, indent=2, ensure_ascii=False)
         return True
 
     def _compute_desired_symlinks(
@@ -1320,7 +1320,7 @@ class Archiver:
         # Write updated file
         unavail_path.parent.mkdir(parents=True, exist_ok=True)
         with AtomicFileWriter(unavail_path) as f:
-            json.dump(existing, f, indent=2)
+            json.dump(existing, f, indent=2, ensure_ascii=False)
 
         logger.info(f"Recorded {new_count} newly unavailable video(s) in {unavail_path.name}")
         return new_count
@@ -1426,7 +1426,7 @@ class Archiver:
 
                             # Update metadata.json with new statistics
                             with AtomicFileWriter(metadata_path) as f:
-                                json.dump(video.to_dict(), f, indent=2)
+                                json.dump(video.to_dict(), f, indent=2, ensure_ascii=False)
                             logger.debug(f"Updated metadata with new statistics: {metadata_path}")
 
                             # If comment count increased, fetch new comments (with early stopping)
@@ -1538,7 +1538,7 @@ class Archiver:
         # Save metadata (after tracking so download_status and file_path are set correctly)
         metadata_path = video_dir / "metadata.json"
         with AtomicFileWriter(metadata_path) as f:
-            json.dump(video.to_dict(), f, indent=2)
+            json.dump(video.to_dict(), f, indent=2, ensure_ascii=False)
 
         logger.debug(f"Saved metadata: {metadata_path}")
 
@@ -1580,7 +1580,7 @@ class Archiver:
                 # Re-save metadata with updated captions_available
                 metadata_path = video_dir / "metadata.json"
                 with AtomicFileWriter(metadata_path) as f:
-                    json.dump(video.to_dict(), f, indent=2)
+                    json.dump(video.to_dict(), f, indent=2, ensure_ascii=False)
                 logger.debug(f"Updated metadata with {len(downloaded_captions)} downloaded captions")
             else:
                 logger.debug(f"No captions downloaded for {video.video_id} (none available)")

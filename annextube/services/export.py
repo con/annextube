@@ -83,8 +83,10 @@ class ExportService:
                 stored_captions = metadata.get("captions_available", [])
                 if vtt_langs and sorted(stored_captions) != vtt_langs:
                     metadata["captions_available"] = vtt_langs
+                    # Remove symlink/file first (may be read-only annex object)
+                    metadata_path.unlink()
                     with open(metadata_path, "w", encoding="utf-8") as fw:
-                        json.dump(metadata, fw, indent=2)
+                        json.dump(metadata, fw, indent=2, ensure_ascii=False)
                     logger.info(
                         f"Updated captions_available for {metadata.get('video_id', '?')}: "
                         f"{stored_captions} → {vtt_langs}"
@@ -104,8 +106,10 @@ class ExportService:
                                 metadata[key] = value
                                 changed = True
                         if changed:
+                            # Remove symlink/file first (may be read-only annex object)
+                            metadata_path.unlink()
                             with open(metadata_path, "w", encoding="utf-8") as fw:
-                                json.dump(metadata, fw, indent=2)
+                                json.dump(metadata, fw, indent=2, ensure_ascii=False)
                             logger.info(
                                 f"Merged extra_metadata.json for "
                                 f"{metadata.get('video_id', '?')}"
@@ -372,7 +376,7 @@ class ExportService:
         # Write channel.json
         output_path = self.repo_path / "channel.json"
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(channel_data, f, indent=2)
+            json.dump(channel_data, f, indent=2, ensure_ascii=False)
 
         logger.info(
             f"Generated channel.json: {total_videos} videos, "
