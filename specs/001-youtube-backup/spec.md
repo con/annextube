@@ -201,7 +201,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-015**: System MUST derive sync state from existing data files (videos.tsv for video discovery, metadata.json for counts, comments.json for comment timestamps, file modification times) rather than maintaining separate sync state tracking file
 - **FR-016**: System MUST complete incremental updates in reasonable time (not re-checking all content) by using date-based filtering in YouTube API queries
 - **FR-016a**: System MUST filter videos by datetime (not just date) after fetching from YouTube API, since yt-dlp's `dateafter` parameter only supports date precision (YYYYMMDD). Videos with `published_at <= latest_datetime_in_tsv` must be skipped to avoid re-processing same-day videos
-- **FR-016b**: System MUST NOT create git commits when only timestamp fields (`fetched_at`, `updated_at`, `last_modified`) have changed without any content changes. Commits should only be created when real data changes (new videos, updated metadata values, new comments, new captions)
+- **FR-016b**: System MUST NOT create git commits when only timestamp fields (`fetched_at`, `updated_at`, `last_modified`) have changed without any content changes. Commits should only be created when real data changes (new videos, updated metadata values, new comments, new captions). Implementation: (a) `channel.json` no longer writes volatile `last_sync`/`fetched_at` fields, eliminating the primary source of timestamp-only diffs; (b) `git_annex.add_and_commit()` detects and filters out timestamp-only changes in remaining files (per-video `metadata.json`)
 
 #### Filtering and Scope Control
 
@@ -236,7 +236,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-035a**: System MUST generate authors.tsv file aggregating all unique authors from videos and comments, with columns: author_id (leading), name, channel_url, first_seen, last_seen, video_count (videos uploaded), comment_count (comments made)
 - **FR-035b**: System MUST ensure deterministic ordering of all list fields in metadata files (e.g., captions_available sorted alphabetically) to prevent false diffs in version control
 - **FR-036**: System MUST regenerate TSV files during updates to reflect current state
-- **FR-037**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB (tab-separated, UTF-8 encoded, with header row)
+- **FR-037**: System MUST export metadata in standard TSV format compatible with Excel, Visidata, DuckDB (tab-separated, UTF-8 encoded, with header row). All JSON files (metadata.json, playlist.json, channel.json, comments.json) MUST be written with `ensure_ascii=False` so non-ASCII characters (Cyrillic, CJK, etc.) are stored as readable UTF-8 instead of `\uXXXX` escape sequences
 
 #### Web Interface
 
@@ -267,7 +267,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-054**: System MUST support configurable logging levels (debug, info, warning, error)
 - **FR-055**: System MUST provide option to force re-fetch of specific videos or date ranges
 - **FR-056**: CLI MUST provide progress indicators for long-running operations
-- **FR-057**: CLI MUST provide clear error messages with recovery suggestions
+- **FR-057**: CLI MUST provide clear error messages with recovery suggestions. Implementation: backup command collects all errors from `stats["errors"]` across sources; on completion with errors, prints summary with up to 10 error messages to stderr and exits with code 1; `_print_stats()` shows per-source error details inline
 
 #### Caption Curation Workflow
 
@@ -304,9 +304,9 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-078**: System MUST detect and handle network interruptions gracefully
 - **FR-079**: System MUST support resumable operations after interruption
 - **FR-080**: System MUST validate downloaded content integrity
-- **FR-081**: System MUST log all errors with sufficient context for troubleshooting
+- **FR-081**: System MUST log all errors with sufficient context for troubleshooting. Implementation: `format_subprocess_error()` utility (`annextube/lib/error_utils.py`) extracts stdout/stderr from `CalledProcessError` (handles both str and bytes); all catch sites in archiver use ERROR log level and record errors in `Archiver._current_run_errors` accumulator, which flows into `stats["errors"]` for CLI reporting
 - **FR-082**: System MUST maintain operation state to support idempotent operations
-- **FR-082a**: System MUST perform atomic file updates when modifying existing files in git-annex repositories. Since git-annex files are symlinks to read-only content, updates MUST follow the pattern: (1) Read existing content if needed, (2) Unlink the symlink, (3) Write new content. This pattern MUST be implemented via a centralized helper utility (function or context manager) to ensure consistency and DRY principle
+- **FR-082a**: System MUST perform atomic file updates when modifying existing files in git-annex repositories. Since git-annex files are symlinks to read-only content, updates MUST follow the pattern: (1) Read existing content if needed, (2) Unlink the symlink, (3) Write new content. This pattern is implemented via `AtomicFileWriter` context manager (`annextube/lib/file_utils.py`) used by archiver.py for all metadata writes, and via explicit `unlink()` before `open(..., "w")` in export.py for captions reconciliation and extra_metadata merge
 - **FR-082b** (TODO): System SHOULD support re-checking previously unavailable videos via `--update-mode unavailable` (or equivalent). This mode iterates only over entries in `.annextube/unavailable_videos.json`, re-probes each video, and promotes any that have become available again (removing them from the registry and fetching their metadata). The `all-force` update mode SHOULD include this re-check automatically.
 
 #### CI/CD and Automation
@@ -331,7 +331,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 ### Key Entities
 
-- **Channel**: Represents a YouTube channel being archived, with attributes including channel ID, name, description, subscriber count, avatar, list of videos, list of playlists, last sync timestamp
+- **Channel**: Represents a YouTube channel being archived, with attributes including channel ID, name, description, subscriber count, avatar, list of videos, list of playlists, created_at. Note: `last_sync` and `fetched_at` are no longer written to `channel.json` (sync time is recoverable from git history); fields remain optional in the model for backward compatibility
 - **Video**: Represents a YouTube video with attributes including video ID, title, description, publication date, duration, view count, like count, comment count, channel, file path, thumbnail path, caption availability, license type, download status
 - **Playlist**: Represents a YouTube playlist with attributes including playlist ID, title, description, channel, video IDs (ordered list), video count, total duration, last updated, privacy status
 - **Caption**: Represents closed captions for a video with attributes including language code, format (VTT), auto-generated flag, file path, last fetched timestamp

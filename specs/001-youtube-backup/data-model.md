@@ -35,19 +35,24 @@ interface Channel {
   country?: string;             // Channel country
   videos: string[];             // List of video IDs in this channel
   playlists: string[];          // List of playlist IDs in this channel
-  last_sync: string;            // ISO 8601 timestamp of last sync
   created_at: string;           // Channel creation date (ISO 8601)
-  fetched_at: string;           // When this metadata was fetched (ISO 8601)
+  // NOTE: last_sync and fetched_at were removed from channel.json to avoid
+  // noisy timestamp-only commits on every run.  Sync time is recoverable
+  // from git history.  Fields kept optional in Channel model for backward
+  // compatibility when reading old channel.json files.
+  last_sync?: string;           // (deprecated, no longer written)
+  fetched_at?: string;          // (deprecated, no longer written)
 }
 ```
 
-**File location**: `channels/{channel_id}/metadata.json`
+**File location**: `channel.json` (root of archive; single-channel archives only)
 
 **Validation**:
 - `channel_id`: Required, matches regex `^[A-Za-z0-9_-]+$`
 - `name`: Required, non-empty string
 - `subscriber_count`, `video_count`: Non-negative integers
-- `last_sync`, `created_at`, `fetched_at`: Valid ISO 8601 timestamps
+- `created_at`: Valid ISO 8601 timestamp
+- `last_sync`, `fetched_at`: Optional, valid ISO 8601 timestamps if present (deprecated, no longer written)
 
 ---
 
