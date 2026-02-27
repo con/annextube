@@ -1696,6 +1696,14 @@ class Archiver:
             import urllib.request
 
             thumbnail_path = video_dir / "thumbnail.jpg"
+
+            if thumbnail_path.exists() or thumbnail_path.is_symlink():
+                if self.update_mode != "all-force":
+                    logger.debug(f"Thumbnail already exists, skipping: {thumbnail_path}")
+                    return
+                # Force mode: remove old thumbnail before re-downloading
+                thumbnail_path.unlink()
+
             urllib.request.urlretrieve(video.thumbnail_url, thumbnail_path)
             logger.debug(f"Downloaded thumbnail: {thumbnail_path}")
 
