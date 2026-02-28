@@ -177,3 +177,74 @@ def test_multiple_timestamp_fields_filtered(tmp_path):
         current_data = json.load(f)
 
     assert current_data == initial_data
+
+
+@pytest.mark.ai_generated
+def test_non_ascii_filenames_handled_by_timestamp_filter(tmp_path):
+    """Test that non-ASCII filenames (e.g. Cyrillic) are handled correctly.
+
+    git diff --name-only quotes non-ASCII paths like
+    "path/\\320\\237\\321\\200\\320\\270\\320\\262\\320\\265\\321\\202.json".
+    Using -z flag outputs raw NUL-separated paths without quoting.
+    """
+    git_annex = GitAnnexService(tmp_path)
+    git_annex.init_repo("Test repo")
+    git_annex.configure_gitattributes()
+
+    # Create a file with a Cyrillic name
+    cyrillic_file = tmp_path / "\u041f\u0440\u0438\u0432\u0435\u0442.json"  # Привет.json
+    initial_data = {
+        "title": "\u041f\u0440\u0438\u0432\u0435\u0442",
+        "fetched_at": "2026-02-09T19:00:00.000000",
+    }
+    with open(cyrillic_file, "w", encoding="utf-8") as f:
+        json.dump(initial_data, f, indent=2, ensure_ascii=False)
+
+    git_annex.add_and_commit("Initial Cyrillic file")
+
+    # Update only the timestamp
+    updated_data = initial_data.copy()
+    updated_data["fetched_at"] = "2026-02-09T20:00:00.000000"
+
+    with open(cyrillic_file, "w", encoding="utf-8") as f:
+        json.dump(updated_data, f, indent=2, ensure_ascii=False)
+
+    # Should filter out the timestamp-only change — this would fail
+    # without -z because git quotes the Cyrillic filename
+    result = git_annex.add_and_commit("Update Cyrillic timestamp")
+    assert result is False  # Should NOT commit (timestamp-only)
+
+    # Verify file was restored
+    with open(cyrillic_file, encoding="utf-8") as f:
+        current_data = json.load(f)
+    assert current_data == initial_data
+
+
+@pytest.mark.ai_generated
+def test_non_ascii_filename_with_real_changes_committed(tmp_path):
+    """Test that non-ASCII filenames with real changes are still committed."""
+    git_annex = GitAnnexService(tmp_path)
+    git_annex.init_repo("Test repo")
+    git_annex.configure_gitattributes()
+
+    cyrillic_file = tmp_path / "\u041a\u0430\u043d\u0430\u043b.json"  # Канал.json
+    initial_data = {
+        "title": "\u041a\u0430\u043d\u0430\u043b",
+        "video_count": 10,
+        "fetched_at": "2026-02-09T19:00:00.000000",
+    }
+    with open(cyrillic_file, "w", encoding="utf-8") as f:
+        json.dump(initial_data, f, indent=2, ensure_ascii=False)
+
+    git_annex.add_and_commit("Initial")
+
+    # Update with real change + timestamp
+    updated_data = initial_data.copy()
+    updated_data["video_count"] = 20
+    updated_data["fetched_at"] = "2026-02-09T20:00:00.000000"
+
+    with open(cyrillic_file, "w", encoding="utf-8") as f:
+        json.dump(updated_data, f, indent=2, ensure_ascii=False)
+
+    result = git_annex.add_and_commit("Update video count")
+    assert result is True  # Should commit (real changes)

@@ -1,6 +1,7 @@
 """Unit tests for unavailable video filtering in playlist updates."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -8,6 +9,7 @@ import pytest
 
 from annextube.lib.config import Config
 from annextube.models.playlist import Playlist
+from annextube.models.video import Video
 from annextube.services.archiver import Archiver
 from annextube.services.youtube import YouTubeService
 
@@ -597,3 +599,101 @@ def test_save_unavailable_video_ids(tmp_path: Path) -> None:
         {"vid1", "vid2"}, source="channel"
     )
     assert count2 == 0
+
+
+def _make_video(availability: str = "public", **kwargs) -> Video:
+    """Helper to create a Video instance for tests."""
+    defaults = {
+        "video_id": "test123",
+        "title": "Test Video",
+        "description": "desc",
+        "channel_id": "UC_TEST",
+        "channel_name": "Test",
+        "published_at": datetime(2026, 1, 1),
+        "source_url": "https://www.youtube.com/watch?v=test123",
+        "fetched_at": datetime(2026, 1, 1),
+        "duration": 120,
+        "thumbnail_url": "https://i.ytimg.com/vi/test123/maxresdefault.jpg",
+        "view_count": 100,
+        "like_count": 10,
+        "comment_count": 5,
+        "privacy_status": "public",
+        "availability": availability,
+        "download_status": "not_downloaded",
+        "tags": [],
+        "categories": [],
+        "captions_available": [],
+        "has_auto_captions": False,
+        "license": "youtube",
+    }
+    defaults.update(kwargs)
+    return Video(**defaults)
+
+
+@pytest.mark.ai_generated
+def test_process_video_skips_supplementary_for_removed_video(tmp_path: Path) -> None:
+    """Thumbnail/caption/comment downloads are skipped for removed videos."""
+    config = Config()
+    archiver = Archiver(tmp_path, config)
+
+    video = _make_video(availability="removed", video_id="X_E2mV71vw0")
+
+    # Create the video directory so _process_video doesn't fail on path ops
+    video_dir = archiver._get_video_path(video)
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    with patch.object(archiver, "_download_thumbnail") as mock_thumb, \
+         patch.object(archiver, "_download_captions") as mock_caps, \
+         patch.object(archiver.youtube, "download_comments") as mock_comments:
+
+        archiver._process_video(video)
+
+        mock_thumb.assert_not_called()
+        mock_caps.assert_not_called()
+        mock_comments.assert_not_called()
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize("availability", ["private", "unavailable", "deleted"])
+def test_process_video_skips_supplementary_for_all_unavailable_states(
+    tmp_path: Path, availability: str
+) -> None:
+    """All non-public availability states skip supplementary downloads."""
+    config = Config()
+    archiver = Archiver(tmp_path, config)
+
+    video = _make_video(availability=availability)
+    video_dir = archiver._get_video_path(video)
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    with patch.object(archiver, "_download_thumbnail") as mock_thumb, \
+         patch.object(archiver, "_download_captions") as mock_caps, \
+         patch.object(archiver.youtube, "download_comments") as mock_comments:
+
+        archiver._process_video(video)
+
+        mock_thumb.assert_not_called()
+        mock_caps.assert_not_called()
+        mock_comments.assert_not_called()
+
+
+@pytest.mark.ai_generated
+def test_process_video_downloads_supplementary_for_public_video(tmp_path: Path) -> None:
+    """Public videos still get thumbnail/caption/comment downloads."""
+    config = Config()
+    archiver = Archiver(tmp_path, config)
+
+    video = _make_video(availability="public")
+    video_dir = archiver._get_video_path(video)
+    video_dir.mkdir(parents=True, exist_ok=True)
+
+    with patch.object(archiver, "_download_thumbnail") as mock_thumb, \
+         patch.object(archiver, "_download_captions", return_value=[]), \
+         patch.object(archiver.youtube, "download_comments"):
+
+        archiver._process_video(video)
+
+        # Public video should attempt supplementary downloads
+        mock_thumb.assert_called_once()
+        # Captions and comments depend on config, but should at least not be
+        # blocked by the unavailability guard

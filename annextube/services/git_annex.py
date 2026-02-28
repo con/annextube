@@ -344,15 +344,17 @@ class GitAnnexService:
             has_untracked = bool(untracked_result.stdout.strip())
 
             # Get list of modified files (unstaged)
+            # Use -z for NUL-separated output to handle non-ASCII filenames
+            # (git quotes non-ASCII paths with literal "..." otherwise)
             result = subprocess.run(
-                ["git", "diff", "--name-only"],
+                ["git", "diff", "-z", "--name-only"],
                 cwd=self.repo_path,
                 capture_output=True,
                 encoding="utf-8",
                 check=True
             )
 
-            modified_files = [f.strip() for f in result.stdout.split('\n') if f.strip()]
+            modified_files = [f for f in result.stdout.split('\0') if f]
 
             if not modified_files:
                 # No modified files, but there might be untracked files
@@ -412,14 +414,14 @@ class GitAnnexService:
 
             # Check if any real changes remain (modified or untracked)
             result = subprocess.run(
-                ["git", "diff", "--name-only"],
+                ["git", "diff", "-z", "--name-only"],
                 cwd=self.repo_path,
                 capture_output=True,
                 encoding="utf-8",
                 check=True
             )
 
-            has_modified = bool(result.stdout.strip())
+            has_modified = bool(result.stdout.strip('\0'))
 
             # Recheck for untracked files
             untracked_check = subprocess.run(
