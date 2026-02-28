@@ -467,3 +467,133 @@ def test_get_playlist_videos_skips_both_existing_and_unavailable(
     # Should only fetch brand_new (skip 1 existing + 2 unavailable)
     assert len(videos) == 1
     assert videos[0]["id"] == "brand_new"
+
+
+@pytest.mark.ai_generated
+@patch("annextube.services.youtube.yt_dlp.YoutubeDL")
+def test_get_channel_videos_skips_unavailable(
+    mock_ytdl_class: MagicMock, mock_repo_path: Path
+) -> None:
+    """Channel incremental discovery skips known unavailable videos."""
+    service = YouTubeService()
+
+    # mock_repo_path already has private456 and removed789 as unavailable
+    # in videos/**/metadata.json
+
+    # First pass: flat extraction returns mix of existing, unavailable, and new
+    mock_flat_ydl = MagicMock()
+    mock_flat_ydl.extract_info.return_value = {
+        "entries": [
+            {"id": "new_video1"},    # New - will fetch
+            {"id": "existing1"},     # Already archived - skip
+            {"id": "private456"},    # Unavailable (private) - skip
+            {"id": "removed789"},    # Unavailable (removed) - skip
+            {"id": "existing2"},     # Already archived - skip
+        ]
+    }
+
+    # Per-video mock for second pass
+    def make_per_video_ydl():
+        m = MagicMock()
+        m.extract_info.return_value = {"id": "new_video1", "title": "New Video"}
+        return m
+
+    call_count = [0]
+    def enter_side_effect():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return mock_flat_ydl
+        return make_per_video_ydl()
+
+    mock_ytdl_class.return_value.__enter__ = lambda self: enter_side_effect()
+    mock_ytdl_class.return_value.__exit__ = MagicMock(return_value=False)
+
+    existing_ids = {"existing1", "existing2"}
+    videos = service.get_channel_videos(
+        "https://www.youtube.com/@TestChannel",
+        existing_video_ids=existing_ids,
+        repo_path=mock_repo_path,
+    )
+
+    # Should only fetch new_video1 (skip 2 existing + 2 unavailable)
+    assert len(videos) == 1
+    assert videos[0]["id"] == "new_video1"
+
+
+@pytest.mark.ai_generated
+@patch("annextube.services.youtube.yt_dlp.YoutubeDL")
+def test_get_channel_videos_records_failed_as_unavailable(
+    mock_ytdl_class: MagicMock, tmp_path: Path
+) -> None:
+    """Channel discovery records videos that fail metadata fetch as unavailable."""
+    service = YouTubeService()
+
+    # First pass: flat extraction returns 2 video IDs
+    mock_flat_ydl = MagicMock()
+    mock_flat_ydl.extract_info.return_value = {
+        "entries": [
+            {"id": "ok_video"},
+            {"id": "members_only"},
+        ]
+    }
+
+    # Per-video mock: members_only raises error
+    def make_per_video_ydl():
+        m = MagicMock()
+        def _extract(url, download=False):
+            if "members_only" in url:
+                raise Exception("Join this channel to get access to members-only content")
+            return {"id": "ok_video", "title": "OK Video"}
+        m.extract_info.side_effect = _extract
+        return m
+
+    call_count = [0]
+    def enter_side_effect():
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return mock_flat_ydl
+        return make_per_video_ydl()
+
+    mock_ytdl_class.return_value.__enter__ = lambda self: enter_side_effect()
+    mock_ytdl_class.return_value.__exit__ = MagicMock(return_value=False)
+
+    existing_ids = {"already_archived"}
+    videos = service.get_channel_videos(
+        "https://www.youtube.com/@TestChannel",
+        existing_video_ids=existing_ids,
+        repo_path=tmp_path,
+    )
+
+    assert len(videos) == 1
+    assert videos[0]["id"] == "ok_video"
+
+    # members_only should be tracked for future skipping
+    assert "members_only" in service._last_unavailable_ids
+
+
+@pytest.mark.ai_generated
+def test_save_unavailable_video_ids(tmp_path: Path) -> None:
+    """_save_unavailable_video_ids records IDs in unavailable_videos.json."""
+    config = Config()
+    archiver = Archiver(tmp_path, config)
+
+    count = archiver._save_unavailable_video_ids(
+        {"vid1", "vid2"}, source="channel"
+    )
+    assert count == 2
+
+    unavail_path = tmp_path / ".annextube" / "unavailable_videos.json"
+    assert unavail_path.exists()
+
+    with open(unavail_path) as f:
+        data = json.load(f)
+
+    assert set(data.keys()) == {"vid1", "vid2"}
+    assert data["vid1"]["source"] == "channel"
+    assert data["vid1"]["reason"] == "unavailable"
+
+    # Idempotent: second call adds nothing
+    count2 = archiver._save_unavailable_video_ids(
+        {"vid1", "vid2"}, source="channel"
+    )
+    assert count2 == 0

@@ -887,7 +887,8 @@ class Archiver:
             all_videos = self.youtube.get_channel_videos(
                 channel_url,
                 limit=limit,
-                existing_video_ids=existing_video_ids
+                existing_video_ids=existing_video_ids,
+                repo_path=self.repo_path,
             )
 
             # Apply date filter only for non-incremental, non-initial backups.
@@ -933,6 +934,12 @@ class Archiver:
             else:
                 logger.warning("No videos.tsv found, cannot process component updates")
                 return stats
+
+        # Save any newly discovered unavailable video IDs (from channel discovery)
+        if not skip_video_fetch and self.youtube._last_unavailable_ids:
+            self._save_unavailable_video_ids(
+                self.youtube._last_unavailable_ids, source="channel"
+            )
 
         # ── Phase 2: Playlist discovery (BEFORE video processing) ─────────
         playlists_info: list[tuple[Playlist, Path, str]] = []  # (playlist, playlist_dir, url)
@@ -1318,6 +1325,51 @@ class Archiver:
             return 0
 
         # Write updated file
+        unavail_path.parent.mkdir(parents=True, exist_ok=True)
+        with AtomicFileWriter(unavail_path) as f:
+            json.dump(existing, f, indent=2, ensure_ascii=False)
+
+        logger.info(f"Recorded {new_count} newly unavailable video(s) in {unavail_path.name}")
+        return new_count
+
+    def _save_unavailable_video_ids(self, video_ids: set[str], source: str = "channel") -> int:
+        """Record unavailable video IDs in .annextube/unavailable_videos.json.
+
+        Args:
+            video_ids: Set of video IDs to record as unavailable
+            source: Label for the source (e.g. "channel", "playlist")
+
+        Returns:
+            Number of newly recorded IDs
+        """
+        if not video_ids:
+            return 0
+
+        unavail_path = self.repo_path / ".annextube" / "unavailable_videos.json"
+        existing: dict[str, dict] = {}
+        if unavail_path.exists():
+            try:
+                with open(unavail_path, encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load {unavail_path}: {e}")
+
+        now = datetime.now().isoformat()
+        new_count = 0
+        for video_id in video_ids:
+            if video_id in existing:
+                continue
+            existing[video_id] = {
+                "detected_at": now,
+                "reason": "unavailable",
+                "source": source,
+            }
+            new_count += 1
+            logger.debug(f"Recorded unavailable video: {video_id}")
+
+        if new_count == 0:
+            return 0
+
         unavail_path.parent.mkdir(parents=True, exist_ok=True)
         with AtomicFileWriter(unavail_path) as f:
             json.dump(existing, f, indent=2, ensure_ascii=False)

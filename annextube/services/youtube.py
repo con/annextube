@@ -275,7 +275,8 @@ class YouTubeService:
 
     def get_channel_videos(
         self, channel_url: str, limit: int | None = None,
-        existing_video_ids: set[str] | None = None
+        existing_video_ids: set[str] | None = None,
+        repo_path: Path | None = None,
     ) -> list[dict[str, Any]]:
         """Get videos from a channel.
 
@@ -283,11 +284,22 @@ class YouTubeService:
             channel_url: YouTube channel URL
             limit: Optional limit for number of videos (most recent)
             existing_video_ids: Optional set of video IDs already in archive (for incremental updates)
+            repo_path: Path to archive repo (for loading known unavailable videos)
 
         Returns:
             List of video metadata dictionaries
         """
         logger.info(f"Fetching videos from channel: {channel_url}")
+
+        # Reset per-call tracking of unavailable IDs
+        self._last_unavailable_ids = set()
+
+        # In incremental mode, load known unavailable videos to skip them
+        unavailable_videos: set[str] = set()
+        if existing_video_ids and repo_path:
+            unavailable_videos = self._load_unavailable_videos(repo_path)
+            if unavailable_videos:
+                logger.info(f"Loaded {len(unavailable_videos)} known unavailable video(s) from archive")
 
         if existing_video_ids:
             logger.info(f"Will filter out {len(existing_video_ids)} existing videos by ID")
@@ -298,6 +310,9 @@ class YouTubeService:
             logger.debug(f"Adjusted URL to videos tab: {channel_url}")
 
         ydl_opts = self._get_ydl_opts(download=False)
+
+        # Build combined skip set: existing (archived) + known unavailable
+        skip_ids = (existing_video_ids or set()) | unavailable_videos
 
         # In incremental mode, use two-pass approach:
         # 1. First pass with extract_flat to get just video IDs (fast)
@@ -332,6 +347,7 @@ class YouTubeService:
                     logger.info(f"Scanning {len(all_entries)} videos for new content...")
                     new_video_ids: list[str] = []
                     consecutive_existing = 0
+                    skipped_unavailable = 0
 
                     for i, entry in enumerate(all_entries, 1):
                         # Progress indicator every 100 videos
@@ -341,16 +357,23 @@ class YouTubeService:
                             continue
 
                         video_id = entry["id"]
-                        if video_id in existing_video_ids:
-                            logger.debug(f"Skipping existing video: {video_id}")
+                        if video_id in skip_ids:
+                            if video_id in unavailable_videos:
+                                logger.debug(f"Skipping known unavailable video: {video_id}")
+                                skipped_unavailable += 1
+                            else:
+                                logger.debug(f"Skipping existing video: {video_id}")
                             consecutive_existing += 1
                             if consecutive_existing >= 10:
-                                logger.info("Stopping: found 10 consecutive existing videos")
+                                logger.info("Stopping: found 10 consecutive existing/unavailable videos")
                                 break
                             continue
 
                         consecutive_existing = 0
                         new_video_ids.append(video_id)
+
+                    if skipped_unavailable > 0:
+                        logger.info(f"Skipped {skipped_unavailable} video(s) known to be unavailable")
 
                     if not new_video_ids:
                         logger.info("No new videos found")
@@ -373,13 +396,19 @@ class YouTubeService:
                         video_info = self._fetch_single_video_info(video_id)
                         if video_info:
                             videos.append(video_info)
+                        else:
+                            logger.warning(f"No metadata returned for {video_id}")
+                            self._last_unavailable_ids.add(video_id)
                     except YouTubeRateLimitError:
                         logger.error("Rate limit persisted after retries, stopping video fetch")
                         break
                     except Exception as e:
                         logger.warning(f"Failed to fetch metadata for {video_id}: {e}")
+                        self._last_unavailable_ids.add(video_id)
 
                 logger.info(f"Successfully fetched metadata for {len(videos)}/{total_new} new video(s)")
+                if self._last_unavailable_ids:
+                    logger.info(f"Detected {len(self._last_unavailable_ids)} newly unavailable video(s)")
                 return videos
 
         # Regular extraction (initial backup or fallback)
