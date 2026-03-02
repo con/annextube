@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from annextube.lib.config import CurationConfig
+from annextube.lib.file_utils import AtomicFileWriter
 from annextube.models.curation import (
     CurationResult,
     Glossary,
@@ -661,7 +662,7 @@ class CaptionCurator:
         result: CurationResult, output_path: Path, word_timing: bool = True
     ) -> None:
         """Write curated segments as a WebVTT file."""
-        with open(output_path, "w") as f:
+        with AtomicFileWriter(output_path) as f:
             f.write("WEBVTT\n")
             f.write("Kind: captions\n")
             f.write("Language: en\n\n")
