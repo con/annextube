@@ -954,8 +954,13 @@ class Archiver:
                 source_config.include_podcasts
             )
 
-            # Build set of channel video IDs for exclusive detection
-            channel_video_ids: set[str] = set()
+            # Build set of ALL known channel video IDs for exclusive detection.
+            # Include existing_video_ids so incremental mode (where
+            # videos_metadata only contains NEW videos) doesn't treat
+            # every already-archived playlist video as "exclusive".
+            # Also include unavailable IDs so we don't re-fetch them.
+            channel_video_ids: set[str] = set(existing_video_ids or [])
+            channel_video_ids.update(self.youtube._last_unavailable_ids)
             for v in videos_metadata:
                 vid = v.get('id') or v.get('video_id')
                 if vid:

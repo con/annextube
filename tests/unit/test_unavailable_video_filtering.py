@@ -697,3 +697,75 @@ def test_process_video_downloads_supplementary_for_public_video(tmp_path: Path) 
         mock_thumb.assert_called_once()
         # Captions and comments depend on config, but should at least not be
         # blocked by the unavailability guard
+
+
+@pytest.mark.ai_generated
+def test_playlist_exclusive_detection_includes_existing_video_ids(
+    tmp_path: Path,
+) -> None:
+    """Playlist-exclusive detection must include existing_video_ids.
+
+    In incremental mode, videos_metadata only contains NEW videos. Without
+    including existing_video_ids in channel_video_ids, every already-archived
+    playlist video would be treated as "exclusive" and re-fetched.
+    """
+    config = Config()
+    archiver = Archiver(tmp_path, config, update_mode="all-incremental")
+
+    # Simulate an archive with 3 existing videos in videos.tsv
+    videos_dir = tmp_path / "videos"
+    videos_dir.mkdir(parents=True)
+    videos_tsv = videos_dir / "videos.tsv"
+    videos_tsv.write_text(
+        "video_id\ttitle\tpath\n"
+        "vid1\tVideo 1\t2026/01/2026-01-01_video-1\n"
+        "vid2\tVideo 2\t2026/01/2026-01-02_video-2\n"
+        "vid3\tVideo 3\t2026/01/2026-01-03_video-3\n"
+    )
+    # Create metadata dirs (needed by _get_video_path / rename checks)
+    for i, vid in enumerate(["vid1", "vid2", "vid3"], 1):
+        vdir = videos_dir / "2026" / "01" / f"2026-01-0{i}_video-{i}"
+        vdir.mkdir(parents=True)
+        (vdir / "metadata.json").write_text(json.dumps({
+            "video_id": vid, "title": f"Video {i}", "description": "",
+            "channel_id": "UC_TEST", "channel_name": "Test",
+            "published_at": "2026-01-01T00:00:00", "source_url": f"https://youtube.com/watch?v={vid}",
+            "fetched_at": "2026-01-01T00:00:00", "duration": 60,
+            "thumbnail_url": "", "view_count": 0, "like_count": 0,
+            "comment_count": 0, "privacy_status": "public",
+            "availability": "public", "download_status": "tracked",
+            "tags": [], "categories": [], "captions_available": [],
+            "has_auto_captions": False, "license": "youtube",
+        }))
+
+    # Create a playlist that contains the same videos
+    playlist = Playlist(
+        playlist_id="PL_test",
+        title="Test Playlist",
+        description="",
+        channel_id="UC_TEST",
+        channel_name="Test",
+        video_count=3,
+        privacy_status="public",
+        last_modified=None,
+        video_ids=["vid1", "vid2", "vid3"],
+    )
+
+    source_config = MagicMock()
+    source_config.include_playlists = "all"
+    source_config.exclude_playlists = None
+    source_config.include_podcasts = "none"
+
+    with patch.object(archiver.youtube, "get_channel_videos", return_value=[]), \
+         patch.object(archiver, "_discover_playlists", return_value=["https://youtube.com/playlist?list=PL_test"]), \
+         patch.object(archiver.youtube, "get_playlist_metadata", return_value=playlist), \
+         patch.object(archiver.youtube, "get_videos_metadata") as mock_get_meta, \
+         patch.object(archiver, "_save_playlist_metadata"), \
+         patch.object(archiver, "_update_playlist_symlinks"), \
+         patch.object(archiver, "_has_uncommitted_changes", return_value=False), \
+         patch.object(archiver, "_generate_and_commit_tsvs"):
+
+        archiver.backup_channel("https://youtube.com/@test", source_config=source_config)
+
+        # All 3 videos are already archived — none should be "exclusive"
+        mock_get_meta.assert_not_called()
