@@ -115,3 +115,4 @@ EXAMPLE_UNAVAILABLE_FILTERING.md
 
 # no duct logs here -- only for tests etc
 .duct
+.claude/worktrees
