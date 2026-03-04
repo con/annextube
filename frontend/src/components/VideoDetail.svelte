@@ -27,6 +27,7 @@
   const initialCaseSensitive = urlParams.cs === '1';
   const initialUseRegex = urlParams.re === '1';
   const initialFilterMode = urlParams.filter === '1';
+  const initialAutoplay = urlParams.autoplay === '1';
   const initialMatchPos = urlParams.match ? Number(urlParams.match) : undefined;
 
   let playerRef: VideoPlayer;
@@ -64,7 +65,7 @@
     if (currentTab) params.set('tab', currentTab);
     if (wideMode) params.set('wide', '1');
     if (!captionVisible) params.set('transcript', '0');
-    const t = Math.floor(currentTime);
+    const t = Math.floor(currentTime || (initialTime ?? 0));
     if (t > 0) params.set('t', String(t));
     if (currentLang && currentLang !== 'en') params.set('lang', currentLang);
     if (currentSearchQuery) params.set('q', currentSearchQuery);
@@ -157,6 +158,7 @@
         {channelDir}
         {initialTab}
         {initialTime}
+        {initialAutoplay}
         showTranscriptTab={hasCaptions && !captionVisible}
         onTranscriptOpen={() => { captionVisible = true; updateVideoParams(); }}
         onTabChange={(tab) => { currentTab = tab; updateVideoParams(); }}

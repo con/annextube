@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import textwrap
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -13,6 +14,7 @@ from annextube.services.search_index import (
     VttCue,
     _ensure_pagefind_subdataset,
     _is_datalad_dataset,
+    _is_git_repo,
     _save_pagefind_subdataset,
     chunk_vtt_cues,
     parse_vtt,
@@ -668,3 +670,105 @@ class TestDataladSubdatasetHelpers:
             recursive=True,
             result_renderer="disabled",
         )
+
+
+# ── _is_git_repo tests ──────────────────────────────────────────────────────
+
+
+@pytest.mark.ai_generated
+class TestIsGitRepo:
+    """Tests for _is_git_repo helper."""
+
+    def test_true_when_git_dir_exists(self, tmp_path: Path) -> None:
+        (tmp_path / ".git").mkdir()
+        assert _is_git_repo(tmp_path) is True
+
+    def test_false_when_no_git_dir(self, tmp_path: Path) -> None:
+        assert _is_git_repo(tmp_path) is False
+
+
+# ── Plain git submodule tests ──────────────────────────────────────────────
+
+
+@pytest.mark.ai_generated
+class TestPlainGitSubmodule:
+    """Tests for git submodule creation/save when archive is a plain git repo."""
+
+    def test_ensure_creates_submodule_for_plain_git(self, tmp_path: Path) -> None:
+        """Creates a git submodule when archive is a plain git repo (no DataLad)."""
+        (tmp_path / ".git").mkdir()  # plain git repo
+        pagefind_dir = tmp_path / "web" / "pagefind"
+
+        with patch("annextube.services.search_index.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+
+        assert result is True
+        # Should have called git init, git commit, git submodule add
+        calls = mock_run.call_args_list
+        assert len(calls) == 3
+        assert calls[0][0][0] == ["git", "init"]
+        assert calls[1][0][0][:2] == ["git", "commit"]
+        assert calls[2][0][0][:3] == ["git", "submodule", "add"]
+
+    def test_ensure_returns_true_when_pagefind_git_exists(
+        self, tmp_path: Path
+    ) -> None:
+        """Returns True without creating if pagefind/.git already exists."""
+        pagefind_dir = tmp_path / "web" / "pagefind"
+        pagefind_dir.mkdir(parents=True)
+        (pagefind_dir / ".git").mkdir()
+
+        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+        assert result is True
+
+    def test_ensure_returns_false_for_non_vcs_archive(self, tmp_path: Path) -> None:
+        """Returns False when archive has neither .datalad nor .git."""
+        pagefind_dir = tmp_path / "web" / "pagefind"
+        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+        assert result is False
+
+    def test_ensure_handles_subprocess_failure(self, tmp_path: Path) -> None:
+        """Returns False when git submodule creation fails."""
+        (tmp_path / ".git").mkdir()
+        pagefind_dir = tmp_path / "web" / "pagefind"
+
+        with patch(
+            "annextube.services.search_index.subprocess.run",
+            side_effect=subprocess.CalledProcessError(1, "git"),
+        ):
+            result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+
+        assert result is False
+
+    def test_save_commits_in_plain_git_submodule(self, tmp_path: Path) -> None:
+        """Save stages, commits in submodule and updates parent pointer."""
+        (tmp_path / ".git").mkdir()
+        pagefind_dir = tmp_path / "web" / "pagefind"
+        pagefind_dir.mkdir(parents=True)
+        (pagefind_dir / ".git").mkdir()
+
+        with patch("annextube.services.search_index.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0)
+            _save_pagefind_subdataset(tmp_path)
+
+        calls = mock_run.call_args_list
+        assert len(calls) == 3
+        # git add -A inside submodule
+        assert calls[0][0][0] == ["git", "add", "-A"]
+        assert calls[0][1]["cwd"] == str(pagefind_dir)
+        # git commit inside submodule
+        assert calls[1][0][0][:2] == ["git", "commit"]
+        assert calls[1][1]["cwd"] == str(pagefind_dir)
+        # git add web/pagefind in parent
+        assert calls[2][0][0][:2] == ["git", "add"]
+        assert calls[2][1]["cwd"] == str(tmp_path)
+
+    def test_save_noop_when_no_pagefind_git(self, tmp_path: Path) -> None:
+        """Save is a no-op when pagefind/.git does not exist."""
+        (tmp_path / ".git").mkdir()
+        (tmp_path / "web" / "pagefind").mkdir(parents=True)
+        # No .git inside pagefind
+        with patch("annextube.services.search_index.subprocess.run") as mock_run:
+            _save_pagefind_subdataset(tmp_path)
+        mock_run.assert_not_called()

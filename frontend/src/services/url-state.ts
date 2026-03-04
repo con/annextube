@@ -9,6 +9,7 @@ import type { SortField, SortDirection } from './sort';
 
 export interface URLState {
   search?: string;
+  searchMode?: 'captions';
   dateFrom?: string;
   dateTo?: string;
   channels?: string[];
@@ -39,6 +40,7 @@ export class URLStateManager {
 
     return {
       search: params.get('search') || undefined,
+      searchMode: params.get('mode') === 'captions' ? 'captions' : undefined,
       dateFrom: params.get('from') || undefined,
       dateTo: params.get('to') || undefined,
       channels: parseArray(params.get('channels')),
@@ -61,6 +63,7 @@ export class URLStateManager {
     const params = new URLSearchParams();
 
     if (state.search) params.set('search', state.search);
+    if (state.searchMode) params.set('mode', state.searchMode);
     if (state.dateFrom) params.set('from', state.dateFrom);
     if (state.dateTo) params.set('to', state.dateTo);
     if (state.channels?.length) params.set('channels', state.channels.join(','));

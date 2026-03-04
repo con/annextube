@@ -165,7 +165,7 @@ describe('CaptionSearchResults', () => {
     await fireEvent.click(resultMain!);
 
     // Check that the hash was set correctly
-    expect(window.location.hash).toBe('#/video/abc123?t=90&q=hello%20world');
+    expect(window.location.hash).toBe('#/video/abc123?t=90&q=hello%20world&filter=1&autoplay=1');
   });
 
   test('shows result count header', () => {

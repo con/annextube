@@ -8,7 +8,8 @@ records so that Pagefind can serve cross-caption search from static files.
 When the archive is a DataLad dataset, the index output at ``web/pagefind/``
 is managed as a DataLad subdataset (git submodule) with ``cfg_proc=text2git``
 so that text files (JS, JSON, CSS) live in git and binary index fragments go
-to git-annex.  This isolates the ~10k derived index files from the main repo.
+to git-annex.  For plain git repos the same directory is managed as a plain
+git submodule.  This isolates the ~10k derived index files from the main repo.
 """
 
 from __future__ import annotations
@@ -300,68 +301,145 @@ def _is_datalad_dataset(path: Path) -> bool:
     return (path / ".datalad").is_dir()
 
 
+def _is_git_repo(path: Path) -> bool:
+    """Return *True* if *path* is a git repository (has ``.git``)."""
+    return (path / ".git").exists()
+
+
 def _ensure_pagefind_subdataset(archive_path: Path, pagefind_dir: Path) -> bool:
-    """Create ``web/pagefind/`` as a DataLad subdataset if it doesn't exist yet.
+    """Create ``web/pagefind/`` as a managed sub-repository if it doesn't exist.
 
-    Only acts when the archive itself is a DataLad dataset.  Uses
-    ``cfg_proc=text2git`` so text files (JS, JSON, CSS) are stored in git
-    while binary Pagefind fragments go to git-annex.
+    Tries DataLad first (with ``cfg_proc=text2git``), then falls back to a
+    plain git submodule when the archive is a plain git repo.
 
-    Returns *True* if a subdataset exists (created or pre-existing),
-    *False* if the archive is not a DataLad dataset.
+    Returns *True* if a sub-repository exists (created or pre-existing),
+    *False* if the archive is not under version control at all.
     """
-    if not _is_datalad_dataset(archive_path):
-        return False
-
-    # Already a subdataset (or standalone git repo)?
+    # Already a sub-repository?
     if (pagefind_dir / ".git").exists():
         return True
 
-    try:
-        from datalad.api import Dataset, create
-    except ImportError:
-        logger.warning(
-            "DataLad dataset detected but datalad package not available; "
-            "skipping subdataset creation for web/pagefind/"
-        )
-        return False
+    # --- DataLad path ---
+    if _is_datalad_dataset(archive_path):
+        try:
+            from datalad.api import Dataset, create
+        except ImportError:
+            logger.warning(
+                "DataLad dataset detected but datalad package not available; "
+                "skipping subdataset creation for web/pagefind/"
+            )
+            return False
 
-    top_ds = Dataset(str(archive_path))
-    logger.info("Creating DataLad subdataset at %s", pagefind_dir)
-    create(
-        path=str(pagefind_dir),
-        dataset=top_ds,
-        cfg_proc="text2git",
-        result_renderer="disabled",
-    )
-    return True
+        top_ds = Dataset(str(archive_path))
+        logger.info("Creating DataLad subdataset at %s", pagefind_dir)
+        create(
+            path=str(pagefind_dir),
+            dataset=top_ds,
+            cfg_proc="text2git",
+            result_renderer="disabled",
+        )
+        return True
+
+    # --- Plain git path ---
+    if _is_git_repo(archive_path):
+        pagefind_dir.mkdir(parents=True, exist_ok=True)
+        rel_path = pagefind_dir.relative_to(archive_path)
+        logger.info("Creating git submodule at %s", rel_path)
+        try:
+            # Initialise a fresh git repo inside web/pagefind/
+            subprocess.run(
+                ["git", "init"],
+                cwd=str(pagefind_dir),
+                capture_output=True,
+                check=True,
+            )
+            # Create an initial commit so the submodule ref is valid
+            subprocess.run(
+                ["git", "commit", "--allow-empty", "-m", "Initial commit"],
+                cwd=str(pagefind_dir),
+                capture_output=True,
+                check=True,
+            )
+            # Register as a submodule in the parent repo
+            subprocess.run(
+                ["git", "submodule", "add", f"./{rel_path}", str(rel_path)],
+                cwd=str(archive_path),
+                capture_output=True,
+                check=True,
+            )
+            return True
+        except subprocess.CalledProcessError as exc:
+            logger.warning(
+                "Failed to create git submodule for web/pagefind/: %s", exc
+            )
+            return False
+
+    return False
 
 
 def _save_pagefind_subdataset(archive_path: Path) -> None:
-    """Commit changes in ``web/pagefind/`` subdataset and update the parent pointer.
+    """Commit changes in ``web/pagefind/`` sub-repository and update the parent.
 
-    No-op if the archive is not a DataLad dataset.
+    Supports both DataLad datasets (via ``datalad save``) and plain git repos
+    (via ``git add -A`` + ``git commit`` in the submodule, then
+    ``git add web/pagefind`` in the parent).
+
+    No-op if the archive is not under version control.
     """
-    if not _is_datalad_dataset(archive_path):
-        return
-
     pagefind_dir = archive_path / "web" / "pagefind"
     if not (pagefind_dir / ".git").exists():
         return
 
-    try:
-        from datalad.api import Dataset
-    except ImportError:
+    # --- DataLad path ---
+    if _is_datalad_dataset(archive_path):
+        try:
+            from datalad.api import Dataset
+        except ImportError:
+            return
+
+        top_ds = Dataset(str(archive_path))
+        logger.info("Saving caption search index in DataLad subdataset")
+        top_ds.save(
+            path="web/pagefind",
+            message="Update caption search index",
+            recursive=True,
+            result_renderer="disabled",
+        )
         return
 
-    top_ds = Dataset(str(archive_path))
-    logger.info("Saving caption search index in DataLad subdataset")
-    top_ds.save(
-        path="web/pagefind",
-        message="Update caption search index",
-        recursive=True,
-        result_renderer="disabled",
-    )
+    # --- Plain git path ---
+    if _is_git_repo(archive_path):
+        logger.info("Saving caption search index in git submodule")
+        try:
+            # Stage and commit inside the submodule
+            subprocess.run(
+                ["git", "add", "-A"],
+                cwd=str(pagefind_dir),
+                capture_output=True,
+                check=True,
+            )
+            subprocess.run(
+                ["git", "commit", "-m", "Update caption search index"],
+                cwd=str(pagefind_dir),
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError:
+            # Nothing to commit in submodule (no changes)
+            pass
+        try:
+            # Update the submodule pointer in the parent repo
+            rel_path = pagefind_dir.relative_to(archive_path)
+            subprocess.run(
+                ["git", "add", str(rel_path)],
+                cwd=str(archive_path),
+                capture_output=True,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.warning(
+                "Failed to update submodule pointer: %s", exc
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -478,8 +556,8 @@ async def build_caption_index(
                 )
                 return stats
 
-    # --- DataLad: ensure subdataset exists ------------------------------------
-    logger.debug("Checking DataLad subdataset status")
+    # --- Ensure sub-repository exists (DataLad or plain git) -----------------
+    logger.debug("Checking sub-repository status")
     is_subdataset = _ensure_pagefind_subdataset(archive_path, pagefind_dir)
 
     # --- Build index ---------------------------------------------------------
@@ -614,7 +692,7 @@ async def build_caption_index(
     if head:
         _write_build_commit(pagefind_dir, head)
 
-    # --- DataLad: commit within subdataset and update parent pointer --------
+    # --- Commit within sub-repository and update parent pointer --------------
     if is_subdataset:
         _save_pagefind_subdataset(archive_path)
 

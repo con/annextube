@@ -12,6 +12,7 @@
   export let onTranscriptOpen: () => void = () => {};
   export let initialTab: 'local' | 'youtube' | undefined = undefined;
   export let initialTime: number | undefined = undefined;
+  export let initialAutoplay: boolean = false;
   export let onTabChange: ((tab: 'local' | 'youtube') => void) | undefined = undefined;
   export let onPause: (() => void) | undefined = undefined;
 
@@ -91,6 +92,8 @@
     const params = new URLSearchParams({ enablejsapi: '1' });
     if (window.location.protocol !== 'file:')
       params.set('origin', window.location.origin);
+    if (initialAutoplay) params.set('autoplay', '1');
+    if (initialTime != null) params.set('start', String(Math.floor(initialTime)));
     return `https://www.youtube.com/embed/${video.video_id}?${params}`;
   }
 
@@ -177,6 +180,11 @@
     if (initialTime != null && !initialTimeApplied) {
       initialTimeApplied = true;
       seekTo(initialTime);
+      if (initialAutoplay && videoElement) {
+        videoElement.play().catch((err) => {
+          console.log('[VideoPlayer] Auto-play blocked by browser:', err);
+        });
+      }
     }
   }
 

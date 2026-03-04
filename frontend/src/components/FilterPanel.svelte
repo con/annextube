@@ -52,6 +52,13 @@
     sortField = urlState.sortField || 'date';
     sortDirection = urlState.sortDirection || 'desc';
 
+    // Restore caption search mode if pagefind is available
+    if (pagefindAvailable && urlState.searchMode === 'captions') {
+      searchMode = 'captions';
+    } else {
+      searchMode = 'videos';
+    }
+
     // Convert downloadStatus array to dropdown value
     if (urlState.downloadStatus) {
       if (urlState.downloadStatus.includes('downloaded')) {
@@ -77,13 +84,14 @@
 
   // Restore filter state from URL on mount and listen for hash changes
   onMount(async () => {
+    // Probe for Pagefind index availability BEFORE restoring URL state
+    // so that caption mode can be restored from the URL
+    pagefindAvailable = await initPagefind();
+
     restoreFromURL();
 
     // Listen for hash changes (browser back/forward)
     window.addEventListener('hashchange', handleHashChange);
-
-    // Probe for Pagefind index availability
-    pagefindAvailable = await initPagefind();
 
     applyFilters();
     await tick();
@@ -128,18 +136,74 @@
     }, 300);
   }
 
+  // Build Pagefind filters from current faceted selections
+  function buildPagefindFilters(): Record<string, string[]> | undefined {
+    const filters: Record<string, string[]> = {};
+
+    // Map selected channel IDs to channel names for Pagefind
+    if (selectedChannels.length > 0) {
+      const channelNames = selectedChannels
+        .map((id) => availableChannels.find((ch) => ch.id === id)?.name)
+        .filter((name): name is string => !!name);
+      if (channelNames.length > 0) {
+        filters.channel_name = channelNames;
+      }
+    }
+
+    return Object.keys(filters).length > 0 ? filters : undefined;
+  }
+
+  // Post-filter caption results by date range and playlists (Pagefind
+  // only supports exact-match filters, not ranges or membership checks)
+  function postFilterCaptionResults(
+    results: GroupedCaptionResult[],
+  ): GroupedCaptionResult[] {
+    let filtered = results;
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      const from = dateFrom || '0000-00-00';
+      const to = dateTo || '9999-99-99';
+      filtered = filtered.filter((r) => {
+        const d = r.uploadDate || '';
+        return d >= from && d <= to;
+      });
+    }
+
+    // Playlist filter: keep results whose videoId appears in any selected playlist
+    if (selectedPlaylists.length > 0) {
+      const playlistVideoIds = new Set<string>();
+      for (const pl of playlists) {
+        if (selectedPlaylists.includes(pl.playlist_id) && pl.video_ids) {
+          for (const vid of pl.video_ids) {
+            playlistVideoIds.add(vid);
+          }
+        }
+      }
+      filtered = filtered.filter((r) => playlistVideoIds.has(r.videoId));
+    }
+
+    return filtered;
+  }
+
   // Debounce caption search (300ms)
   $: {
     searchQuery;
     searchMode;
+    selectedChannels;
+    dateFrom;
+    dateTo;
+    selectedPlaylists;
 
     clearTimeout(captionDebounceTimer);
     if (searchMode === 'captions') {
+      updateURL();
       if (searchQuery.trim()) {
         captionSearchLoading = true;
         captionDebounceTimer = setTimeout(async () => {
           try {
-            captionResults = await searchCaptions(searchQuery);
+            const raw = await searchCaptions(searchQuery, buildPagefindFilters());
+            captionResults = postFilterCaptionResults(raw);
           } catch (err) {
             console.warn('Caption search failed:', err);
             captionResults = [];
@@ -216,6 +280,7 @@
     urlDebounceTimer = setTimeout(() => {
       const newState = {
         search: searchQuery || undefined,
+        searchMode: searchMode === 'captions' ? 'captions' as const : undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         channels: selectedChannels.length > 0 ? selectedChannels : undefined,
@@ -238,6 +303,7 @@
   function statesEqual(a: any, b: any): boolean {
     return (
       a.search === b.search &&
+      a.searchMode === b.searchMode &&
       a.dateFrom === b.dateFrom &&
       a.dateTo === b.dateTo &&
       arrayEqual(a.channels, b.channels) &&
@@ -272,6 +338,7 @@
       captionSearchLoading = false;
       applyFilters();
     }
+    updateURL();
   }
 
   function clearFilters() {

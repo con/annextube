@@ -47,7 +47,7 @@
 
   function navigateToVideo(videoId: string, timestamp: number) {
     const encodedQuery = encodeURIComponent(query);
-    window.location.hash = `#/video/${videoId}?t=${Math.floor(timestamp)}&q=${encodedQuery}`;
+    window.location.hash = `#/video/${videoId}?t=${Math.floor(timestamp)}&q=${encodedQuery}&filter=1&autoplay=1`;
   }
 
   function formatDate(dateStr: string): string {
