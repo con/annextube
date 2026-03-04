@@ -82,6 +82,7 @@ web/
 demo/
 frontend/dist/
 frontend/build/
+pagefind/
 
 # Environment files
 .env

@@ -5,12 +5,15 @@ from __future__ import annotations
 import json
 import textwrap
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from annextube.services.search_index import (
     VttCue,
+    _ensure_pagefind_subdataset,
+    _is_datalad_dataset,
+    _save_pagefind_subdataset,
     chunk_vtt_cues,
     parse_vtt,
 )
@@ -482,3 +485,186 @@ class TestBuildCaptionIndex:
         assert stats.videos_indexed == 1
         assert stats.chunks_created > 0
         assert fake_index.written
+
+    @pytest.mark.asyncio
+    async def test_datalad_subdataset_created_when_archive_is_datalad(
+        self, tmp_path: Path
+    ) -> None:
+        """When archive is a DataLad dataset, web/pagefind subdataset is created and saved."""
+        archive = _make_archive(tmp_path, has_curated=True)
+        # Make it look like a DataLad dataset
+        (archive / ".datalad").mkdir()
+
+        fake_index = _FakeIndex()
+
+        # Simulate datalad create() actually creating the .git dir
+        def fake_create(**kwargs):
+            Path(kwargs["path"]).mkdir(parents=True, exist_ok=True)
+            (Path(kwargs["path"]) / ".git").mkdir(exist_ok=True)
+
+        mock_create = MagicMock(side_effect=fake_create)
+        mock_ds = MagicMock()
+        mock_dataset_cls = MagicMock(return_value=mock_ds)
+
+        with (
+            patch(
+                "annextube.services.search_index.PagefindIndex",
+                return_value=fake_index,
+            ),
+            patch(
+                "annextube.services.search_index._current_head",
+                return_value="abc123def",
+            ),
+            patch.dict(
+                "sys.modules",
+                {
+                    "datalad": MagicMock(),
+                    "datalad.api": MagicMock(
+                        create=mock_create,
+                        Dataset=mock_dataset_cls,
+                    ),
+                },
+            ),
+        ):
+            from annextube.services.search_index import build_caption_index
+
+            stats = await build_caption_index(archive, force=True)
+
+        assert stats.videos_indexed == 1
+        # create() should have been called for the subdataset
+        mock_create.assert_called_once()
+        call_kwargs = mock_create.call_args
+        assert "text2git" in str(call_kwargs)
+        # save() should have been called after index build
+        mock_ds.save.assert_called_once()
+        save_kwargs = mock_ds.save.call_args
+        assert "web/pagefind" in str(save_kwargs)
+
+    @pytest.mark.asyncio
+    async def test_no_datalad_when_not_datalad_dataset(self, tmp_path: Path) -> None:
+        """When archive is NOT a DataLad dataset, no subdataset ops happen."""
+        archive = _make_archive(tmp_path, has_curated=True)
+        # No .datalad dir -- not a DataLad dataset
+        fake_index = _FakeIndex()
+
+        with (
+            patch(
+                "annextube.services.search_index.PagefindIndex",
+                return_value=fake_index,
+            ),
+            patch(
+                "annextube.services.search_index._current_head",
+                return_value="abc123def",
+            ),
+        ):
+            from annextube.services.search_index import build_caption_index
+
+            stats = await build_caption_index(archive, force=True)
+
+        assert stats.videos_indexed == 1
+        # No datalad module should have been imported
+
+
+# ── DataLad subdataset helper tests ────────────────────────────────────────
+
+
+@pytest.mark.ai_generated
+class TestDataladSubdatasetHelpers:
+    """Tests for DataLad subdataset management helpers."""
+
+    def test_is_datalad_dataset_true(self, tmp_path: Path) -> None:
+        """Returns True when .datalad directory exists."""
+        (tmp_path / ".datalad").mkdir()
+        assert _is_datalad_dataset(tmp_path) is True
+
+    def test_is_datalad_dataset_false(self, tmp_path: Path) -> None:
+        """Returns False when .datalad directory does not exist."""
+        assert _is_datalad_dataset(tmp_path) is False
+
+    def test_ensure_subdataset_noop_for_non_datalad(self, tmp_path: Path) -> None:
+        """No subdataset created when archive is not a DataLad dataset."""
+        pagefind_dir = tmp_path / "web" / "pagefind"
+        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+        assert result is False
+        assert not pagefind_dir.exists()
+
+    def test_ensure_subdataset_skips_existing(self, tmp_path: Path) -> None:
+        """Returns True without creating if subdataset already exists."""
+        (tmp_path / ".datalad").mkdir()
+        pagefind_dir = tmp_path / "web" / "pagefind"
+        pagefind_dir.mkdir(parents=True)
+        (pagefind_dir / ".git").mkdir()  # Simulate existing repo
+
+        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+        assert result is True
+
+    def test_ensure_subdataset_creates_when_datalad_available(
+        self, tmp_path: Path
+    ) -> None:
+        """Creates subdataset when archive is DataLad and pagefind dir has no .git."""
+        (tmp_path / ".datalad").mkdir()
+        pagefind_dir = tmp_path / "web" / "pagefind"
+
+        mock_create = MagicMock()
+        mock_ds = MagicMock()
+        mock_dataset_cls = MagicMock(return_value=mock_ds)
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "datalad": MagicMock(),
+                "datalad.api": MagicMock(
+                    create=mock_create,
+                    Dataset=mock_dataset_cls,
+                ),
+            },
+        ):
+            result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+
+        assert result is True
+        mock_create.assert_called_once_with(
+            path=str(pagefind_dir),
+            dataset=mock_ds,
+            cfg_proc="text2git",
+            result_renderer="disabled",
+        )
+
+    def test_save_noop_for_non_datalad(self, tmp_path: Path) -> None:
+        """Save is a no-op when archive is not a DataLad dataset."""
+        # Should not raise
+        _save_pagefind_subdataset(tmp_path)
+
+    def test_save_noop_when_no_subdataset_git(self, tmp_path: Path) -> None:
+        """Save is a no-op when web/pagefind/.git does not exist."""
+        (tmp_path / ".datalad").mkdir()
+        (tmp_path / "web" / "pagefind").mkdir(parents=True)
+        # No .git inside pagefind dir
+        _save_pagefind_subdataset(tmp_path)
+
+    def test_save_calls_datalad_save(self, tmp_path: Path) -> None:
+        """Save delegates to top_ds.save() with recursive=True."""
+        (tmp_path / ".datalad").mkdir()
+        pagefind_dir = tmp_path / "web" / "pagefind"
+        pagefind_dir.mkdir(parents=True)
+        (pagefind_dir / ".git").mkdir()
+
+        mock_ds = MagicMock()
+        mock_dataset_cls = MagicMock(return_value=mock_ds)
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "datalad": MagicMock(),
+                "datalad.api": MagicMock(
+                    Dataset=mock_dataset_cls,
+                ),
+            },
+        ):
+            _save_pagefind_subdataset(tmp_path)
+
+        mock_ds.save.assert_called_once_with(
+            path="web/pagefind",
+            message="Update caption search index",
+            recursive=True,
+            result_renderer="disabled",
+        )

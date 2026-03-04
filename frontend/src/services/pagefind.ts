@@ -66,10 +66,14 @@ export async function initPagefind(): Promise<boolean> {
   initAttempted = true;
 
   try {
-    // Pagefind is loaded as a global script at a well-known path.
-    // Build the URL dynamically so Vite does not attempt static resolution
-    // at build/transform time.
-    const pagefindUrl = ['/pagefind', 'pagefind.js'].join('/');
+    // Pagefind is loaded relative to the current page.
+    // The frontend lives at /web/ and pagefind index at /web/pagefind/.
+    // We construct an absolute URL from the page's location so the browser
+    // can resolve it as a proper module specifier (bare specifiers like
+    // "pagefind/pagefind.js" fail).  The array join prevents Vite from
+    // seeing a static string and attempting build-time resolution.
+    const base = window.location.href.replace(/#.*$/, '').replace(/[^/]*$/, '');
+    const pagefindUrl = base + ['pagefind', 'pagefind.js'].join('/');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pf = await (Function('url', 'return import(url)') as (url: string) => Promise<any>)(pagefindUrl);
     pagefindInstance = pf as PagefindInstance;

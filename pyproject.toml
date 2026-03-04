@@ -53,6 +53,7 @@ datalad = [
 ]
 search = [
     "pagefind>=1.0,<2.0",
+    "pagefind-bin>=1.0,<2.0",
 ]
 audio-align = [
     "stable-ts>=2.15.0",

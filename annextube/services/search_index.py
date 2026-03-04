@@ -4,6 +4,11 @@ Builds a Pagefind search index from VTT caption files during ``generate-web``.
 Curated VTTs are preferred; original VTTs serve as a fallback.  Each VTT is
 parsed into cues, grouped into paragraph-sized chunks, and added as custom
 records so that Pagefind can serve cross-caption search from static files.
+
+When the archive is a DataLad dataset, the index output at ``web/pagefind/``
+is managed as a DataLad subdataset (git submodule) with ``cfg_proc=text2git``
+so that text files (JS, JSON, CSS) live in git and binary index fragments go
+to git-annex.  This isolates the ~10k derived index files from the main repo.
 """
 
 from __future__ import annotations
@@ -285,6 +290,80 @@ def _vtt_changed_since(repo: Path, since_commit: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# DataLad subdataset management
+# ---------------------------------------------------------------------------
+
+
+def _is_datalad_dataset(path: Path) -> bool:
+    """Return *True* if *path* is (inside) a DataLad dataset."""
+    return (path / ".datalad").is_dir()
+
+
+def _ensure_pagefind_subdataset(archive_path: Path, pagefind_dir: Path) -> bool:
+    """Create ``web/pagefind/`` as a DataLad subdataset if it doesn't exist yet.
+
+    Only acts when the archive itself is a DataLad dataset.  Uses
+    ``cfg_proc=text2git`` so text files (JS, JSON, CSS) are stored in git
+    while binary Pagefind fragments go to git-annex.
+
+    Returns *True* if a subdataset exists (created or pre-existing),
+    *False* if the archive is not a DataLad dataset.
+    """
+    if not _is_datalad_dataset(archive_path):
+        return False
+
+    # Already a subdataset (or standalone git repo)?
+    if (pagefind_dir / ".git").exists():
+        return True
+
+    try:
+        from datalad.api import Dataset, create
+    except ImportError:
+        logger.warning(
+            "DataLad dataset detected but datalad package not available; "
+            "skipping subdataset creation for web/pagefind/"
+        )
+        return False
+
+    top_ds = Dataset(str(archive_path))
+    logger.info("Creating DataLad subdataset at %s", pagefind_dir)
+    create(
+        path=str(pagefind_dir),
+        dataset=top_ds,
+        cfg_proc="text2git",
+        result_renderer="disabled",
+    )
+    return True
+
+
+def _save_pagefind_subdataset(archive_path: Path) -> None:
+    """Commit changes in ``web/pagefind/`` subdataset and update the parent pointer.
+
+    No-op if the archive is not a DataLad dataset.
+    """
+    if not _is_datalad_dataset(archive_path):
+        return
+
+    pagefind_dir = archive_path / "web" / "pagefind"
+    if not (pagefind_dir / ".git").exists():
+        return
+
+    try:
+        from datalad.api import Dataset
+    except ImportError:
+        return
+
+    top_ds = Dataset(str(archive_path))
+    logger.info("Saving caption search index in DataLad subdataset")
+    top_ds.save(
+        path="web/pagefind",
+        message="Update caption search index",
+        recursive=True,
+        result_renderer="disabled",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Index builder
 # ---------------------------------------------------------------------------
 
@@ -398,6 +477,9 @@ async def build_caption_index(
                 )
                 return stats
 
+    # --- DataLad: ensure subdataset exists ------------------------------------
+    is_subdataset = _ensure_pagefind_subdataset(archive_path, pagefind_dir)
+
     # --- Build index ---------------------------------------------------------
     pagefind_dir.mkdir(parents=True, exist_ok=True)
 
@@ -480,6 +562,10 @@ async def build_caption_index(
     head = _current_head(archive_path)
     if head:
         _write_build_commit(pagefind_dir, head)
+
+    # --- DataLad: commit within subdataset and update parent pointer --------
+    if is_subdataset:
+        _save_pagefind_subdataset(archive_path)
 
     logger.info(
         "Caption search index built: %d videos (%d curated, %d original), "
