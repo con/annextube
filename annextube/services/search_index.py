@@ -13,6 +13,7 @@ to git-annex.  This isolates the ~10k derived index files from the main repo.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import subprocess
@@ -478,14 +479,58 @@ async def build_caption_index(
                 return stats
 
     # --- DataLad: ensure subdataset exists ------------------------------------
+    logger.debug("Checking DataLad subdataset status")
     is_subdataset = _ensure_pagefind_subdataset(archive_path, pagefind_dir)
 
     # --- Build index ---------------------------------------------------------
     pagefind_dir.mkdir(parents=True, exist_ok=True)
 
+    logger.debug("Initializing Pagefind index")
+    # Work around pagefind Python library's 100ms polling sleep in
+    # PagefindService._wait_for_responses (upstream issue).  The sleep adds
+    # ~0.1s per IPC round-trip; with thousands of add_custom_record calls
+    # that means minutes of pure sleeping.  Replacing with sleep(0) keeps
+    # the cooperative yield without the latency penalty.
+    try:
+        import pagefind.service as _pf_svc
+
+        _pf_svc._POLL_SLEEP = 0  # type: ignore[attr-defined]
+        _orig_wait = _pf_svc.PagefindService._wait_for_responses
+
+        async def _fast_poll(self):  # type: ignore[no-untyped-def]
+            while True:
+                await asyncio.sleep(0)
+                assert self._backend.stdout is not None
+                output = await self._backend.stdout.readuntil(b",")
+                if (resp := json.loads(__import__("base64").b64decode(output[:-1]))) is None:
+                    continue
+                from pagefind.service.types import InternalResponseType
+
+                message_id = resp.get("message_id")
+                if message_id is None:
+                    if (orig := resp["payload"].get("original_message")) is not None:
+                        if (sent := json.loads(orig)) is not None:
+                            message_id = sent.get("message_id")
+                if message_id is not None:
+                    if (future := self._responses.get(message_id)) is not None:
+                        payload = resp["payload"]
+                        if payload["type"] == InternalResponseType.ERROR.value:
+                            future.set_exception(Exception(payload["message"]))
+                        else:
+                            future.set_result(payload)
+
+        _pf_svc.PagefindService._wait_for_responses = _fast_poll
+        logger.debug("Patched pagefind polling (removed 100ms sleep)")
+    except Exception:
+        logger.debug("Could not patch pagefind polling, using default (slow)")
+
     config = IndexConfig(root_selector="main")
     async with PagefindIndex(config=config) as index:
+        logger.debug("Pagefind index initialized, scanning video directories")
+        video_count = 0
         for video_dir in _iter_video_dirs(archive_path, channels):
+            video_count += 1
+            logger.debug("Processing video dir %d: %s", video_count, video_dir)
             meta = _read_metadata(video_dir)
             if meta is None:
                 stats.videos_skipped += 1
@@ -521,6 +566,10 @@ async def build_caption_index(
             else:
                 stats.videos_original += 1
             stats.videos_indexed += 1
+            logger.debug(
+                "  Video %s: %d cues -> %d chunks (%s)",
+                video_id, len(cues), len(chunks), source,
+            )
 
             for chunk in chunks:
                 start_seconds = int(chunk.start_time)
@@ -549,7 +598,12 @@ async def build_caption_index(
                 stats.chunks_created += 1
 
         # Write the index files
+        logger.debug(
+            "Writing index: %d videos, %d chunks",
+            stats.videos_indexed, stats.chunks_created,
+        )
         await index.write_files(output_path=str(pagefind_dir))
+        logger.debug("Index files written")
 
     # Compute index size
     total = 0
