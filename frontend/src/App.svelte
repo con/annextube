@@ -157,8 +157,14 @@
     }
   }
 
+  let captionSearchActive = false;
+
   function handleFilterChange(filtered: Video[]) {
     filteredVideos = filtered;
+  }
+
+  function handleCaptionSearchActive(active: boolean) {
+    captionSearchActive = active;
   }
 </script>
 
@@ -207,8 +213,10 @@
           videos={allVideos}
           {playlists}
           onFilterChange={handleFilterChange}
+          onCaptionSearchActive={handleCaptionSearchActive}
         />
       {/if}
+      {#if !captionSearchActive}
       <VideoList
         videos={filteredVideos}
         totalVideos={allVideos.length}
@@ -216,6 +224,7 @@
         {error}
         onVideoClick={handleVideoClick}
       />
+      {/if}
     {/if}
   </div>
 </main>

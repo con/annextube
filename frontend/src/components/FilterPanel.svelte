@@ -2,6 +2,7 @@
   FilterPanel Component
 
   Provides search, filtering, sorting, and playlist selection for videos.
+  Includes a Videos/Captions search mode toggle when Pagefind index is available.
   Updates URL hash to preserve filter state (mykrok pattern).
 -->
 <script lang="ts">
@@ -11,10 +12,21 @@
   import { filterService } from '@/services/filter';
   import { sortService, type SortField, type SortDirection } from '@/services/sort';
   import { urlStateManager } from '@/services/url-state';
+  import { initPagefind, searchCaptions, type GroupedCaptionResult } from '@/services/pagefind';
+  import CaptionSearchResults from './CaptionSearchResults.svelte';
 
   export let videos: Video[];
   export let playlists: Playlist[] = [];
   export let onFilterChange: (filtered: Video[]) => void;
+  export let onCaptionSearchActive: ((active: boolean) => void) | undefined = undefined;
+
+  // Caption search state
+  type SearchMode = 'videos' | 'captions';
+  let searchMode: SearchMode = 'videos';
+  let pagefindAvailable = false;
+  let captionResults: GroupedCaptionResult[] = [];
+  let captionSearchLoading = false;
+  let captionDebounceTimer: number;
 
   // Filter state (initialize with defaults, will be overridden by URL state on mount)
   let searchQuery = '';
@@ -70,6 +82,9 @@
     // Listen for hash changes (browser back/forward)
     window.addEventListener('hashchange', handleHashChange);
 
+    // Probe for Pagefind index availability
+    pagefindAvailable = await initPagefind();
+
     applyFilters();
     await tick();
     isInitializing = false;
@@ -107,8 +122,36 @@
 
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      applyFilters();
+      if (searchMode === 'videos') {
+        applyFilters();
+      }
     }, 300);
+  }
+
+  // Debounce caption search (300ms)
+  $: {
+    searchQuery;
+    searchMode;
+
+    clearTimeout(captionDebounceTimer);
+    if (searchMode === 'captions') {
+      if (searchQuery.trim()) {
+        captionSearchLoading = true;
+        captionDebounceTimer = setTimeout(async () => {
+          try {
+            captionResults = await searchCaptions(searchQuery);
+          } catch (err) {
+            console.warn('Caption search failed:', err);
+            captionResults = [];
+          } finally {
+            captionSearchLoading = false;
+          }
+        }, 300);
+      } else {
+        captionResults = [];
+        captionSearchLoading = false;
+      }
+    }
   }
 
   // Apply filters immediately for discrete controls
@@ -217,6 +260,20 @@
     return true;
   }
 
+  // Notify parent when caption search replaces the video grid
+  $: captionSearchIsActive = searchMode === 'captions' && (searchQuery.trim().length > 0 || captionSearchLoading);
+  $: onCaptionSearchActive?.(captionSearchIsActive);
+
+  function setSearchMode(mode: SearchMode) {
+    searchMode = mode;
+    if (mode === 'videos') {
+      // Switching back to videos -- clear caption state and reapply filters
+      captionResults = [];
+      captionSearchLoading = false;
+      applyFilters();
+    }
+  }
+
   function clearFilters() {
     searchQuery = '';
     dateFrom = '';
@@ -227,6 +284,10 @@
     selectedPlaylists = [];
     sortField = 'date';
     sortDirection = 'desc';
+    if (searchMode === 'captions') {
+      captionResults = [];
+      captionSearchLoading = false;
+    }
   }
 
   // Count active filters for badge
@@ -286,16 +347,43 @@
 
 <div class="filter-panel">
   <div class="search-section">
-    <label for="search-input" class="search-label">Search</label>
+    <div class="search-header">
+      <label for="search-input" class="search-label">Search</label>
+      {#if pagefindAvailable}
+        <div class="search-mode-toggle" role="tablist" aria-label="Search mode">
+          <button
+            role="tab"
+            class="mode-tab"
+            class:active={searchMode === 'videos'}
+            aria-selected={searchMode === 'videos'}
+            on:click={() => setSearchMode('videos')}
+          >Videos</button>
+          <button
+            role="tab"
+            class="mode-tab"
+            class:active={searchMode === 'captions'}
+            aria-selected={searchMode === 'captions'}
+            on:click={() => setSearchMode('captions')}
+          >Captions</button>
+        </div>
+      {/if}
+    </div>
     <input
       id="search-input"
       type="text"
       bind:value={searchQuery}
-      placeholder="Search videos, channels, tags..."
+      placeholder={searchMode === 'captions' ? 'Search within captions...' : 'Search videos, channels, tags...'}
       class="search-input"
     />
   </div>
 
+  {#if searchMode === 'captions' && (searchQuery.trim() || captionSearchLoading)}
+    <CaptionSearchResults
+      results={captionResults}
+      query={searchQuery}
+      loading={captionSearchLoading}
+    />
+  {:else}
   <button class="filters-toggle" on:click={() => (filtersExpanded = !filtersExpanded)}>
     <span class="toggle-icon">{filtersExpanded ? '▼' : '▶'}</span>
     Filters
@@ -414,6 +502,7 @@
       </button>
     </div>
   {/if}
+  {/if}
 </div>
 
 <style>
@@ -429,12 +518,55 @@
     margin-bottom: 16px;
   }
 
+  .search-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
   .search-label {
     display: block;
     font-size: 14px;
     font-weight: 500;
     color: #333;
-    margin-bottom: 6px;
+  }
+
+  .search-mode-toggle {
+    display: flex;
+    gap: 0;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .mode-tab {
+    padding: 4px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    background: #f8f9fa;
+    color: #606060;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .mode-tab:not(:last-child) {
+    border-right: 1px solid #e0e0e0;
+  }
+
+  .mode-tab:hover {
+    background: #e8f0fe;
+    color: #1a73e8;
+  }
+
+  .mode-tab.active {
+    background: #1a73e8;
+    color: white;
+  }
+
+  .mode-tab.active:hover {
+    background: #1557b0;
   }
 
   .search-input {

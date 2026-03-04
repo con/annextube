@@ -1,5 +1,6 @@
 """Generate web command for annextube."""
 
+import asyncio
 import shutil
 from pathlib import Path
 
@@ -78,9 +79,26 @@ def deploy_frontend(web_dir: Path) -> None:
         click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
         raise click.Abort()
 
+    # Preserve web/pagefind/ if it exists (may be a DataLad subdataset
+    # with the search index that should survive frontend re-deploys).
+    pagefind_dir = web_dir / "pagefind"
+    pagefind_backup = None
+    if pagefind_dir.exists():
+        pagefind_backup = web_dir.parent / ".pagefind_backup"
+        if pagefind_backup.exists():
+            shutil.rmtree(pagefind_backup)
+        pagefind_dir.rename(pagefind_backup)
+
     if web_dir.exists():
         shutil.rmtree(web_dir)
     shutil.copytree(FRONTEND_BUILD_DIR, web_dir)
+
+    # Restore pagefind directory
+    if pagefind_backup is not None and pagefind_backup.exists():
+        target = web_dir / "pagefind"
+        if target.exists():
+            shutil.rmtree(target)
+        pagefind_backup.rename(target)
 
     if _inject_version(web_dir, __version__):
         click.echo(f"  [ok] web/ (v{__version__})")
@@ -90,6 +108,40 @@ def deploy_frontend(web_dir: Path) -> None:
             f"(placeholder '{FRONTEND_VERSION_PLACEHOLDER}' not found in JS bundle)",
             err=True,
         )
+
+
+def _build_search_index(archive_path: Path, force: bool = False) -> None:
+    """Build the Pagefind caption search index.
+
+    Verifies that the ``pagefind`` package is installed, then delegates to
+    :func:`annextube.services.search_index.build_caption_index`.
+    """
+    try:
+        from pagefind.index import PagefindIndex  # noqa: F401
+    except ImportError as exc:
+        click.echo(
+            "Error: pagefind package required for search index. "
+            "Install with: pip install 'annextube[search]'",
+            err=True,
+        )
+        raise click.Abort() from exc
+
+    from annextube.services.search_index import build_caption_index
+
+    click.echo("Building caption search index...")
+    stats = asyncio.run(build_caption_index(archive_path, force=force))
+
+    if stats.videos_indexed == 0 and stats.chunks_created == 0:
+        click.echo("  [ok] Search index up to date (no changes)")
+    else:
+        size_mb = stats.index_size_bytes / (1024 * 1024)
+        click.echo(
+            f"  [ok] {stats.videos_indexed} videos "
+            f"({stats.videos_curated} curated, {stats.videos_original} original), "
+            f"{stats.chunks_created:,} chunks, {size_mb:.1f} MB"
+        )
+    if stats.videos_skipped:
+        click.echo(f"  (skipped {stats.videos_skipped} videos without captions)")
 
 
 @click.command()
@@ -104,8 +156,26 @@ def deploy_frontend(web_dir: Path) -> None:
     is_flag=True,
     help="Overwrite existing web directory",
 )
+@click.option(
+    "--search-index",
+    is_flag=True,
+    default=False,
+    help="Build Pagefind caption search index (requires 'annextube[search]')",
+)
+@click.option(
+    "--force-reindex",
+    is_flag=True,
+    default=False,
+    help="Force full search index rebuild (ignore incremental cache)",
+)
 @click.pass_context
-def generate_web(ctx: click.Context, output_dir: Path, force: bool):
+def generate_web(
+    ctx: click.Context,
+    output_dir: Path,
+    force: bool,
+    search_index: bool,
+    force_reindex: bool,
+):
     """Generate interactive web browser for the archive.
 
     Copies the web frontend to the archive's web/ directory and ensures
@@ -128,6 +198,12 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
 
         # Overwrite existing web directory
         annextube generate-web --force
+
+        # Build with caption search index
+        annextube generate-web --force --search-index
+
+        # Force full re-index
+        annextube generate-web --force --search-index --force-reindex
     """
     logger.info("Starting web browser generation")
 
@@ -169,6 +245,10 @@ def generate_web(ctx: click.Context, output_dir: Path, force: bool):
         # Deploy frontend (copy + version injection)
         click.echo(f"Copying web browser to {web_dir}...")
         deploy_frontend(web_dir)
+
+        # Optionally build caption search index
+        if search_index:
+            _build_search_index(output_dir, force=force_reindex)
 
         click.echo()
         click.echo("[ok] Web browser generated successfully!")
