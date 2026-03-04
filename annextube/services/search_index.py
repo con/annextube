@@ -524,7 +524,7 @@ async def build_caption_index(
     except Exception:
         logger.debug("Could not patch pagefind polling, using default (slow)")
 
-    config = IndexConfig(root_selector="main")
+    config = IndexConfig(root_selector="main", output_path=str(pagefind_dir))
     async with PagefindIndex(config=config) as index:
         logger.debug("Pagefind index initialized, scanning video directories")
         video_count = 0
@@ -597,13 +597,10 @@ async def build_caption_index(
                 )
                 stats.chunks_created += 1
 
-        # Write the index files
         logger.debug(
-            "Writing index: %d videos, %d chunks",
+            "Indexed %d videos, %d chunks — writing files on context exit",
             stats.videos_indexed, stats.chunks_created,
         )
-        await index.write_files(output_path=str(pagefind_dir))
-        logger.debug("Index files written")
 
     # Compute index size
     total = 0
