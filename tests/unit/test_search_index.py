@@ -12,7 +12,6 @@ import pytest
 
 from annextube.services.search_index import (
     VttCue,
-    _create_subdataset_datalad,
     _ensure_pagefind_subdataset,
     _is_datalad_dataset,
     _is_git_repo,
@@ -592,28 +591,33 @@ class TestDataladSubdatasetHelpers:
         """Returns False when .datalad directory does not exist."""
         assert _is_datalad_dataset(tmp_path) is False
 
-    def test_ensure_subdataset_noop_for_non_git(self, tmp_path: Path) -> None:
+    def test_is_git_repo_true(self, tmp_path: Path) -> None:
+        (tmp_path / ".git").mkdir()
+        assert _is_git_repo(tmp_path) is True
+
+    def test_is_git_repo_false(self, tmp_path: Path) -> None:
+        assert _is_git_repo(tmp_path) is False
+
+    def test_ensure_noop_for_non_git(self, tmp_path: Path) -> None:
         """No subdataset created when archive is not a git repo."""
         pagefind_dir = tmp_path / "web" / "pagefind"
         result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
         assert result is False
         assert not pagefind_dir.exists()
 
-    def test_ensure_subdataset_skips_existing(self, tmp_path: Path) -> None:
+    def test_ensure_skips_existing(self, tmp_path: Path) -> None:
         """Returns True without creating if subdataset already exists."""
         (tmp_path / ".git").mkdir()
         pagefind_dir = tmp_path / "web" / "pagefind"
         pagefind_dir.mkdir(parents=True)
-        (pagefind_dir / ".git").mkdir()  # Simulate existing repo
+        (pagefind_dir / ".git").mkdir()
 
         result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
         assert result is True
 
-    def test_ensure_subdataset_tries_datalad_first(
-        self, tmp_path: Path
-    ) -> None:
-        """DataLad create is attempted first for any git repo with datalad available."""
-        (tmp_path / ".git").mkdir()  # plain git repo (no .datalad)
+    def test_ensure_calls_datalad_create(self, tmp_path: Path) -> None:
+        """Creates subdataset via datalad create with cfg_text2git."""
+        (tmp_path / ".git").mkdir()
         pagefind_dir = tmp_path / "web" / "pagefind"
 
         mock_create = MagicMock()
@@ -640,33 +644,37 @@ class TestDataladSubdatasetHelpers:
             result_renderer="disabled",
         )
 
-    def test_ensure_subdataset_falls_back_to_git_when_no_datalad(
-        self, tmp_path: Path
-    ) -> None:
-        """Falls back to plain git submodule when datalad is not installed."""
-        (tmp_path / ".git").mkdir()
-        pagefind_dir = tmp_path / "web" / "pagefind"
+    def test_ensure_creates_gitattributes(self, tmp_path: Path) -> None:
+        """Real DataLad create with cfg_text2git produces .gitattributes in subdataset."""
+        try:
+            import datalad  # noqa: F401
+        except ImportError:
+            pytest.skip("DataLad not installed (optional dependency)")
 
-        with patch("annextube.services.search_index.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            # datalad is not installed — ImportError on import
-            with patch.dict("sys.modules", {"datalad": None, "datalad.api": None}):
-                result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+        subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=True)
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "init"],
+            cwd=str(tmp_path), capture_output=True, check=True,
+        )
+
+        pagefind_dir = tmp_path / "web" / "pagefind"
+        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
 
         assert result is True
-        # Should have called git init, git commit, git submodule add
-        calls = mock_run.call_args_list
-        assert len(calls) == 3
-        assert calls[0][0][0] == ["git", "init"]
+        assert (pagefind_dir / ".git").exists(), "subdataset .git should exist"
+        assert (pagefind_dir / ".gitattributes").exists(), (
+            "cfg_text2git should create .gitattributes in subdataset"
+        )
+        gitattributes = (pagefind_dir / ".gitattributes").read_text()
+        assert "annex.largefiles" in gitattributes
 
-    def test_save_noop_when_no_pagefind_git_dir(self, tmp_path: Path) -> None:
+    def test_save_noop_when_no_pagefind_git(self, tmp_path: Path) -> None:
         """Save is a no-op when web/pagefind/.git does not exist."""
         (tmp_path / "web" / "pagefind").mkdir(parents=True)
-        # No .git inside pagefind dir — should not raise
         _save_pagefind_subdataset(tmp_path)
 
     def test_save_calls_datalad_save(self, tmp_path: Path) -> None:
-        """Save delegates to top_ds.save() when datalad is available."""
+        """Save delegates to top_ds.save() with recursive=True."""
         (tmp_path / ".git").mkdir()
         pagefind_dir = tmp_path / "web" / "pagefind"
         pagefind_dir.mkdir(parents=True)
@@ -692,136 +700,3 @@ class TestDataladSubdatasetHelpers:
             recursive=True,
             result_renderer="disabled",
         )
-
-    @pytest.mark.ai_generated
-    def test_datalad_create_produces_gitattributes(self, tmp_path: Path) -> None:
-        """Real DataLad create with cfg_text2git produces .gitattributes in subdataset."""
-        try:
-            import datalad  # noqa: F401
-        except ImportError:
-            pytest.skip("DataLad not installed (optional dependency)")
-
-        # Create a real git repo
-        subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", "init"],
-            cwd=str(tmp_path), capture_output=True, check=True,
-        )
-
-        pagefind_dir = tmp_path / "web" / "pagefind"
-        result = _create_subdataset_datalad(tmp_path, pagefind_dir)
-
-        assert result is True
-        assert (pagefind_dir / ".git").exists(), "subdataset .git should exist"
-        assert (pagefind_dir / ".gitattributes").exists(), (
-            "cfg_text2git should create .gitattributes in subdataset"
-        )
-        # text2git .gitattributes should annex by default, keep text in git
-        gitattributes = (pagefind_dir / ".gitattributes").read_text()
-        assert "annex.largefiles" in gitattributes
-
-
-# ── _is_git_repo tests ──────────────────────────────────────────────────────
-
-
-@pytest.mark.ai_generated
-class TestIsGitRepo:
-    """Tests for _is_git_repo helper."""
-
-    def test_true_when_git_dir_exists(self, tmp_path: Path) -> None:
-        (tmp_path / ".git").mkdir()
-        assert _is_git_repo(tmp_path) is True
-
-    def test_false_when_no_git_dir(self, tmp_path: Path) -> None:
-        assert _is_git_repo(tmp_path) is False
-
-
-# ── Plain git submodule tests ──────────────────────────────────────────────
-
-
-@pytest.mark.ai_generated
-class TestPlainGitSubmodule:
-    """Tests for git submodule creation/save when archive is a plain git repo."""
-
-    def test_ensure_creates_submodule_for_plain_git(self, tmp_path: Path) -> None:
-        """Creates a git submodule when archive is a plain git repo and no DataLad."""
-        (tmp_path / ".git").mkdir()  # plain git repo
-        pagefind_dir = tmp_path / "web" / "pagefind"
-
-        with patch("annextube.services.search_index.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            # Ensure datalad is not available
-            with patch.dict("sys.modules", {"datalad": None, "datalad.api": None}):
-                result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
-
-        assert result is True
-        # Should have called git init, git commit, git submodule add
-        calls = mock_run.call_args_list
-        assert len(calls) == 3
-        assert calls[0][0][0] == ["git", "init"]
-        assert calls[1][0][0][:2] == ["git", "commit"]
-        assert calls[2][0][0][:3] == ["git", "submodule", "add"]
-
-    def test_ensure_returns_true_when_pagefind_git_exists(
-        self, tmp_path: Path
-    ) -> None:
-        """Returns True without creating if pagefind/.git already exists."""
-        pagefind_dir = tmp_path / "web" / "pagefind"
-        pagefind_dir.mkdir(parents=True)
-        (pagefind_dir / ".git").mkdir()
-
-        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
-        assert result is True
-
-    def test_ensure_returns_false_for_non_vcs_archive(self, tmp_path: Path) -> None:
-        """Returns False when archive has neither .datalad nor .git."""
-        pagefind_dir = tmp_path / "web" / "pagefind"
-        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
-        assert result is False
-
-    def test_ensure_handles_subprocess_failure(self, tmp_path: Path) -> None:
-        """Returns False when git submodule creation fails (and no datalad)."""
-        (tmp_path / ".git").mkdir()
-        pagefind_dir = tmp_path / "web" / "pagefind"
-
-        with patch(
-            "annextube.services.search_index.subprocess.run",
-            side_effect=subprocess.CalledProcessError(1, "git"),
-        ):
-            with patch.dict("sys.modules", {"datalad": None, "datalad.api": None}):
-                result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
-
-        assert result is False
-
-    def test_save_commits_in_plain_git_submodule(self, tmp_path: Path) -> None:
-        """Save stages, commits in submodule and updates parent pointer when no datalad."""
-        (tmp_path / ".git").mkdir()
-        pagefind_dir = tmp_path / "web" / "pagefind"
-        pagefind_dir.mkdir(parents=True)
-        (pagefind_dir / ".git").mkdir()
-
-        with patch("annextube.services.search_index.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(returncode=0)
-            with patch.dict("sys.modules", {"datalad": None, "datalad.api": None}):
-                _save_pagefind_subdataset(tmp_path)
-
-        calls = mock_run.call_args_list
-        assert len(calls) == 3
-        # git add -A inside submodule
-        assert calls[0][0][0] == ["git", "add", "-A"]
-        assert calls[0][1]["cwd"] == str(pagefind_dir)
-        # git commit inside submodule
-        assert calls[1][0][0][:2] == ["git", "commit"]
-        assert calls[1][1]["cwd"] == str(pagefind_dir)
-        # git add web/pagefind in parent
-        assert calls[2][0][0][:2] == ["git", "add"]
-        assert calls[2][1]["cwd"] == str(tmp_path)
-
-    def test_save_noop_when_no_pagefind_git(self, tmp_path: Path) -> None:
-        """Save is a no-op when pagefind/.git does not exist."""
-        (tmp_path / ".git").mkdir()
-        (tmp_path / "web" / "pagefind").mkdir(parents=True)
-        # No .git inside pagefind
-        with patch("annextube.services.search_index.subprocess.run") as mock_run:
-            _save_pagefind_subdataset(tmp_path)
-        mock_run.assert_not_called()
