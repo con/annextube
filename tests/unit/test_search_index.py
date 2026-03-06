@@ -299,19 +299,27 @@ class _FakeIndex:
         return self
 
     async def __aexit__(self, *args):
-        pass
+        self.written = True
 
     async def add_custom_record(self, **kwargs):
         self.records.append(kwargs)
-
-    async def write_files(self, output_path: str = ""):
-        self.written = True
-        self._output_path = output_path
 
 
 @pytest.mark.ai_generated
 class TestBuildCaptionIndex:
     """Tests for build_caption_index with mocked Pagefind."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_pagefind_imports(self):
+        """Ensure IndexConfig and PagefindIndex are non-None even without pagefind installed.
+
+        Individual tests override PagefindIndex with their own _FakeIndex via nested patches.
+        """
+        with (
+            patch("annextube.services.search_index.IndexConfig", MagicMock()),
+            patch("annextube.services.search_index.PagefindIndex", _FakeIndex),
+        ):
+            yield
 
     @pytest.mark.asyncio
     async def test_curated_preferred_over_original(self, tmp_path: Path) -> None:

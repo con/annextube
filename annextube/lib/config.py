@@ -50,6 +50,13 @@ class CurationConfig:
 
 
 @dataclass
+class SearchConfig:
+    """Configuration for caption search index (pagefind)."""
+
+    enabled: bool = False  # Build search index after backup
+
+
+@dataclass
 class SourceConfig:
     """Configuration for a YouTube source (channel or playlist)."""
 
@@ -224,6 +231,7 @@ class Config:
     organization: OrganizationConfig = field(default_factory=OrganizationConfig)
     backup: BackupConfig = field(default_factory=BackupConfig)
     curation: CurationConfig = field(default_factory=CurationConfig)
+    search: SearchConfig = field(default_factory=SearchConfig)
 
     # Convenience properties for backward compatibility
     @property
@@ -327,12 +335,18 @@ class Config:
                 curation_kwargs[key] = curation_data[key]
         curation = CurationConfig(**curation_kwargs)
 
+        search_data = data.get("search", {})
+        search = SearchConfig(
+            enabled=search_data.get("enabled", False),
+        )
+
         return cls(
             sources=sources,
             components=components,
             filters=filters,
             organization=organization,
             curation=curation,
+            search=search,
         )
 
 
@@ -664,6 +678,11 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
 # Audio-based alignment (optional, requires stable-ts or ctc)
 # audio_align_method = "stable-ts"  # "stable-ts" or "ctc"
 # audio_align_model = "base"        # Whisper model name
+
+# Caption search index (requires pagefind: pip install 'annextube[search]')
+# Builds a Pagefind full-text search index from caption VTT files after backup
+[search]
+# enabled = true  # Uncomment to auto-build search index after backup
 
 {organization_section}{filters_section}
 # Optional date range filter

@@ -1,5 +1,6 @@
 """Backup command for annextube."""
 
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from annextube.lib.date_utils import parse_date
 from annextube.lib.logging_config import get_logger
 from annextube.services.archiver import Archiver
 from annextube.services.export import ExportService
+from annextube.services.search_index import build_caption_index
 
 logger = get_logger(__name__)
 
@@ -69,8 +71,13 @@ logger = get_logger(__name__)
     hidden=True,  # Deprecated, replaced by --update=all-incremental
     help="(Deprecated: use --update=all-incremental instead)",
 )
+@click.option(
+    "--search-index/--no-search-index",
+    default=None,
+    help="Build caption search index after backup (default: use [search] config)",
+)
 @click.pass_context
-def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, yt_dlp_max_parallel: int | None, skip_existing: bool):
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, yt_dlp_max_parallel: int | None, skip_existing: bool, search_index: bool | None):
     """Backup YouTube channel or playlist.
 
     If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
@@ -271,6 +278,38 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         except Exception as e:
             # Don't fail the entire backup if channel.json generation fails
             logger.warning(f"Could not generate channel.json: {e}")
+
+        # Build caption search index if enabled
+        # CLI flag overrides config: True=force, False=skip, None=use config
+        do_search = config.search.enabled if search_index is None else search_index
+        if do_search:
+            try:
+                from pagefind.index import PagefindIndex  # noqa: F401
+            except ImportError:
+                click.echo(
+                    "Error: pagefind package required for search index. "
+                    "Install with: pip install 'annextube[search]'",
+                    err=True,
+                )
+                ctx.exit(1)
+            else:
+                try:
+                    click.echo()
+                    click.echo("Building caption search index...")
+                    stats = asyncio.run(build_caption_index(output_dir))
+                    if stats.videos_indexed == 0 and stats.chunks_created == 0:
+                        click.echo("  [ok] Search index up to date (no changes)")
+                    else:
+                        size_mb = stats.index_size_bytes / (1024 * 1024)
+                        click.echo(
+                            f"  [ok] {stats.videos_indexed} videos "
+                            f"({stats.videos_curated} curated, {stats.videos_original} original), "
+                            f"{stats.chunks_created:,} chunks, {size_mb:.1f} MB"
+                        )
+                    if stats.videos_skipped:
+                        click.echo(f"  (skipped {stats.videos_skipped} videos without captions)")
+                except Exception as e:
+                    click.echo(f"Warning: search index build failed: {e}", err=True)
 
         click.echo()
         if all_errors:
