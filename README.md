@@ -16,8 +16,11 @@ YouTube archive system using git-annex for efficient storage and incremental upd
 ## Quick Start
 
 ```bash
-# Install
+# Install (core)
 pip install annextube
+
+# Or install with all optional features (DataLad, search index, audio alignment)
+pip install 'annextube[full]'
 
 # Create archive
 mkdir my-archive && cd my-archive
@@ -84,11 +87,14 @@ See [docs/how-to/container-deployment.md](docs/content/how-to/container-deployme
 
 - **YouTube Data API v3 key**: For API-based metadata (free from Google Cloud Console)
 - **deno or node**: JavaScript runtime for modern YouTube features
-- **DataLad**: For creating DataLad datasets instead of plain git-annex repos
-  ```bash
-  pip install annextube[datalad]
-  annextube init --datalad  # Creates DataLad dataset with .datalad/ config
-  ```
+- **Optional extras** (install individually or all at once with `pip install 'annextube[full]'`):
+
+  | Extra | Install | Description |
+  |-------|---------|-------------|
+  | `datalad` | `pip install 'annextube[datalad]'` | DataLad dataset management |
+  | `search` | `pip install 'annextube[search]'` | Full-text caption search index (pagefind) |
+  | `audio-align` | `pip install 'annextube[audio-align]'` | Audio-based caption alignment (Whisper) |
+  | **`full`** | `pip install 'annextube[full]'` | **All of the above** |
 
 ## Development
 

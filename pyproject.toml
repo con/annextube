@@ -59,6 +59,11 @@ audio-align = [
     "stable-ts>=2.15.0",
     "openai-whisper>=20231117",
 ]
+full = [
+    "annextube[datalad]",
+    "annextube[search]",
+    "annextube[audio-align]",
+]
 devel = [
     "annextube[test]",
     "annextube[search]",

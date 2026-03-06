@@ -28,10 +28,13 @@ logger = get_logger(__name__)
 @click.option("--include-playlists", default="all", show_default=True, help="Playlist inclusion: 'all', 'none', or regex pattern")
 @click.option("--include-podcasts", default="all", show_default=True, help="Podcast inclusion: 'all', 'none', or regex pattern")
 @click.option("--video-path-pattern", default="{year}/{month}/{date}_{sanitized_title}", show_default=True, help="Path pattern for video directories")
+@click.option("--curation/--no-curation", default=False, help="Enable caption curation during backup")
+@click.option("--search/--no-search", "search_index", default=False, help="Enable search index build after backup (requires annextube[search])")
+@click.option("--enable-all", is_flag=True, default=False, help="Enable all optional features (curation, search)")
 @click.option("--all-to-git", is_flag=True, default=False, help="Keep all files in git (no annexing). Use for demos/GitHub Pages.")
 @click.option("--datalad", is_flag=True, default=False, help="Create a DataLad dataset (requires: pip install annextube[datalad])")
 @click.pass_context
-def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments_depth: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, all_to_git: bool, datalad: bool):
+def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comments_depth: int, captions: bool, thumbnails: bool, limit: int, include_playlists: str, include_podcasts: str, video_path_pattern: str, curation: bool, search_index: bool, enable_all: bool, all_to_git: bool, datalad: bool):
     """Initialize a new YouTube archive repository.
 
     Creates git-annex repository with URL backend for tracking video URLs,
@@ -92,6 +95,10 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         config_dir = output_dir / ".annextube"
         # Convert -1 (unlimited) to None
         comments_depth_value = None if comments_depth == -1 else comments_depth
+        # --enable-all implies all optional features
+        if enable_all:
+            curation = True
+            search_index = True
         config_path = save_config_template(
             config_dir,
             urls=list(urls),
@@ -102,7 +109,9 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
             limit=limit,
             include_playlists=include_playlists,
             include_podcasts=include_podcasts,
-            video_path_pattern=video_path_pattern
+            video_path_pattern=video_path_pattern,
+            enable_curation=curation,
+            enable_search=search_index,
         )
 
         # Initial commit
@@ -139,6 +148,8 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
             click.echo(f"  - Comments: up to {comments_depth}")
         click.echo(f"  - Captions: {'enabled' if captions else 'disabled'}")
         click.echo(f"  - Thumbnails: {'enabled' if thumbnails else 'disabled'}")
+        click.echo(f"  - Curation: {'enabled' if curation else 'disabled'}")
+        click.echo(f"  - Search index: {'enabled' if search_index else 'disabled'}")
         if limit:
             click.echo(f"  - Limit: {limit} most recent videos")
         if include_playlists != "none":
