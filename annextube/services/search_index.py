@@ -306,11 +306,76 @@ def _is_git_repo(path: Path) -> bool:
     return (path / ".git").exists()
 
 
+def _create_subdataset_datalad(archive_path: Path, pagefind_dir: Path) -> bool:
+    """Create ``web/pagefind/`` as a DataLad subdataset with ``cfg_text2git``.
+
+    Works for both DataLad datasets and plain git repos — DataLad will
+    register the subdataset as a git submodule either way.
+
+    Returns *True* on success, *False* on failure or if DataLad is unavailable.
+    """
+    try:
+        from datalad.api import Dataset, create
+    except ImportError:
+        return False
+
+    top_ds = Dataset(str(archive_path))
+    logger.info("Creating DataLad subdataset at %s", pagefind_dir)
+    try:
+        create(
+            path=str(pagefind_dir),
+            dataset=top_ds,
+            cfg_proc="text2git",
+            result_renderer="disabled",
+        )
+        return True
+    except Exception as exc:
+        logger.warning("DataLad subdataset creation failed: %s", exc)
+        return False
+
+
+def _create_subdataset_git(archive_path: Path, pagefind_dir: Path) -> bool:
+    """Create ``web/pagefind/`` as a plain git submodule (no git-annex).
+
+    Fallback when DataLad is not available.
+
+    Returns *True* on success, *False* on failure.
+    """
+    pagefind_dir.mkdir(parents=True, exist_ok=True)
+    rel_path = pagefind_dir.relative_to(archive_path)
+    logger.info("Creating git submodule at %s (no DataLad)", rel_path)
+    try:
+        subprocess.run(
+            ["git", "init"],
+            cwd=str(pagefind_dir),
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "--allow-empty", "-m", "Initial commit"],
+            cwd=str(pagefind_dir),
+            capture_output=True,
+            check=True,
+        )
+        subprocess.run(
+            ["git", "submodule", "add", f"./{rel_path}", str(rel_path)],
+            cwd=str(archive_path),
+            capture_output=True,
+            check=True,
+        )
+        return True
+    except subprocess.CalledProcessError as exc:
+        logger.warning(
+            "Failed to create git submodule for web/pagefind/: %s", exc
+        )
+        return False
+
+
 def _ensure_pagefind_subdataset(archive_path: Path, pagefind_dir: Path) -> bool:
     """Create ``web/pagefind/`` as a managed sub-repository if it doesn't exist.
 
-    Tries DataLad first (with ``cfg_proc=text2git``), then falls back to a
-    plain git submodule when the archive is a plain git repo.
+    Tries DataLad first (with ``cfg_proc=text2git`` for proper git-annex setup
+    and .gitattributes), then falls back to a plain git submodule.
 
     Returns *True* if a sub-repository exists (created or pre-existing),
     *False* if the archive is not under version control at all.
@@ -319,70 +384,22 @@ def _ensure_pagefind_subdataset(archive_path: Path, pagefind_dir: Path) -> bool:
     if (pagefind_dir / ".git").exists():
         return True
 
-    # --- DataLad path ---
-    if _is_datalad_dataset(archive_path):
-        try:
-            from datalad.api import Dataset, create
-        except ImportError:
-            logger.warning(
-                "DataLad dataset detected but datalad package not available; "
-                "skipping subdataset creation for web/pagefind/"
-            )
-            return False
+    if not _is_git_repo(archive_path):
+        return False
 
-        top_ds = Dataset(str(archive_path))
-        logger.info("Creating DataLad subdataset at %s", pagefind_dir)
-        create(
-            path=str(pagefind_dir),
-            dataset=top_ds,
-            cfg_proc="text2git",
-            result_renderer="disabled",
-        )
+    # Try DataLad first (works for both DataLad datasets and plain git repos)
+    if _create_subdataset_datalad(archive_path, pagefind_dir):
         return True
 
-    # --- Plain git path ---
-    if _is_git_repo(archive_path):
-        pagefind_dir.mkdir(parents=True, exist_ok=True)
-        rel_path = pagefind_dir.relative_to(archive_path)
-        logger.info("Creating git submodule at %s", rel_path)
-        try:
-            # Initialise a fresh git repo inside web/pagefind/
-            subprocess.run(
-                ["git", "init"],
-                cwd=str(pagefind_dir),
-                capture_output=True,
-                check=True,
-            )
-            # Create an initial commit so the submodule ref is valid
-            subprocess.run(
-                ["git", "commit", "--allow-empty", "-m", "Initial commit"],
-                cwd=str(pagefind_dir),
-                capture_output=True,
-                check=True,
-            )
-            # Register as a submodule in the parent repo
-            subprocess.run(
-                ["git", "submodule", "add", f"./{rel_path}", str(rel_path)],
-                cwd=str(archive_path),
-                capture_output=True,
-                check=True,
-            )
-            return True
-        except subprocess.CalledProcessError as exc:
-            logger.warning(
-                "Failed to create git submodule for web/pagefind/: %s", exc
-            )
-            return False
-
-    return False
+    # Fall back to plain git submodule
+    return _create_subdataset_git(archive_path, pagefind_dir)
 
 
 def _save_pagefind_subdataset(archive_path: Path) -> None:
     """Commit changes in ``web/pagefind/`` sub-repository and update the parent.
 
-    Supports both DataLad datasets (via ``datalad save``) and plain git repos
-    (via ``git add -A`` + ``git commit`` in the submodule, then
-    ``git add web/pagefind`` in the parent).
+    Tries DataLad save first (works for any git repo with datalad installed),
+    falls back to plain git commands.
 
     No-op if the archive is not under version control.
     """
@@ -390,15 +407,12 @@ def _save_pagefind_subdataset(archive_path: Path) -> None:
     if not (pagefind_dir / ".git").exists():
         return
 
-    # --- DataLad path ---
-    if _is_datalad_dataset(archive_path):
-        try:
-            from datalad.api import Dataset
-        except ImportError:
-            return
+    # --- Try DataLad first ---
+    try:
+        from datalad.api import Dataset
 
         top_ds = Dataset(str(archive_path))
-        logger.info("Saving caption search index in DataLad subdataset")
+        logger.info("Saving caption search index via DataLad")
         top_ds.save(
             path="web/pagefind",
             message="Update caption search index",
@@ -406,12 +420,15 @@ def _save_pagefind_subdataset(archive_path: Path) -> None:
             result_renderer="disabled",
         )
         return
+    except ImportError:
+        pass
+    except Exception as exc:
+        logger.debug("DataLad save failed, falling back to git: %s", exc)
 
-    # --- Plain git path ---
+    # --- Fallback: plain git ---
     if _is_git_repo(archive_path):
         logger.info("Saving caption search index in git submodule")
         try:
-            # Stage and commit inside the submodule
             subprocess.run(
                 ["git", "add", "-A"],
                 cwd=str(pagefind_dir),
@@ -428,7 +445,6 @@ def _save_pagefind_subdataset(archive_path: Path) -> None:
             # Nothing to commit in submodule (no changes)
             pass
         try:
-            # Update the submodule pointer in the parent repo
             rel_path = pagefind_dir.relative_to(archive_path)
             subprocess.run(
                 ["git", "add", str(rel_path)],
