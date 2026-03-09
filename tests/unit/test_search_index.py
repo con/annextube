@@ -13,7 +13,6 @@ import pytest
 from annextube.services.search_index import (
     VttCue,
     _ensure_pagefind_subdataset,
-    _is_datalad_dataset,
     _is_git_repo,
     _save_pagefind_subdataset,
     chunk_vtt_cues,
@@ -497,60 +496,6 @@ class TestBuildCaptionIndex:
         assert fake_index.written
 
     @pytest.mark.asyncio
-    async def test_datalad_subdataset_created_when_archive_is_datalad(
-        self, tmp_path: Path
-    ) -> None:
-        """When archive is a git repo with datalad available, subdataset is created and saved."""
-        archive = _make_archive(tmp_path, has_curated=True)
-        # Make it look like a git repo
-        (archive / ".git").mkdir()
-
-        fake_index = _FakeIndex()
-
-        # Simulate datalad create() actually creating the .git dir
-        def fake_create(**kwargs):
-            Path(kwargs["path"]).mkdir(parents=True, exist_ok=True)
-            (Path(kwargs["path"]) / ".git").mkdir(exist_ok=True)
-
-        mock_create = MagicMock(side_effect=fake_create)
-        mock_ds = MagicMock()
-        mock_dataset_cls = MagicMock(return_value=mock_ds)
-
-        with (
-            patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
-            ),
-            patch(
-                "annextube.services.search_index._current_head",
-                return_value="abc123def",
-            ),
-            patch.dict(
-                "sys.modules",
-                {
-                    "datalad": MagicMock(),
-                    "datalad.api": MagicMock(
-                        create=mock_create,
-                        Dataset=mock_dataset_cls,
-                    ),
-                },
-            ),
-        ):
-            from annextube.services.search_index import build_caption_index
-
-            stats = await build_caption_index(archive, force=True)
-
-        assert stats.videos_indexed == 1
-        # create() should have been called for the subdataset
-        mock_create.assert_called_once()
-        call_kwargs = mock_create.call_args
-        assert "text2git" in str(call_kwargs)
-        # save() should have been called after index build
-        mock_ds.save.assert_called_once()
-        save_kwargs = mock_ds.save.call_args
-        assert "web/pagefind" in str(save_kwargs)
-
-    @pytest.mark.asyncio
     async def test_no_subdataset_when_not_git_repo(self, tmp_path: Path) -> None:
         """When archive is not a git repo, no subdataset ops happen."""
         archive = _make_archive(tmp_path, has_curated=True)
@@ -582,15 +527,6 @@ class TestBuildCaptionIndex:
 class TestDataladSubdatasetHelpers:
     """Tests for DataLad subdataset management helpers."""
 
-    def test_is_datalad_dataset_true(self, tmp_path: Path) -> None:
-        """Returns True when .datalad directory exists."""
-        (tmp_path / ".datalad").mkdir()
-        assert _is_datalad_dataset(tmp_path) is True
-
-    def test_is_datalad_dataset_false(self, tmp_path: Path) -> None:
-        """Returns False when .datalad directory does not exist."""
-        assert _is_datalad_dataset(tmp_path) is False
-
     def test_is_git_repo_true(self, tmp_path: Path) -> None:
         (tmp_path / ".git").mkdir()
         assert _is_git_repo(tmp_path) is True
@@ -606,56 +542,23 @@ class TestDataladSubdatasetHelpers:
         assert not pagefind_dir.exists()
 
     def test_ensure_skips_existing(self, tmp_path: Path) -> None:
-        """Returns True without creating if subdataset already exists."""
-        (tmp_path / ".git").mkdir()
+        """Returns True without re-creating if subdataset already exists."""
+        from datalad.api import create
+
+        create(path=str(tmp_path), force=True, result_renderer="disabled")
         pagefind_dir = tmp_path / "web" / "pagefind"
-        pagefind_dir.mkdir(parents=True)
-        (pagefind_dir / ".git").mkdir()
+        result1 = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+        assert result1 is True
 
-        result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
-        assert result is True
-
-    def test_ensure_calls_datalad_create(self, tmp_path: Path) -> None:
-        """Creates subdataset via datalad create with cfg_text2git."""
-        (tmp_path / ".git").mkdir()
-        pagefind_dir = tmp_path / "web" / "pagefind"
-
-        mock_create = MagicMock()
-        mock_ds = MagicMock()
-        mock_dataset_cls = MagicMock(return_value=mock_ds)
-
-        with patch.dict(
-            "sys.modules",
-            {
-                "datalad": MagicMock(),
-                "datalad.api": MagicMock(
-                    create=mock_create,
-                    Dataset=mock_dataset_cls,
-                ),
-            },
-        ):
-            result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
-
-        assert result is True
-        mock_create.assert_called_once_with(
-            path=str(pagefind_dir),
-            dataset=mock_ds,
-            cfg_proc="text2git",
-            result_renderer="disabled",
-        )
+        # Second call should be idempotent — no error, still True
+        result2 = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
+        assert result2 is True
 
     def test_ensure_creates_gitattributes(self, tmp_path: Path) -> None:
         """Real DataLad create with cfg_text2git produces .gitattributes in subdataset."""
-        try:
-            import datalad  # noqa: F401
-        except ImportError:
-            pytest.skip("DataLad not installed (optional dependency)")
+        from datalad.api import create
 
-        subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=True)
-        subprocess.run(
-            ["git", "commit", "--allow-empty", "-m", "init"],
-            cwd=str(tmp_path), capture_output=True, check=True,
-        )
+        create(path=str(tmp_path), force=True, result_renderer="disabled")
 
         pagefind_dir = tmp_path / "web" / "pagefind"
         result = _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
@@ -667,36 +570,71 @@ class TestDataladSubdatasetHelpers:
         )
         gitattributes = (pagefind_dir / ".gitattributes").read_text()
         assert "annex.largefiles" in gitattributes
+        # Subdataset should be registered in parent
+        assert (tmp_path / ".gitmodules").exists()
 
     def test_save_noop_when_no_pagefind_git(self, tmp_path: Path) -> None:
         """Save is a no-op when web/pagefind/.git does not exist."""
         (tmp_path / "web" / "pagefind").mkdir(parents=True)
         _save_pagefind_subdataset(tmp_path)
 
-    def test_save_calls_datalad_save(self, tmp_path: Path) -> None:
-        """Save delegates to top_ds.save() with recursive=True."""
-        (tmp_path / ".git").mkdir()
+    def test_save_commits_pagefind_subdataset(self, tmp_path: Path) -> None:
+        """Save commits files in the pagefind subdataset and updates the parent."""
+        from datalad.api import create
+
+        create(path=str(tmp_path), force=True, result_renderer="disabled")
         pagefind_dir = tmp_path / "web" / "pagefind"
-        pagefind_dir.mkdir(parents=True)
-        (pagefind_dir / ".git").mkdir()
+        _ensure_pagefind_subdataset(tmp_path, pagefind_dir)
 
-        mock_ds = MagicMock()
-        mock_dataset_cls = MagicMock(return_value=mock_ds)
+        # Write a file into the subdataset
+        (pagefind_dir / "test.js").write_text("// test")
+        _save_pagefind_subdataset(tmp_path)
 
-        with patch.dict(
-            "sys.modules",
-            {
-                "datalad": MagicMock(),
-                "datalad.api": MagicMock(
-                    Dataset=mock_dataset_cls,
-                ),
-            },
+        # Subdataset should be clean
+        sub_status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(pagefind_dir), capture_output=True, text=True, check=True,
+        )
+        assert sub_status.stdout.strip() == "", "subdataset should be clean after save"
+
+        # Parent should have the submodule pointer updated
+        parent_status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(tmp_path), capture_output=True, text=True, check=True,
+        )
+        assert parent_status.stdout.strip() == "", "parent should be clean after save"
+
+    @pytest.mark.asyncio
+    async def test_build_creates_and_saves_subdataset(self, tmp_path: Path) -> None:
+        """build_caption_index creates DataLad subdataset at web/pagefind/."""
+        from datalad.api import create
+
+        archive = _make_archive(tmp_path, has_curated=True)
+        create(path=str(archive), force=True, result_renderer="disabled")
+        # Need a commit so _current_head returns something
+        subprocess.run(
+            ["git", "add", "-A"], cwd=str(archive), capture_output=True, check=True,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "init"],
+            cwd=str(archive), capture_output=True, check=True,
+        )
+
+        fake_index = _FakeIndex()
+        with (
+            patch(
+                "annextube.services.search_index.PagefindIndex",
+                return_value=fake_index,
+            ),
+            patch("annextube.services.search_index.IndexConfig", MagicMock()),
         ):
-            _save_pagefind_subdataset(tmp_path)
+            from annextube.services.search_index import build_caption_index
 
-        mock_ds.save.assert_called_once_with(
-            path="web/pagefind",
-            message="Update caption search index",
-            recursive=True,
-            result_renderer="disabled",
+            stats = await build_caption_index(archive, force=True)
+
+        assert stats.videos_indexed == 1
+        pagefind_dir = archive / "web" / "pagefind"
+        assert (pagefind_dir / ".git").exists(), "subdataset should be created"
+        assert (pagefind_dir / ".gitattributes").exists(), (
+            "cfg_text2git should create .gitattributes"
         )

@@ -14,27 +14,6 @@ from pathlib import Path
 import pytest
 
 
-def _init_annex_repo(repo_path: Path) -> None:
-    """Initialize a git-annex repo at repo_path."""
-    cmds = [
-        ["git", "init"],
-        ["git", "config", "user.name", "Test User"],
-        ["git", "config", "user.email", "test@example.com"],
-        ["git", "annex", "init", "test-repo"],
-    ]
-    for cmd in cmds:
-        subprocess.run(cmd, cwd=repo_path, check=True, capture_output=True)
-
-    # .gitattributes: keep small files in git
-    (repo_path / ".gitattributes").write_text(
-        "*.json annex.largefiles=nothing\n"
-        "*.tsv annex.largefiles=nothing\n"
-        "*.vtt annex.largefiles=nothing\n"
-    )
-    subprocess.run(["git", "add", ".gitattributes"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=repo_path, check=True, capture_output=True)
-
-
 def _git_status_clean(repo_path: Path) -> bool:
     """Return True if git working tree is clean."""
     result = subprocess.run(
@@ -50,13 +29,12 @@ def _git_status_clean(repo_path: Path) -> bool:
 class TestE2EBackupFeatures:
     """End-to-end tests requiring network access to YouTube."""
 
-    def test_channel_backup_metadata_and_captions(self, tmp_path: Path) -> None:
+    def test_channel_backup_metadata_and_captions(self, annextube_archive: Path) -> None:
         """Backup a channel (no playlists), verify metadata + captions + thumbnails + clean git."""
         from annextube.lib.config import ComponentsConfig, Config, FiltersConfig, SourceConfig
         from annextube.services.archiver import Archiver
 
-        repo_path = tmp_path
-        _init_annex_repo(repo_path)
+        repo_path = annextube_archive
 
         config = Config(
             sources=[
@@ -117,13 +95,12 @@ class TestE2EBackupFeatures:
             f"Status: {subprocess.run(['git', 'status', '--porcelain'], cwd=repo_path, capture_output=True, text=True).stdout}"
         )
 
-    def test_playlist_backup_with_captions(self, tmp_path: Path) -> None:
+    def test_playlist_backup_with_captions(self, annextube_archive: Path) -> None:
         """Backup a specific playlist, verify captions and symlinks."""
         from annextube.lib.config import ComponentsConfig, Config, FiltersConfig
         from annextube.services.archiver import Archiver
 
-        repo_path = tmp_path
-        _init_annex_repo(repo_path)
+        repo_path = annextube_archive
 
         config = Config(
             components=ComponentsConfig(

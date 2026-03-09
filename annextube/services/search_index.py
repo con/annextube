@@ -8,8 +8,7 @@ records so that Pagefind can serve cross-caption search from static files.
 When the archive is a DataLad dataset, the index output at ``web/pagefind/``
 is managed as a DataLad subdataset (git submodule) with ``cfg_proc=text2git``
 so that text files (JS, JSON, CSS) live in git and binary index fragments go
-to git-annex.  For plain git repos the same directory is managed as a plain
-git submodule.  This isolates the ~10k derived index files from the main repo.
+to git-annex.  This isolates the ~10k derived index files from the main repo.
 """
 
 from __future__ import annotations
@@ -21,6 +20,9 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from datalad.api import Dataset
+from datalad.api import create as datalad_create
+
 from annextube.lib.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -28,7 +30,7 @@ logger = get_logger(__name__)
 # Guard the optional pagefind import -- the package is only required when the
 # user opts into search indexing (``--search-index``).
 try:
-    from pagefind.index import IndexConfig, PagefindIndex  # type: ignore[import-untyped]
+    from pagefind.index import IndexConfig, PagefindIndex
 except ImportError:  # pragma: no cover
     PagefindIndex = None  # type: ignore[assignment,misc]
     IndexConfig = None  # type: ignore[assignment,misc]
@@ -296,11 +298,6 @@ def _vtt_changed_since(repo: Path, since_commit: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _is_datalad_dataset(path: Path) -> bool:
-    """Return *True* if *path* is (inside) a DataLad dataset."""
-    return (path / ".datalad").is_dir()
-
-
 def _is_git_repo(path: Path) -> bool:
     """Return *True* if *path* is a git repository (has ``.git``)."""
     return (path / ".git").exists()
@@ -322,11 +319,9 @@ def _ensure_pagefind_subdataset(archive_path: Path, pagefind_dir: Path) -> bool:
     if not _is_git_repo(archive_path):
         return False
 
-    from datalad.api import Dataset, create
-
     top_ds = Dataset(str(archive_path))
     logger.info("Creating DataLad subdataset at %s", pagefind_dir)
-    create(
+    datalad_create(
         path=str(pagefind_dir),
         dataset=top_ds,
         cfg_proc="text2git",
@@ -345,8 +340,6 @@ def _save_pagefind_subdataset(archive_path: Path) -> None:
     pagefind_dir = archive_path / "web" / "pagefind"
     if not (pagefind_dir / ".git").exists():
         return
-
-    from datalad.api import Dataset
 
     top_ds = Dataset(str(archive_path))
     logger.info("Saving caption search index via DataLad")
@@ -387,7 +380,7 @@ def _read_metadata(video_dir: Path) -> dict | None:
     if not meta_path.is_file():
         return None
     try:
-        return json.loads(meta_path.read_text(encoding="utf-8"))
+        return json.loads(meta_path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
     except (json.JSONDecodeError, OSError) as exc:
         logger.warning("Skipping %s: %s", meta_path, exc)
         return None
@@ -491,7 +484,7 @@ async def build_caption_index(
         _pf_svc._POLL_SLEEP = 0  # type: ignore[attr-defined]
         _orig_wait = _pf_svc.PagefindService._wait_for_responses
 
-        async def _fast_poll(self):  # type: ignore[no-untyped-def]
+        async def _fast_poll(self):
             while True:
                 await asyncio.sleep(0)
                 assert self._backend.stdout is not None
@@ -513,7 +506,7 @@ async def build_caption_index(
                         else:
                             future.set_result(payload)
 
-        _pf_svc.PagefindService._wait_for_responses = _fast_poll
+        _pf_svc.PagefindService._wait_for_responses = _fast_poll  # type: ignore[method-assign]
         logger.debug("Patched pagefind polling (removed 100ms sleep)")
     except Exception:
         logger.debug("Could not patch pagefind polling, using default (slow)")

@@ -11,26 +11,6 @@ from annextube.lib.config import BackupConfig, ComponentsConfig, Config, Filters
 from annextube.services.archiver import Archiver
 
 
-def _init_test_repo(repo_path: Path) -> None:
-    """Initialize a git-annex repo for testing."""
-    cmds = [
-        ["git", "init"],
-        ["git", "config", "user.name", "Test User"],
-        ["git", "config", "user.email", "test@example.com"],
-        ["git", "annex", "init", "test-repo"],
-    ]
-    for cmd in cmds:
-        subprocess.run(cmd, cwd=repo_path, check=True, capture_output=True)
-
-    # .gitattributes: keep small files in git
-    (repo_path / ".gitattributes").write_text(
-        "*.json annex.largefiles=nothing\n"
-        "*.tsv annex.largefiles=nothing\n"
-    )
-    subprocess.run(["git", "add", ".gitattributes"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "commit", "-m", "init"], cwd=repo_path, check=True, capture_output=True)
-
-
 def _get_git_commit_messages(repo_path: Path) -> list[str]:
     """Get list of commit messages from git log."""
     result = subprocess.run(
@@ -83,10 +63,9 @@ def _create_process_video_mock(archiver):
 class TestCheckpointCommits:
     """Tests for checkpoint commit behavior during backup."""
 
-    def test_checkpoint_creates_intermediate_commits(self, tmp_path: Path):
+    def test_checkpoint_creates_intermediate_commits(self, annextube_archive: Path):
         """Test that checkpoints create commits at specified intervals."""
-        repo_path = tmp_path
-        _init_test_repo(repo_path)
+        repo_path = annextube_archive
 
         # Configure with small checkpoint interval (every 2 videos)
         config = Config(
@@ -135,10 +114,9 @@ class TestCheckpointCommits:
         assert any("2/" in c for c in checkpoint_commits), "Should have checkpoint for 2 videos"
         assert any("4/" in c for c in checkpoint_commits), "Should have checkpoint for 4 videos"
 
-    def test_checkpoint_disabled_creates_single_commit(self, tmp_path: Path):
+    def test_checkpoint_disabled_creates_single_commit(self, annextube_archive: Path):
         """Test that disabling checkpoints creates only final commit."""
-        repo_path = tmp_path
-        _init_test_repo(repo_path)
+        repo_path = annextube_archive
 
         # Disable checkpoints
         config = Config(
@@ -182,10 +160,9 @@ class TestCheckpointCommits:
         backup_commits = [c for c in commits if "Backup channel:" in c]
         assert len(backup_commits) == 1, f"Expected 1 backup commit, got {backup_commits}"
 
-    def test_checkpoint_regenerates_tsvs(self, tmp_path: Path):
+    def test_checkpoint_regenerates_tsvs(self, annextube_archive: Path):
         """Test that checkpoints regenerate TSV files."""
-        repo_path = tmp_path
-        _init_test_repo(repo_path)
+        repo_path = annextube_archive
 
         config = Config(
             sources=[SourceConfig(url="test-channel", type="channel")],
@@ -232,10 +209,9 @@ class TestCheckpointCommits:
         videos_tsv = repo_path / "videos" / "videos.tsv"
         assert videos_tsv.exists(), "videos.tsv should exist after checkpoint"
 
-    def test_keyboard_interrupt_auto_commits(self, tmp_path: Path):
+    def test_keyboard_interrupt_auto_commits(self, annextube_archive: Path):
         """Test that Ctrl+C triggers auto-commit of partial progress."""
-        repo_path = tmp_path
-        _init_test_repo(repo_path)
+        repo_path = annextube_archive
 
         config = Config(
             sources=[SourceConfig(url="test-channel", type="channel")],
@@ -294,10 +270,9 @@ class TestCheckpointCommits:
         # Verify commit message mentions correct video count
         assert "2 videos" in partial_commits[0], f"Expected '2 videos' in commit: {partial_commits[0]}"
 
-    def test_keyboard_interrupt_without_auto_commit(self, tmp_path: Path):
+    def test_keyboard_interrupt_without_auto_commit(self, annextube_archive: Path):
         """Test that disabling auto-commit leaves changes uncommitted."""
-        repo_path = tmp_path
-        _init_test_repo(repo_path)
+        repo_path = annextube_archive
 
         config = Config(
             sources=[SourceConfig(url="test-channel", type="channel")],
@@ -358,10 +333,9 @@ class TestCheckpointCommits:
 
 
 @pytest.mark.ai_generated
-def test_checkpoint_interval_zero_disables_checkpoints(tmp_path: Path):
+def test_checkpoint_interval_zero_disables_checkpoints(annextube_archive: Path):
     """Test that checkpoint_interval=0 disables checkpoints."""
-    repo_path = tmp_path
-    _init_test_repo(repo_path)
+    repo_path = annextube_archive
 
     config = Config(
         sources=[SourceConfig(url="test-channel", type="channel")],

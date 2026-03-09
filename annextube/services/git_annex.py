@@ -4,6 +4,8 @@ import subprocess
 from pathlib import Path
 from typing import cast
 
+from datalad.api import create as datalad_create
+
 from annextube.lib.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -61,13 +63,6 @@ class GitAnnexService:
         Args:
             description: Repository description
         """
-        try:
-            from datalad.api import create
-        except ImportError as e:
-            raise ImportError(
-                "DataLad is not installed. Install with: pip install annextube[datalad]"
-            ) from e
-
         logger.info(f"Creating DataLad dataset at {self.repo_path}")
 
         # Create DataLad dataset
@@ -75,7 +70,7 @@ class GitAnnexService:
         # force=False ensures we don't overwrite existing repos
         # description sets git-annex description
         try:
-            create(
+            datalad_create(
                 path=str(self.repo_path),
                 annex=True,
                 description=description,

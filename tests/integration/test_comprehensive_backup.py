@@ -14,36 +14,10 @@ from annextube.lib.config import ComponentsConfig, Config, FiltersConfig
 from annextube.services.archiver import Archiver
 
 
-@pytest.fixture
-def tmp_git_annex_repo(tmp_path):
-    """Create a temporary git-annex repository for integration testing."""
-    repo_path = tmp_path
-
-    # Initialize git repo
-    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True, capture_output=True)
-
-    # Initialize git-annex
-    subprocess.run(["git", "annex", "init", "test-repo"], cwd=repo_path, check=True, capture_output=True)
-
-    # Configure .gitattributes to keep small files in git (not annex)
-    gitattributes = repo_path / ".gitattributes"
-    gitattributes.write_text(
-        "*.json annex.largefiles=nothing\n"
-        "*.tsv annex.largefiles=nothing\n"
-        "*.toml annex.largefiles=nothing\n"
-    )
-    subprocess.run(["git", "add", ".gitattributes"], cwd=repo_path, check=True)
-    subprocess.run(["git", "commit", "-m", "Add .gitattributes"], cwd=repo_path, check=True, capture_output=True)
-
-    return repo_path
-
-
 @pytest.mark.ai_generated
 @pytest.mark.network
 @pytest.mark.timeout(180)
-def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> None:
+def test_comprehensive_backup_with_all_features(annextube_archive: Path) -> None:
     """Test backup with playlists, captions, comments, and thumbnails enabled.
 
     Verifies that:
@@ -70,7 +44,7 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
         ),
     )
 
-    archiver = Archiver(tmp_git_annex_repo, config)
+    archiver = Archiver(annextube_archive, config)
 
     # Backup AnnexTube Test Channel (dedicated test channel with known content)
     result = archiver.backup_channel("https://www.youtube.com/channel/UCHpuDwi3IorJ_Uez2e7pqHA")
@@ -80,7 +54,7 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
 
     # Verify videos directory exists with 2 videos
     # Note: With hierarchical structure, video dirs are nested (e.g., 2026/01/video_name/)
-    videos_dir = tmp_git_annex_repo / "videos"
+    videos_dir = annextube_archive / "videos"
     assert videos_dir.exists()
     video_dirs = sorted([p.parent for p in videos_dir.rglob("metadata.json")])
     assert len(video_dirs) == 2, f"Expected 2 video directories, found {len(video_dirs)}: {[d.relative_to(videos_dir) for d in video_dirs]}"
@@ -123,19 +97,19 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
                 assert first_line == "WEBVTT", f"Invalid WebVTT header in {vtt_file}"
 
     # Verify TSV files were generated
-    videos_tsv = tmp_git_annex_repo / "videos" / "videos.tsv"
+    videos_tsv = annextube_archive / "videos" / "videos.tsv"
     assert videos_tsv.exists()
 
-    playlists_tsv = tmp_git_annex_repo / "playlists" / "playlists.tsv"
+    playlists_tsv = annextube_archive / "playlists" / "playlists.tsv"
     assert playlists_tsv.exists()
 
-    authors_tsv = tmp_git_annex_repo / "authors.tsv"
+    authors_tsv = annextube_archive / "authors.tsv"
     assert authors_tsv.exists()
 
     # Verify git status is clean (all changes committed)
     result = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd=tmp_git_annex_repo,
+        cwd=annextube_archive,
         capture_output=True,
         text=True,
         check=True,
@@ -146,7 +120,7 @@ def test_comprehensive_backup_with_all_features(tmp_git_annex_repo: Path) -> Non
 @pytest.mark.ai_generated
 @pytest.mark.network
 @pytest.mark.timeout(180)
-def test_playlist_backup_creates_symlinks(tmp_git_annex_repo: Path) -> None:
+def test_playlist_backup_creates_symlinks(annextube_archive: Path) -> None:
     """Test that playlist backup creates chronologically ordered symlinks.
 
     Verifies:
@@ -169,7 +143,7 @@ def test_playlist_backup_creates_symlinks(tmp_git_annex_repo: Path) -> None:
         ),
     )
 
-    archiver = Archiver(tmp_git_annex_repo, config)
+    archiver = Archiver(annextube_archive, config)
 
     # Backup a known playlist (C++ by The Cherno)
     playlist_url = "https://www.youtube.com/playlist?list=PLlrATfBNZ98dudnM48yfGUldqGD0S4FFb"
@@ -179,7 +153,7 @@ def test_playlist_backup_creates_symlinks(tmp_git_annex_repo: Path) -> None:
     assert result["videos_processed"] == 3
 
     # Verify playlist directory exists
-    playlists_dir = tmp_git_annex_repo / "playlists"
+    playlists_dir = annextube_archive / "playlists"
     assert playlists_dir.exists()
 
     # Find the playlist directory (should be named based on playlist title)
@@ -241,13 +215,13 @@ def test_playlist_backup_creates_symlinks(tmp_git_annex_repo: Path) -> None:
         )
 
     # Verify playlists.tsv was generated
-    playlists_tsv = tmp_git_annex_repo / "playlists" / "playlists.tsv"
+    playlists_tsv = annextube_archive / "playlists" / "playlists.tsv"
     assert playlists_tsv.exists()
 
     # Verify git status is clean
     result = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd=tmp_git_annex_repo,
+        cwd=annextube_archive,
         capture_output=True,
         text=True,
         check=True,

@@ -296,18 +296,18 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 try:
                     click.echo()
                     click.echo("Building caption search index...")
-                    stats = asyncio.run(build_caption_index(output_dir))
-                    if stats.videos_indexed == 0 and stats.chunks_created == 0:
+                    search_stats = asyncio.run(build_caption_index(output_dir))
+                    if search_stats.videos_indexed == 0 and search_stats.chunks_created == 0:
                         click.echo("  [ok] Search index up to date (no changes)")
                     else:
-                        size_mb = stats.index_size_bytes / (1024 * 1024)
+                        size_mb = search_stats.index_size_bytes / (1024 * 1024)
                         click.echo(
-                            f"  [ok] {stats.videos_indexed} videos "
-                            f"({stats.videos_curated} curated, {stats.videos_original} original), "
-                            f"{stats.chunks_created:,} chunks, {size_mb:.1f} MB"
+                            f"  [ok] {search_stats.videos_indexed} videos "
+                            f"({search_stats.videos_curated} curated, {search_stats.videos_original} original), "
+                            f"{search_stats.chunks_created:,} chunks, {size_mb:.1f} MB"
                         )
-                    if stats.videos_skipped:
-                        click.echo(f"  (skipped {stats.videos_skipped} videos without captions)")
+                    if search_stats.videos_skipped:
+                        click.echo(f"  (skipped {search_stats.videos_skipped} videos without captions)")
                 except Exception as e:
                     click.echo(f"Warning: search index build failed: {e}", err=True)
 

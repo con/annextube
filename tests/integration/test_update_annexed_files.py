@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from annextube.lib.file_utils import AtomicFileWriter
+from annextube.services.git_annex import GitAnnexService
 
 
 @pytest.mark.ai_generated
@@ -19,15 +20,12 @@ def test_atomic_write_then_git_annex_add(tmp_path: Path) -> None:
 
     Should not fail with "does not exist" or "changed while being added".
     """
-    # Initialize git-annex repo
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "annex", "init"], cwd=tmp_path, check=True, capture_output=True)
-
-    # Configure .gitattributes to annex .json files
-    gitattributes = tmp_path / ".gitattributes"
-    gitattributes.write_text("*.json annex.largefiles=anything\n")
+    # Initialize DataLad dataset with custom .gitattributes for annexing JSON
+    svc = GitAnnexService(tmp_path)
+    svc.init_datalad_dataset()
+    (tmp_path / ".gitattributes").write_text("*.json annex.largefiles=anything\n")
     subprocess.run(["git", "add", ".gitattributes"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "commit", "-m", "Add .gitattributes"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "Custom .gitattributes for annex test"], cwd=tmp_path, check=True)
 
     # Create initial file
     test_file = tmp_path / "test.json"
@@ -80,18 +78,15 @@ def test_multiple_files_update_race_condition(tmp_path: Path) -> None:
 
     All in quick succession, then call git annex add.
     """
-    # Initialize
-    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
-    subprocess.run(["git", "annex", "init"], cwd=tmp_path, check=True, capture_output=True)
-
-    # Configure to annex .json and .vtt files
-    gitattributes = tmp_path / ".gitattributes"
-    gitattributes.write_text(
+    # Initialize DataLad dataset with custom .gitattributes for annexing JSON and VTT
+    svc = GitAnnexService(tmp_path)
+    svc.init_datalad_dataset()
+    (tmp_path / ".gitattributes").write_text(
         "*.json annex.largefiles=anything\n"
         "*.vtt annex.largefiles=anything\n"
     )
     subprocess.run(["git", "add", ".gitattributes"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "commit", "-m", "Config"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-m", "Custom .gitattributes for annex test"], cwd=tmp_path, check=True)
 
     # Create initial files
     video_dir = tmp_path / "video1"

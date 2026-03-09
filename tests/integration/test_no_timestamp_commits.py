@@ -9,35 +9,13 @@ import pytest
 from annextube.services.git_annex import GitAnnexService
 
 
-@pytest.fixture
-def git_annex_repo(tmp_path):
-    """Create a temporary git-annex repository for integration testing."""
-    repo_path = tmp_path
-
-    # Initialize git repo
-    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True, capture_output=True)
-
-    # Initialize git-annex
-    subprocess.run(["git", "annex", "init", "test-repo"], cwd=repo_path, check=True, capture_output=True)
-
-    # Configure .gitattributes to keep JSON files in git (not annex)
-    gitattributes = repo_path / ".gitattributes"
-    gitattributes.write_text("*.json annex.largefiles=nothing\n")
-    subprocess.run(["git", "add", ".gitattributes"], cwd=repo_path, check=True)
-    subprocess.run(["git", "commit", "-m", "Add .gitattributes"], cwd=repo_path, check=True, capture_output=True)
-
-    return repo_path
-
-
 @pytest.mark.ai_generated
-def test_no_commit_for_timestamp_only_changes(git_annex_repo: Path) -> None:
+def test_no_commit_for_timestamp_only_changes(datalad_repo: Path) -> None:
     """Integration test: add_and_commit should not create commits for timestamp-only changes."""
-    service = GitAnnexService(git_annex_repo)
+    service = GitAnnexService(datalad_repo)
 
     # Create initial video metadata
-    video_dir = git_annex_repo / "videos" / "vid1"
+    video_dir = datalad_repo / "videos" / "vid1"
     video_dir.mkdir(parents=True)
     metadata_file = video_dir / "metadata.json"
 
@@ -56,7 +34,7 @@ def test_no_commit_for_timestamp_only_changes(git_annex_repo: Path) -> None:
     # Get commit count
     commit_count = subprocess.run(
         ["git", "rev-list", "--count", "HEAD"],
-        cwd=git_annex_repo,
+        cwd=datalad_repo,
         capture_output=True,
         text=True,
         check=True
@@ -79,7 +57,7 @@ def test_no_commit_for_timestamp_only_changes(git_annex_repo: Path) -> None:
     # Verify no new commit was created
     commit_count_after = subprocess.run(
         ["git", "rev-list", "--count", "HEAD"],
-        cwd=git_annex_repo,
+        cwd=datalad_repo,
         capture_output=True,
         text=True,
         check=True
@@ -91,7 +69,7 @@ def test_no_commit_for_timestamp_only_changes(git_annex_repo: Path) -> None:
     # Verify working directory is clean (timestamp changes were restored)
     status_result = subprocess.run(
         ["git", "status", "--porcelain"],
-        cwd=git_annex_repo,
+        cwd=datalad_repo,
         capture_output=True,
         text=True,
         check=True
@@ -100,12 +78,12 @@ def test_no_commit_for_timestamp_only_changes(git_annex_repo: Path) -> None:
 
 
 @pytest.mark.ai_generated
-def test_commit_created_for_real_changes(git_annex_repo: Path) -> None:
+def test_commit_created_for_real_changes(datalad_repo: Path) -> None:
     """Integration test: add_and_commit should create commits for real content changes."""
-    service = GitAnnexService(git_annex_repo)
+    service = GitAnnexService(datalad_repo)
 
     # Create initial video metadata
-    video_dir = git_annex_repo / "videos" / "vid1"
+    video_dir = datalad_repo / "videos" / "vid1"
     video_dir.mkdir(parents=True)
     metadata_file = video_dir / "metadata.json"
 
@@ -123,7 +101,7 @@ def test_commit_created_for_real_changes(git_annex_repo: Path) -> None:
     # Get commit count
     commit_count = subprocess.run(
         ["git", "rev-list", "--count", "HEAD"],
-        cwd=git_annex_repo,
+        cwd=datalad_repo,
         capture_output=True,
         text=True,
         check=True
@@ -146,7 +124,7 @@ def test_commit_created_for_real_changes(git_annex_repo: Path) -> None:
     # Verify new commit was created
     commit_count_after = subprocess.run(
         ["git", "rev-list", "--count", "HEAD"],
-        cwd=git_annex_repo,
+        cwd=datalad_repo,
         capture_output=True,
         text=True,
         check=True
@@ -157,13 +135,13 @@ def test_commit_created_for_real_changes(git_annex_repo: Path) -> None:
 
 
 @pytest.mark.ai_generated
-def test_mixed_changes_commit_only_real_files(git_annex_repo: Path) -> None:
+def test_mixed_changes_commit_only_real_files(datalad_repo: Path) -> None:
     """Integration test: Only files with real changes should be committed."""
-    service = GitAnnexService(git_annex_repo)
+    service = GitAnnexService(datalad_repo)
 
     # Create two video metadata files
-    video1_dir = git_annex_repo / "videos" / "vid1"
-    video2_dir = git_annex_repo / "videos" / "vid2"
+    video1_dir = datalad_repo / "videos" / "vid1"
+    video2_dir = datalad_repo / "videos" / "vid2"
     video1_dir.mkdir(parents=True)
     video2_dir.mkdir(parents=True)
 
@@ -194,7 +172,7 @@ def test_mixed_changes_commit_only_real_files(git_annex_repo: Path) -> None:
     # Verify only video 2 is in the last commit
     diff_result = subprocess.run(
         ["git", "diff", "HEAD~1", "HEAD", "--name-only"],
-        cwd=git_annex_repo,
+        cwd=datalad_repo,
         capture_output=True,
         text=True,
         check=True

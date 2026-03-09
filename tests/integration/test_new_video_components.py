@@ -1,6 +1,5 @@
 """Integration tests for new video component fetching logic."""
 
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -10,26 +9,6 @@ import pytest
 from annextube.lib.config import ComponentsConfig, Config
 from annextube.models.video import Video
 from annextube.services.archiver import Archiver
-
-
-@pytest.fixture
-def git_annex_test_repo(tmp_path):
-    """Create a temporary git-annex repository."""
-    repo_path = tmp_path
-
-    # Initialize git and git-annex
-    subprocess.run(["git", "init"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo_path, check=True, capture_output=True)
-    subprocess.run(["git", "annex", "init", "test-repo"], cwd=repo_path, check=True, capture_output=True)
-
-    # Configure .gitattributes
-    gitattributes = repo_path / ".gitattributes"
-    gitattributes.write_text("*.json annex.largefiles=nothing\n*.tsv annex.largefiles=nothing\n")
-    subprocess.run(["git", "add", ".gitattributes"], cwd=repo_path, check=True)
-    subprocess.run(["git", "commit", "-m", "Add .gitattributes"], cwd=repo_path, check=True, capture_output=True)
-
-    return repo_path
 
 
 @pytest.fixture
@@ -61,7 +40,7 @@ def test_video():
 
 
 @pytest.mark.ai_generated
-def test_new_video_gets_all_configured_components_regardless_of_mode(git_annex_test_repo: Path, test_video: Video) -> None:
+def test_new_video_gets_all_configured_components_regardless_of_mode(annextube_archive: Path, test_video: Video) -> None:
     """Test that NEW videos get ALL configured components even in component-specific mode."""
     # Configure with all components enabled
     config = Config(
@@ -73,7 +52,7 @@ def test_new_video_gets_all_configured_components_regardless_of_mode(git_annex_t
     )
 
     # Set update_mode to simulate --update playlists (component-specific mode)
-    archiver = Archiver(git_annex_test_repo, config, update_mode="playlists")
+    archiver = Archiver(annextube_archive, config, update_mode="playlists")
 
     # Mock methods to avoid real API calls and verify they're called
     with patch.object(archiver.youtube, 'download_captions', return_value=['en']) as mock_captions, \
@@ -99,7 +78,7 @@ def test_new_video_gets_all_configured_components_regardless_of_mode(git_annex_t
 
 
 @pytest.mark.ai_generated
-def test_existing_video_respects_component_mode(git_annex_test_repo: Path, test_video: Video) -> None:
+def test_existing_video_respects_component_mode(annextube_archive: Path, test_video: Video) -> None:
     """Test that EXISTING videos respect component-specific mode (e.g., --update playlists)."""
     # Configure with all components enabled
     config = Config(
@@ -110,7 +89,7 @@ def test_existing_video_respects_component_mode(git_annex_test_repo: Path, test_
         )
     )
 
-    archiver = Archiver(git_annex_test_repo, config, update_mode="playlists")
+    archiver = Archiver(annextube_archive, config, update_mode="playlists")
 
     # Create existing video metadata
     video_path = archiver._get_video_path(test_video)

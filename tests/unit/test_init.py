@@ -10,7 +10,6 @@ import pytest
 
 from annextube.lib.config import generate_config_template
 
-
 # ── Config template generation tests ──────────────────────────────────────
 
 
