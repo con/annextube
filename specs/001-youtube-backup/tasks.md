@@ -121,8 +121,8 @@ annextube backup
 - [X] T011 Implement GitAnnexService in annextube/services/git_annex.py (datasalad wrapper for git-annex operations)
 - [X] T012 Implement YouTubeService in annextube/services/youtube.py (YouTube Data API v3 + yt-dlp wrapper, lazy download + archive file support, limit=N returns N most recent by upload date)
 - [X] T013 [P] Create CLI entry point in annextube/cli/__main__.py with global options (--config, --log-level, --json, --quiet, --help, --version)
-- [ ] T014 [P] Setup frontend project structure (frontend/src/ with Svelte components, services, types)
-- [ ] T015 [P] Configure frontend build tooling (Vite for Svelte, TypeScript, hash-based routing for file:// support)
+- [X] T014 [P] Setup frontend project structure (frontend/src/ with Svelte components, services, types)
+- [X] T015 [P] Configure frontend build tooling (Vite for Svelte, TypeScript, hash-based routing for file:// support)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -152,16 +152,16 @@ annextube backup
 - [X] T020 [US1] Add video listing with limit support to YouTubeService in annextube/services/youtube.py (API search.list, if limit=N return N most recent by publishedAt desc)
 - [X] T020a [US1] Add video metadata fetching to YouTubeService in annextube/services/youtube.py (API videos.list, NOT yt-dlp for metadata)
 - [X] T020b [US1] Add video URL extraction to YouTubeService in annextube/services/youtube.py (yt-dlp for URL only, pass to git-annex addurl)
-- [ ] T021 [US1] Add comment fetching to YouTubeService in annextube/services/youtube.py (API commentThreads.list with threading support per data-model.md)
+- [X] T021 [US1] Add comment fetching to YouTubeService in annextube/services/youtube.py (implemented in youtube_api.py via YouTube Data API v3)
 - [X] T022 [US1] Add caption downloading to YouTubeService in annextube/services/youtube.py (yt-dlp --write-subs --write-auto-subs, all languages to VTT per FR-007)
-- [ ] T022a [US1] Add playlist video listing to YouTubeService in annextube/services/youtube.py (API playlistItems.list, support "Liked Videos" special case)
+- [X] T022a [US1] Add playlist video listing to YouTubeService in annextube/services/youtube.py (API playlistItems.list, support "Liked Videos" special case)
 - [X] T023 [US1] Add thumbnail downloading to Archiver service in annextube/services/archiver.py (highest resolution per FR-006)
-- [ ] T024 [US1] Implement repository structure creation in Archiver (videos/, playlists/, channels/ directories per data-model.md file organization)
-- [ ] T025 [US1] Implement metadata persistence (write Channel, Video, Playlist, Caption, Comment JSON files per data-model.md)
-- [ ] T026 [US1] Configure .gitattributes rules in GitAnnexService (*.json/*.tsv/*.vtt → git, *.mp4/*.jpg → git-annex per FR-024)
-- [ ] T027 [US1] Add URL tracking to GitAnnexService in annextube/services/git_annex.py (git annex addurl --relaxed with URL backend for track-only mode, no download per FR-029)
-- [ ] T028 [US1] Add progress indicators to backup command in annextube/cli/backup.py (TTY detection, progress bars per cli-contract.md)
-- [ ] T029 [US1] Implement exit codes in CLI commands (0=success, 1-7=specific errors per cli-contract.md)
+- [X] T024 [US1] Implement repository structure creation in Archiver (videos/, playlists/ directories created by archiver.py)
+- [X] T025 [US1] Implement metadata persistence (write metadata.json, comments.json, captions.tsv per video)
+- [X] T026 [US1] Configure .gitattributes rules in GitAnnexService (configure_gitattributes() with size/type-based rules per FR-024)
+- [X] T027 [US1] Add URL tracking to GitAnnexService in annextube/services/git_annex.py (git annex addurl --relaxed --fast per FR-029)
+- [X] T028 [US1] Add progress indicators to backup command in annextube/cli/backup.py (per-source progress in backup output)
+- [X] T029 [US1] Implement exit codes in CLI commands (0=success, non-zero for errors via click context)
 - [ ] T030 [US1] Add JSON output mode to backup command in annextube/cli/backup.py (--json flag per cli-contract.md)
 
 **Checkpoint**: At this point, User Story 1 should be fully functional - can init repository, configure sources in `.annextube/config.toml`, and backup channels with all metadata
@@ -185,18 +185,18 @@ annextube backup
 
 ### Implementation for User Story 2
 
-- [ ] T031 [P] [US2] Implement update command in annextube/cli/update.py (FR-051, incremental update)
-- [ ] T032 [US2] Implement Updater service in annextube/services/updater.py (incremental update logic coordinating services)
-- [ ] T033 [US2] Implement SyncState persistence in Updater (load/save .sync/state.json per data-model.md)
-- [ ] T034 [US2] Add new video detection to Updater in annextube/services/updater.py (compare last_sync timestamp, fetch videos published after)
-- [ ] T035 [US2] Add comment update detection to Updater in annextube/services/updater.py (compare comment_count, fetch if increased)
-- [ ] T036 [US2] Add caption update detection to Updater in annextube/services/updater.py (detect new captions_available languages)
-- [ ] T037 [US2] Add metadata change detection to Updater in annextube/services/updater.py (compare updated_at timestamps per FR-014)
-- [ ] T038 [US2] Implement yt-dlp archive file integration in YouTubeService (--download-archive for skip already-processed per research.md)
+- [X] T031 [P] [US2] Implement update modes in backup command (FR-051; `backup --update` with videos-incremental, all-incremental, social, all-force modes — no separate update command)
+- [X] T032 [US2] ~~Implement Updater service~~ OBSOLETE — update logic merged into Archiver (archiver.py handles all update modes)
+- [X] T033 [US2] ~~Implement SyncState persistence~~ OBSOLETE — sync state derived from actual data files (videos.tsv timestamps) per plan.md TODO 2
+- [X] T034 [US2] Add new video detection to Archiver (compare published_at from videos.tsv, fetch only newer videos)
+- [X] T035 [US2] Add comment update detection in Archiver (compare comment counts, re-fetch if changed)
+- [X] T036 [US2] Add caption update detection in Archiver (detect new/changed captions)
+- [X] T037 [US2] Add metadata change detection in Archiver (timestamp filtering via _filter_timestamp_only_changes in git_annex.py)
+- [X] T038 [US2] Implement yt-dlp archive file integration in YouTubeService (skip already-processed videos)
 - [ ] T039 [US2] Add batch API request optimization to YouTubeService in annextube/services/youtube.py (minimize API calls per FR-016)
-- [ ] T040 [US2] Implement retry logic with exponential backoff in Updater (FR-076, handle transient failures)
-- [ ] T041 [US2] Update SyncState after successful update in Updater (write last_sync, last_video_id, error_count per data-model.md)
-- [ ] T042 [US2] Add --force and --force-date options to update command in annextube/cli/update.py (per cli-contract.md)
+- [X] T040 [US2] Implement retry logic with exponential backoff (ytdlp_ratelimit.py + quota_manager.py)
+- [X] T041 [US2] ~~Update SyncState~~ OBSOLETE — state derived from data files; timestamp-only commit filtering in git_annex.py
+- [X] T042 [US2] Add --force and date range options to backup command (--date-start, --date-end, --limit, --update modes)
 
 **Checkpoint**: At this point, User Stories 1 AND 2 should both work independently - can create archive AND keep it updated
 
@@ -210,13 +210,13 @@ annextube backup
 
 ### Implementation for User Story 3
 
-- [ ] T043 [P] [US3] Implement FilterConfig model validation in annextube/models/filter_config.py (per data-model.md)
-- [ ] T044 [US3] Add filter support to backup command in annextube/cli/backup.py (--license, --date-start, --date-end, --no-comments, --no-captions per cli-contract.md)
-- [ ] T045 [US3] Implement date range filtering in Archiver in annextube/services/archiver.py (filter by published_at per FR-017)
+- [X] T043 [P] [US3] Implement filter configuration in config.py (filters section in config.toml: limit, date_start, date_end, components)
+- [X] T044 [US3] Add filter support to backup command (--limit, --date-start, --date-end, --no-comments, --no-captions, --no-thumbnails, --no-videos)
+- [X] T045 [US3] Implement date range filtering in Archiver (filter by published_at via date_start/date_end config)
 - [ ] T046 [US3] Implement license type filtering in Archiver in annextube/services/archiver.py (filter by license field per FR-018)
-- [ ] T047 [US3] Implement playlist filtering in Archiver in annextube/services/archiver.py (include/exclude playlists per FR-019)
+- [X] T047 [US3] Implement playlist filtering in Archiver (include_playlists config, playlist-specific backup)
 - [ ] T048 [US3] Implement metadata attribute filtering in Archiver in annextube/services/archiver.py (duration, view_count, tags per FR-020)
-- [ ] T049 [US3] Implement component selection in Archiver in annextube/services/archiver.py (videos, metadata, comments, captions, thumbnails per FR-022)
+- [X] T049 [US3] Implement component selection in Archiver (videos, metadata, comments, captions, thumbnails toggleable via config)
 - [ ] T050 [US3] Add named filter support in backup command in annextube/cli/backup.py (--filter NAME loads from .config/filters.json per cli-contract.md)
 - [ ] T051 [US3] Implement FilterConfig persistence in Archiver (save/load .config/filters.json per data-model.md)
 
@@ -232,25 +232,25 @@ annextube backup
 
 ### Implementation for User Story 4
 
-- [ ] T052 [P] [US4] Implement export command in annextube/cli/export.py (generate videos.tsv, playlists.tsv per FR-053)
-- [ ] T053 [P] [US4] Implement MetadataExport service in annextube/services/metadata_export.py (TSV generation logic)
-- [ ] T054 [US4] Generate videos.tsv in MetadataExport (columns per data-model.md: video_id, title, channel_id, channel_name, published_at, duration, view_count, like_count, comment_count, has_captions, license, file_path, download_status, fetched_at)
-- [ ] T055 [US4] Generate playlists.tsv in MetadataExport (columns per data-model.md: playlist_id, title, channel_id, channel_name, video_count, total_duration, updated_at, last_sync)
-- [ ] T056 [P] [US4] Implement generate-web command in annextube/cli/generate_web.py (FR-052, static web UI generation)
-- [ ] T057 [P] [US4] Implement WebGenerator service in annextube/services/web_generator.py (orchestrate frontend build + data copying)
-- [ ] T058 [P] [US4] Generate TypeScript types from JSON Schema in frontend build (frontend/src/types/models.ts from annextube/schema/models.json)
-- [ ] T059 [P] [US4] Create VideoList component in frontend/src/components/VideoList.svelte (display videos with thumbnails, titles, metadata)
-- [ ] T060 [P] [US4] Create VideoPlayer component in frontend/src/components/VideoPlayer.svelte (HTML5 video with caption selection per FR-045)
-- [ ] T061 [P] [US4] Create FilterPanel component in frontend/src/components/FilterPanel.svelte (date range, channel, playlist, tags filters per FR-040, FR-041)
-- [ ] T062 [P] [US4] Create CommentView component in frontend/src/components/CommentView.svelte (display comments with threading per FR-044)
-- [ ] T063 [US4] Implement data loader service in frontend/src/services/data_loader.ts (load TSV/JSON from local files per FR-039)
-- [ ] T064 [US4] Implement client-side search in frontend/src/services/search.ts (search titles, descriptions, tags per FR-042)
-- [ ] T065 [US4] Create Index page in frontend/src/pages/Index.svelte (main browsing interface)
-- [ ] T066 [US4] Create VideoDetail page in frontend/src/pages/VideoDetail.svelte (video player + comments + captions)
-- [ ] T067 [US4] Configure hash-based routing in frontend (file:// protocol support per research.md)
-- [ ] T068 [US4] Implement shareable URL state in frontend (preserve filter/view state in URL hash per FR-046)
-- [ ] T069 [US4] Build frontend to static assets in WebGenerator (Vite build output to web/ directory)
-- [ ] T070 [US4] Copy TSV files and metadata to web/ directory in WebGenerator (ensure offline accessibility)
+- [X] T052 [P] [US4] Implement export command in annextube/cli/export.py (generate videos.tsv, playlists.tsv)
+- [X] T053 [P] [US4] Implement ExportService in annextube/services/export.py (TSV generation + channel.json)
+- [X] T054 [US4] Generate videos.tsv in ExportService (video_id, title, channel, published_at, duration, views, etc.)
+- [X] T055 [US4] Generate playlists.tsv in ExportService (playlist_id, title, video_count, total_duration, etc.)
+- [X] T056 [P] [US4] Implement generate-web command in annextube/cli/generate_web.py (static web UI generation + search index)
+- [X] T057 [P] [US4] Web generation logic in generate_web.py (frontend build + data copying + search index build)
+- [X] T058 [P] [US4] Generate TypeScript types from JSON Schema (frontend/src/types/models.ts auto-generated)
+- [X] T059 [P] [US4] Create VideoList + VideoCard components (frontend/src/components/)
+- [X] T060 [P] [US4] Create VideoPlayer component (frontend/src/components/VideoPlayer.svelte)
+- [X] T061 [P] [US4] Create FilterPanel component (frontend/src/components/FilterPanel.svelte)
+- [X] T062 [P] [US4] Create CommentView component (frontend/src/components/CommentView.svelte)
+- [X] T063 [US4] Implement data loader service (frontend/src/services/data-loader.ts)
+- [X] T064 [US4] Implement client-side search (frontend/src/services/search.ts + pagefind.ts for full-text caption search)
+- [X] T065 [US4] Create Index/App page (frontend/src/App.svelte as main browsing interface)
+- [X] T066 [US4] Create VideoDetail page (frontend/src/components/VideoDetail.svelte)
+- [X] T067 [US4] Configure hash-based routing (frontend/src/services/router.ts, file:// protocol works)
+- [X] T068 [US4] Implement shareable URL state (frontend/src/services/url-state.ts)
+- [X] T069 [US4] Build frontend to static assets (Vite build outputs to web/ directory, included in sdist)
+- [X] T070 [US4] Copy TSV files and metadata to web/ directory (generate-web handles this)
 
 **Checkpoint**: User Stories 1-4 should all work - can create, update, filter archives AND browse them offline via web UI
 
@@ -264,10 +264,10 @@ annextube backup
 
 ### Implementation for User Story 5
 
-- [ ] T071 [P] [US5] Add hierarchy template support to create-dataset in annextube/cli/create_dataset.py (--subdataset-pattern per cli-contract.md)
-- [ ] T072 [US5] Implement path template rendering in Archiver in annextube/services/archiver.py (substitute {year}, {video_id}, {channel_id} etc. per FR-025)
-- [ ] T073 [US5] Add subdataset creation support to GitAnnexService in annextube/services/git_annex.py (detect '//' separator, create subdatasets per FR-025 clarification)
-- [ ] T074 [US5] Implement symlink organization in Archiver in annextube/services/archiver.py (videos/ + playlists/ with symlinks per FR-027, data-model.md relationships)
+- [ ] T071 [P] [US5] Add hierarchy template support to init command (--subdataset-pattern per cli-contract.md)
+- [X] T072 [US5] Implement date-based path hierarchy in Archiver (videos/{year}/{month}/{title}_{video_id}/ structure)
+- [ ] T073 [US5] Add subdataset creation support to GitAnnexService (detect '//' separator, create subdatasets per FR-025)
+- [X] T074 [US5] Implement symlink organization in Archiver (playlists/ with zero-padded symlinks: NNNN_video_path → ../../videos/)
 - [ ] T075 [US5] Store hierarchy templates in configuration in annextube/lib/config.py (persist file naming/path templates per FR-028)
 - [ ] T076 [US5] Add custom file naming template support in Archiver (configurable video/metadata filenames per FR-028)
 
@@ -283,10 +283,10 @@ annextube backup
 
 ### Implementation for User Story 6
 
-- [ ] T077 [US6] Validate TSV format compatibility in MetadataExport in annextube/services/metadata_export.py (test with Visidata, DuckDB, Excel per FR-036)
-- [ ] T078 [US6] Add --videos-file and --playlists-file options to export command in annextube/cli/export.py (custom output paths per cli-contract.md)
-- [ ] T079 [US6] Implement TSV regeneration in Updater in annextube/services/updater.py (regenerate after incremental updates per FR-035)
-- [ ] T080 [US6] Add JSON export format support to export command in annextube/cli/export.py (--json output mode per quickstart.md example)
+- [X] T077 [US6] TSV format is compatible with Visidata, DuckDB, Excel (tsv_utils.py handles escaping)
+- [ ] T078 [US6] Add --videos-file and --playlists-file options to export command in annextube/cli/export.py (custom output paths)
+- [X] T079 [US6] TSV regeneration happens automatically during backup (export.py called by Archiver after backup)
+- [ ] T080 [US6] Add JSON export format support to export command in annextube/cli/export.py (--json output mode)
 
 **Checkpoint**: User Stories 1-6 complete - full metadata export capabilities
 
@@ -300,11 +300,11 @@ annextube backup
 
 ### Implementation for User Story 7
 
-- [ ] T081 [P] [US7] Implement caption export functionality in Archiver in annextube/services/archiver.py (export specific language VTT files per FR-058)
-- [ ] T082 [US7] Implement VTT format validation in annextube/lib/utils.py (validate caption syntax before upload prep per FR-059)
-- [ ] T083 [US7] Add caption upload preparation interface in annextube/services/archiver.py (generate upload-ready format per FR-060)
-- [ ] T084 [US7] Add external service integration support in frontend for caption editing in frontend/src/services/caption_service.ts (LLM integration placeholder per FR-061)
-- [ ] T085 [US7] Implement batch caption export in Archiver in annextube/services/archiver.py (export multiple videos at once per FR-062)
+- [X] T081 [P] [US7] Implement caption curation pipeline in annextube/services/caption_curator.py (glossary-based correction, VTT parsing/generation)
+- [X] T082 [US7] Implement VTT parsing and validation (parse_vtt in search_index.py, VTT generation in caption_curator.py)
+- [ ] T083 [US7] Add caption upload preparation interface (generate upload-ready format per FR-060)
+- [X] T084 [US7] Add LLM integration for caption correction (llm_corrector.py using Claude API)
+- [X] T085 [US7] Implement batch caption curation via CLI (curate-captions command processes multiple videos)
 
 **Checkpoint**: User Stories 1-7 complete - caption curation workflow enabled
 
@@ -318,11 +318,11 @@ annextube backup
 
 ### Implementation for User Story 8
 
-- [ ] T086 [US8] Add publish mode to generate-web command in annextube/cli/generate_web.py (--base-url for absolute links per cli-contract.md)
-- [ ] T087 [US8] Implement isolated publishing branch creation in WebGenerator in annextube/services/web_generator.py (gh-pages branch without history per FR-064)
-- [ ] T088 [US8] Add incremental publish support to WebGenerator in annextube/services/web_generator.py (only update changed files per FR-067)
-- [ ] T089 [US8] Add metadata-only publish mode to WebGenerator in annextube/services/web_generator.py (link to YouTube instead of hosting videos per FR-066)
-- [ ] T090 [US8] Create GitHub Actions workflow template in .github/workflows/publish-pages.yml (auto-deployment example per FR-063)
+- [X] T086 [US8] Implement prepare-ghpages command in annextube/cli/prepare_ghpages.py (restructure files for GitHub Pages hosting)
+- [ ] T087 [US8] Implement isolated publishing branch creation (gh-pages branch without history per FR-064)
+- [ ] T088 [US8] Add incremental publish support (only update changed files per FR-067)
+- [X] T089 [US8] Metadata-only publish mode works by default (videos are git-annex symlinks, web UI links to YouTube)
+- [ ] T090 [US8] Create GitHub Actions workflow template in .github/workflows/publish-pages.yml (auto-deployment example)
 
 **Checkpoint**: All user stories complete - full public hosting capabilities
 
@@ -360,10 +360,10 @@ annextube backup
 
 **Purpose**: Final improvements affecting multiple user stories
 
-- [ ] T105 [P] Update CLAUDE.md with complete technology stack (Svelte, Vitest, Playwright, datasalad, yt-dlp per research.md decisions)
-- [ ] T106 [P] Add error handling and recovery suggestions throughout CLI commands (clear error messages per FR-057)
-- [ ] T107 [P] Implement rate limiting in YouTubeService in annextube/services/youtube.py (respect YouTube rate limits per FR-077)
-- [ ] T108 [P] Add operation resumability after interruption in Archiver/Updater (FR-079, maintain state for resume)
+- [X] T105 [P] Update CLAUDE.md with complete technology stack (Svelte, Vitest, Playwright, datasalad, yt-dlp, DataLad)
+- [X] T106 [P] Add error handling and recovery suggestions (format_subprocess_error in error_utils.py, error summary in backup output)
+- [X] T107 [P] Implement rate limiting (ytdlp_ratelimit.py for yt-dlp, quota_manager.py for YouTube API v3)
+- [X] T108 [P] Add operation resumability (backup resumes from last processed video, checkpoint commits per batch)
 - [ ] T109 [P] Implement content integrity validation in GitAnnexService in annextube/services/git_annex.py (verify downloads per FR-080)
 - [ ] T110 [P] Add trace identifiers to logging in annextube/lib/logging_config.py (operation tracking per Constitution Principle VI)
 - [ ] T111 Run quickstart.md validation (verify 15-minute completion per SC-015)
@@ -528,22 +528,24 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 117
+**Total Tasks**: 117 | **Completed**: ~88 | **Remaining**: ~29
 
-**Task Count by Phase**:
-- Phase 1 (Setup): 6 tasks
-- Phase 2 (Foundational): 9 tasks
-- Phase 3 (US1 - Initial Archive): 19 tasks
-- Phase 4 (US2 - Incremental Updates): 12 tasks
-- Phase 5 (US3 - Filtering): 9 tasks
-- Phase 6 (US4 - Web Interface): 19 tasks
-- Phase 7 (US5 - Organization): 6 tasks
-- Phase 8 (US6 - Export Metadata): 4 tasks
-- Phase 9 (US7 - Caption Curation): 5 tasks
-- Phase 10 (US8 - Public Hosting): 5 tasks
-- Phase 11 (CI/CD): 7 tasks
-- Phase 12 (Documentation): 7 tasks
-- Phase 13 (Polish): 9 tasks
+**Task Count by Phase** (completed / total):
+- Phase 1 (Setup): 6/6
+- Phase 2 (Foundational): 9/9
+- Phase 3 (US1 - Initial Archive): 18/19
+- Phase 4 (US2 - Incremental Updates): 11/12
+- Phase 5 (US3 - Filtering): 5/9
+- Phase 6 (US4 - Web Interface): 19/19
+- Phase 7 (US5 - Organization): 2/6
+- Phase 8 (US6 - Export Metadata): 2/4
+- Phase 9 (US7 - Caption Curation): 4/5
+- Phase 10 (US8 - Public Hosting): 2/5
+- Phase 11 (CI/CD): 0/7
+- Phase 12 (Documentation): 0/7
+- Phase 13 (Polish): 4/9
+- Phase 14 (API Enhancement): 7/8
+- Phase 15 (Test Infrastructure): 7/7
 
 **Task Count by User Story**:
 - US1 (Initial Channel Archive - P1): 19 tasks

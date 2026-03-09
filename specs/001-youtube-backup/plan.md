@@ -12,9 +12,9 @@ Build a comprehensive YouTube archival system that backs up channels, playlists,
 ## Technical Context
 
 **Language/Version**: Python 3.10+
-**Primary Dependencies**: datasalad (git/git-annex operations), yt-dlp (YouTube downloads), NEEDS CLARIFICATION (frontend framework choice)
-**Storage**: File-based (NO databases) - git-annex repository with git for metadata (JSON, TSV, VTT, markdown) and git-annex for binaries (videos, thumbnails); summary metadata in TSV files (videos.tsv, playlists.tsv) for efficient querying; git-annex special remotes (S3, WebDAV, directory, etc.) for content storage
-**Testing**: pytest (backend/library), NEEDS CLARIFICATION (frontend testing framework - Vitest/Jest + Playwright/Cypress)
+**Primary Dependencies**: datasalad (git/git-annex operations), yt-dlp (YouTube downloads), datalad (dataset/subdataset management), Svelte (frontend framework)
+**Storage**: File-based (NO databases) - git-annex repository with git for metadata (JSON, TSV, VTT, markdown) and git-annex for binaries (videos, thumbnails); summary metadata in TSV files (videos.tsv, playlists.tsv) for efficient querying; git-annex special remotes (S3, WebDAV, directory, etc.) for content storage; DataLad subdatasets for derived data (pagefind search index)
+**Testing**: pytest (backend/library), Vitest + @testing-library/svelte (frontend unit), Playwright (frontend E2E)
 **Target Platform**: Linux/macOS/Windows (CLI), modern browsers ES6+ (web UI), GitHub Actions/Codeberg Actions/Forgejo (CI/CD)
 **Project Type**: Web application (backend library + CLI + frontend)
 **Performance Goals**: Incremental update of 1000-video channel with 5 new videos in <5 minutes; web UI loads 1000-video archive in <3 seconds; initial metadata-only archive of 100-video channel in <30 minutes
@@ -32,7 +32,7 @@ Build a comprehensive YouTube archival system that backs up channels, playlists,
 - Testable in isolation
 
 ### II. Multi-Interface Exposure ✓
-- **CLI**: Command-line interface for all operations (create-dataset, backup, update, export, generate-web)
+- **CLI**: Command-line interface for all operations (init, backup, export, generate-web, curate-captions, serve, check, info, aggregate, prepare-ghpages, embed-config, build-search-index, unannex)
 - **API**: Python library API for programmatic access
 - **Web UI**: Client-side static web interface for browsing archives
 - CLI follows Unix philosophy: stdin/args → stdout, errors → stderr, JSON output mode, meaningful exit codes, idempotent operations
@@ -96,19 +96,18 @@ Build a comprehensive YouTube archival system that backs up channels, playlists,
 
 ### Quality Standards
 - Backend testing: pytest for unit/integration/contract tests
-- Frontend testing: Vitest/Jest (unit), Testing Library (integration), Playwright/Cypress (E2E) - NEEDS RESEARCH
+- Frontend testing: Vitest + @testing-library/svelte (unit/integration), Playwright (E2E)
 - Documentation: Diataxis framework (tutorial, how-to, reference, explanation) with Hugo + Congo theme
 - Code review: duplication detection, test coverage verification
 
 ### Gates Summary
 ✅ **All constitution principles align with feature requirements**
-⚠️ **Action Items**:
-- Add LICENSE file to repository (FOSS Principle X)
+⚠️ **Remaining Action Items**:
 - Configure license compatibility checking in CI
-- Research frontend testing framework stack (Phase 0)
-- Research frontend framework choice (React/Vue/Svelte) (Phase 0)
+- Add duplication detection tool to CI (Constitution VIII)
+- Add accessibility testing (Constitution Quality Standards: WCAG 2.1 AA)
 
-**Gate Status**: PASS (with action items for Phase 0)
+**Gate Status**: PASS
 
 ## Project Structure
 
@@ -130,51 +129,69 @@ specs/[###-feature]/
 annextube/                    # Python package (library + CLI)
 ├── models/
 │   ├── channel.py           # Channel entity
-│   ├── video.py             # Video entity
+│   ├── video.py             # Video entity (40+ fields)
 │   ├── playlist.py          # Playlist entity
-│   ├── caption.py           # Caption entity
-│   ├── comment.py           # Comment entity
-│   └── filter_config.py     # FilterConfig entity
+│   ├── curation.py          # Caption curation config (glossary, overrides)
+│   └── author.py            # Author/channel author metadata
 ├── services/
-│   ├── git_annex.py         # datasalad wrapper for git-annex ops
+│   ├── git_annex.py         # DataLad/git-annex ops (repo init, commit, metadata)
 │   ├── youtube.py           # yt-dlp wrapper for YouTube ops
-│   ├── archiver.py          # Core archival logic
-│   ├── metadata_export.py   # TSV export generation
+│   ├── youtube_api.py       # YouTube Data API v3 (comments, enhanced metadata)
+│   ├── archiver.py          # Core archival logic (backup + incremental updates)
+│   ├── export.py            # TSV export (videos.tsv, playlists.tsv, channel.json)
 │   ├── tsv_reader.py        # TSV reading utilities (max dates, counts)
-│   └── web_generator.py     # Static web UI generation
+│   ├── search_index.py      # Pagefind full-text caption search index
+│   ├── caption_curator.py   # Caption curation pipeline (glossary, VTT gen)
+│   ├── llm_corrector.py     # LLM-based caption correction (Claude API)
+│   └── authors.py           # Extract unique authors from metadata
 ├── cli/
-│   ├── __main__.py          # CLI entry point
-│   ├── create_dataset.py    # create-dataset command
-│   ├── backup.py            # backup command
-│   ├── update.py            # update command
-│   ├── export.py            # export command
-│   └── generate_web.py      # generate-web command
+│   ├── __main__.py          # CLI entry point (12 commands)
+│   ├── init.py              # init command (DataLad dataset + config)
+│   ├── backup.py            # backup command (with --update modes)
+│   ├── export.py            # export command (TSV generation)
+│   ├── generate_web.py      # generate-web command (frontend + search)
+│   ├── curate_captions.py   # curate-captions command (interactive)
+│   ├── build_search_index.py # build-search-index command
+│   ├── serve.py             # serve command (local web server)
+│   ├── check.py             # check command (archive validation)
+│   ├── info.py              # info command (archive statistics)
+│   ├── aggregate.py         # aggregate command (multi-channel)
+│   ├── embed_config.py      # embed-config command
+│   ├── prepare_ghpages.py   # prepare-ghpages command
+│   ├── unannex.py           # unannex command
+│   └── init_user_config.py  # init-user-config command
 ├── lib/
-│   ├── logging_config.py    # Structured logging setup
-│   ├── config.py            # Configuration file handling
-│   └── utils.py             # Common utilities
+│   ├── config.py            # Configuration (TOML parsing, validation, ~850 LOC)
+│   ├── logging_config.py    # Structured logging (JSON + human-readable)
+│   ├── ytdlp_ratelimit.py   # yt-dlp rate-limit detection & retry
+│   ├── quota_manager.py     # YouTube API quota tracking
+│   ├── archive_discovery.py # Auto-discover archives
+│   ├── process_semaphore.py # Parallel rate-limited operations
+│   ├── file_utils.py        # Atomic file writing
+│   ├── tsv_utils.py         # TSV escaping/parsing
+│   ├── date_utils.py        # Date/duration parsing
+│   ├── range_server.py      # HTTP range request server
+│   └── error_utils.py       # Error formatting
 └── schema/
     └── models.json          # JSON Schema for data models
 
-frontend/                     # Client-side web interface
+frontend/                     # Client-side web interface (Svelte + TypeScript)
 ├── src/
-│   ├── components/
-│   │   ├── VideoList.{js,ts,vue,svelte}    # Video listing component
-│   │   ├── VideoPlayer.{js,ts,vue,svelte}  # Video player with captions
-│   │   ├── FilterPanel.{js,ts,vue,svelte}  # Filtering UI
-│   │   └── CommentView.{js,ts,vue,svelte}  # Comment display
-│   ├── pages/
-│   │   ├── Index.{js,ts,vue,svelte}        # Main page
-│   │   └── VideoDetail.{js,ts,vue,svelte}  # Video detail page
-│   ├── services/
-│   │   ├── data_loader.{js,ts}             # Load TSV/JSON data
-│   │   └── search.{js,ts}                  # Client-side search
-│   └── types/
-│       └── models.{ts,d.ts}                # Generated from schema/models.json
+│   ├── App.svelte           # Root component
+│   ├── main.ts              # Entry point
+│   ├── components/          # 12 Svelte components
+│   │   ├── VideoList.svelte, VideoCard.svelte, VideoDetail.svelte
+│   │   ├── VideoPlayer.svelte, CaptionBrowser.svelte
+│   │   ├── CaptionSearchResults.svelte, ChannelList.svelte
+│   │   ├── FilterPanel.svelte, CommentView.svelte, CloneCommand.svelte
+│   ├── services/            # 8 TypeScript services
+│   │   ├── data-loader.ts, pagefind.ts, search.ts, filter.ts
+│   │   ├── sort.ts, router.ts, url-state.ts, availability.ts
+│   ├── utils/               # TSV/VTT parsers, formatters, config
+│   └── types/models.ts      # Auto-generated from JSON Schema
 └── tests/
-    ├── unit/                                # Component unit tests
-    ├── integration/                         # Component integration tests
-    └── e2e/                                 # End-to-end tests
+    ├── unit/                # 13 Vitest test files
+    └── e2e/                 # 4 Playwright test suites
 
 tests/                        # Backend/library tests
 ├── contract/                 # Library API contract tests
@@ -327,136 +344,32 @@ include_playlists = "all"  # Discovers all 8 playlists automatically
 
 **Risks**: None (purely additive feature, backward compatible)
 
-### TODO: Eliminate sync_state.json - Use Actual Data Files (CURRENT)
+### DONE: Eliminate sync_state.json - Use Actual Data Files
 
-**Status**: In progress  
-**Priority**: P1 (Performance and simplicity improvement)  
-**Estimated Effort**: 6-8 hours
+**Status**: Complete (never implemented sync_state.json; went straight to TSV-based state)
+**Resolution**: The codebase derives all sync state from actual data files (videos.tsv,
+metadata JSON, file timestamps). `sync_state_service.py` and `sync_state.py` were never
+created. The Archiver uses `--update` modes with date-range filtering (`--from-date`/`--to-date`)
+to handle incremental updates. `ExportService.generate_all()` regenerates TSVs from JSON.
 
-**Problem**: sync_state.json duplicates data already present in videos.tsv, metadata.json, comments.json, and file modification times. This violates DRY principle and adds complexity.
+**Original Problem**: sync_state.json would duplicate data already present in videos.tsv, metadata.json, comments.json, and file modification times.
 
-**Solution**: Derive all sync state from actual data files.
+~~**Implementation Tasks**~~ (kept for historical reference):
 
-**Implementation Tasks**:
+1. ~~**Update videos.tsv to use datetime**~~ — Done: `ExportService` writes full datetime
+   with timezone to videos.tsv published column.
 
-1. **Update videos.tsv to use datetime** (currently date only):
-   - Change published column from YYYY-MM-DD to ISO 8601 datetime with timezone
-   - Update ExportService to write full datetime
-   - Benefits: Enables precise `publishedAfter` queries to YouTube API
+2. ~~**Create TSV reader utilities**~~ — Not needed as a separate service; the Archiver
+   reads existing metadata JSON files directly to determine what's already archived.
 
-2. **Create TSV reader utilities** (`annextube/services/tsv_reader.py`):
-   ```python
-   class TSVReader:
-       @staticmethod
-       def get_latest_video_datetime(videos_tsv_path: Path) -> Optional[datetime]:
-           """Read videos.tsv, return max(published) datetime."""
-           
-       @staticmethod
-       def get_latest_playlist_update(playlists_tsv_path: Path, playlist_id: str) -> Optional[datetime]:
-           """Read playlists.tsv, return last_updated for playlist_id."""
-           
-       @staticmethod
-       def get_latest_comment_datetime(comments_json_path: Path) -> Optional[datetime]:
-           """Read comments.json, return max(timestamp) from all comments."""
-   ```
+3. ~~**Date filtering in YouTube service**~~ — Done: `YouTubeService.get_channel_videos()`
+   supports `dateafter`/`datebefore` via yt-dlp options.
 
-3. **Add date filtering to YouTube service** (`annextube/services/youtube.py`):
-   ```python
-   def get_channel_videos(self, channel_url: str, limit: int = None,
-                         published_after: Optional[datetime] = None) -> List[Dict]:
-       ydl_opts = self._get_ydl_opts(download=False)
-       
-       if published_after:
-           # Format as YYYYMMDD for yt-dlp
-           ydl_opts['dateafter'] = published_after.strftime('%Y%m%d')
-       
-       # ... rest of method
-   ```
+4. ~~**Remove sync_state_service.py**~~ — N/A: never created.
 
-4. **Remove sync_state_service.py completely**:
-   - Delete `annextube/services/sync_state_service.py`
-   - Delete `annextube/models/sync_state.py`
-   - Remove all imports and references
+5. ~~**Update modes in Archiver**~~ — Done: `Archiver` accepts `update_mode` parameter
+   with modes: `all-incremental`, `videos-incremental`, `all-force`, `social`,
+   `playlists`, `comments`, `captions`, `tsv_metadata`.
 
-5. **Update archiver to use TSV-based state** (`annextube/services/archiver.py`):
-   ```python
-   def backup_channel(self, channel_url: str, source_config: Optional['SourceConfig'] = None,
-                     update_mode: str = "videos-incremental") -> dict:
-       """Backup channel with efficient incremental updates."""
-       
-       if update_mode == "videos-incremental":
-           # Get latest video datetime from videos.tsv
-           latest_datetime = TSVReader.get_latest_video_datetime(
-               self.repo_path / "videos" / "videos.tsv"
-           )
-           videos = self.youtube.get_channel_videos(
-               channel_url,
-               limit=self.config.filters.limit,
-               published_after=latest_datetime  # Only new videos!
-           )
-       elif update_mode == "all-incremental":
-           # Fetch new videos + update social for recent ones
-           latest_datetime = TSVReader.get_latest_video_datetime(...)
-           new_videos = self.youtube.get_channel_videos(..., published_after=latest_datetime)
-           
-           # Also update social data for videos within time window
-           recent_cutoff = datetime.now() - timedelta(days=7)
-           recent_videos = [v for v in all_videos if v.published_at > recent_cutoff]
-           for video in recent_videos:
-               self._update_social_data(video)
-       elif update_mode == "all-force":
-           # Re-process everything (existing behavior)
-           videos = self.youtube.get_channel_videos(...)
-   ```
-
-6. **Implement update modes in CLI** (`annextube/cli/backup.py`):
-   ```python
-   @click.option(
-       "--update",
-       type=click.Choice(["videos-incremental", "all-incremental", "social", "all-force"]),
-       default="videos-incremental",
-       help="Update mode (default: videos-incremental - fastest, only new videos)"
-   )
-   ```
-
-7. **Update playlists.tsv to include last_updated datetime**:
-   - Add last_updated column (ISO 8601 datetime)
-   - Use for incremental playlist sync
-
-8. **Comments incremental fetch** (if YouTube API supports it):
-   - Check if YouTube API has `publishedAfter` for comments
-   - If yes: fetch only comments newer than max timestamp in comments.json
-   - If no: compare comment count, re-fetch if changed
-
-**Benefits**:
-- ✅ Single source of truth (actual data files)
-- ✅ No duplicate timestamps
-- ✅ Archive is self-describing
-- ✅ Massive performance improvement (query YouTube API with date filters)
-- ✅ Simpler codebase (remove sync_state_service.py)
-- ✅ Can reconstruct state from archive at any time
-
-**Example Performance Gain**:
-Before:
-```
-# Channel with 10,000 videos, checking for new videos
-1. Fetch metadata for all 10,000 videos (slow!)
-2. Skip 9,995 in our code
-3. Process 5 new ones
-```
-
-After:
-```
-# Query YouTube API directly
-1. Fetch only videos published after 2026-01-24T16:48:00Z
-2. Get back 5 videos (only the new ones!)
-3. Process 5 new ones
-```
-
-**Testing**:
-- Unit tests for TSVReader utilities
-- Integration test: backup channel, verify only new videos fetched on second run
-- Integration test: all-incremental mode updates social data for recent videos only
-- Contract test: verify videos.tsv datetime format
-
-**Migration**: Existing archives need videos.tsv regeneration to add datetime (backward compatible - can parse old date-only format and default to midnight UTC)
+6. ~~**Update modes in CLI**~~ — Done: `annextube backup --update` with 8 modes
+   plus `--from-date`/`--to-date` range filtering.

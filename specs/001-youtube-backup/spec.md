@@ -245,7 +245,9 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-039**: Web interface MUST load metadata from TSV files on demand
 - **FR-040**: Web interface MUST support filtering videos by date range
 - **FR-041**: Web interface MUST support filtering videos by channel, playlist, tags
-- **FR-042**: Web interface MUST support text search across video titles and descriptions
+- **FR-042**: Web interface MUST support text search across video titles and descriptions. Implementation: Pagefind-based full-text search index built from caption VTT files; index stored as a DataLad subdataset at `web/pagefind/`; `annextube backup --search-index` auto-builds after backup; `annextube build-search-index` for standalone rebuild
+- **FR-042a**: Search index MUST support searching within caption text (not just titles/descriptions), chunked by configurable duration windows (default: 60 seconds)
+- **FR-042b**: Search index MUST distinguish between curated (human-edited) and original (auto-generated) captions, prioritizing curated versions
 - **FR-043**: Web interface MUST display video thumbnails, metadata, and allow playback
 - **FR-044**: Web interface MUST display video comments with threading
 - **FR-045**: Web interface MUST allow caption selection and display during playback
@@ -268,6 +270,14 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-055**: System MUST provide option to force re-fetch of specific videos or date ranges
 - **FR-056**: CLI MUST provide progress indicators for long-running operations
 - **FR-057**: CLI MUST provide clear error messages with recovery suggestions. Implementation: backup command collects all errors from `stats["errors"]` across sources; on completion with errors, prints summary with up to 10 error messages to stderr and exits with code 1; `_print_stats()` shows per-source error details inline
+- **FR-057a**: System MUST provide CLI command to display archive information (`annextube info`): channel name, video count, playlist count, archive size, git-annex backend info, and DataLad dataset status
+- **FR-057b**: System MUST provide CLI command to validate archive integrity (`annextube check`): verify directory structure, config file validity, git-annex status, and optional content checks
+- **FR-057c**: System MUST provide CLI command to serve the web interface locally (`annextube serve`): start a local HTTP server for browsing the archive with live-reload support
+- **FR-057d**: System MUST provide CLI command to aggregate metadata across multi-channel collections (`annextube aggregate`): merge videos.tsv, playlists.tsv, and authors.tsv from sub-archives into collection-level summaries
+- **FR-057e**: System MUST provide CLI command to embed configuration into the generated web interface (`annextube embed-config`): write archive metadata (channel name, video count, etc.) into frontend config for display
+- **FR-057f**: System MUST provide CLI command to build or rebuild the caption search index (`annextube build-search-index`): standalone command for Pagefind index generation without running a full backup
+- **FR-057g**: System MUST provide CLI command to curate captions (`annextube curate-captions`): export VTT files for editing, validate edited captions, and prepare for YouTube upload
+- **FR-057h**: System MUST provide CLI command to initialize user-level configuration (`annextube init-user-config`): create platform-specific config directory with default settings (cookie file path, parallel download limits, etc.)
 
 #### Caption Curation Workflow
 
@@ -329,6 +339,13 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-095**: System MUST provide commands to verify content availability on configured remotes
 - **FR-096**: System MUST support initializing common special remote configurations via CLI
 
+#### DataLad Integration
+
+- **FR-097**: System MUST use DataLad as a core dependency for repository initialization and dataset management (`datalad.api.create()` for new archives, `Dataset.save()` for commits)
+- **FR-098**: System MUST initialize archives as DataLad datasets with `cfg_text2git` procedure for text-in-git defaults
+- **FR-099**: System MUST support DataLad subdatasets for modular archive components (e.g., Pagefind search index at `web/pagefind/`)
+- **FR-100**: System MUST configure `.gitattributes` via `GitAnnexService.configure_gitattributes()` with production rules: text < 10k in git, TSV always in git, comments.json always in annex, VTT always in annex
+
 ### Key Entities
 
 - **Channel**: Represents a YouTube channel being archived, with attributes including channel ID, name, description, subscriber count, avatar, list of videos, list of playlists, created_at. Note: `last_sync` and `fetched_at` are no longer written to `channel.json` (sync time is recoverable from git history); fields remain optional in the model for backward compatibility
@@ -336,7 +353,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **Playlist**: Represents a YouTube playlist with attributes including playlist ID, title, description, channel, video IDs (ordered list), video count, total duration, last updated, privacy status
 - **Caption**: Represents closed captions for a video with attributes including language code, format (VTT), auto-generated flag, file path, last fetched timestamp
 - **Comment**: Represents a comment on a video with attributes including comment ID, author, author channel, text, timestamp, like count, parent comment ID (for replies), reply count
-- **SyncState**: Tracks synchronization state with attributes including source URL (channel/playlist), last sync timestamp, last video ID processed, error count, next retry timestamp
+- **SyncState**: ~~Tracks synchronization state with attributes including source URL (channel/playlist), last sync timestamp, last video ID processed, error count, next retry timestamp~~ OBSOLETE: Never implemented. Sync state is derived from actual data files (videos.tsv timestamps, metadata JSON existence, git history). See FR-051a–d for update modes.
 - **FilterConfig**: Defines filtering rules with attributes including date range, license types, playlist inclusion/exclusion, metadata constraints, component selection flags
 
 ### Repository Structure
@@ -460,12 +477,14 @@ Deep Learning State of the Art  Lex Fridman  2020-01-10  5261      100000  5000 
 
 - **Python**: Runtime for CLI and library implementation (version 3.10+)
 - **datasalad**: Core library for efficient git/git-annex command execution (https://hub.datalad.org/datalad/datasalad)
+- **datalad**: Dataset management, DataLad superdataset/subdataset support, `cfg_text2git` procedure (core dependency since v0.11)
 - **yt-dlp** (Python package): For metadata extraction and caption downloading in Python code
 - **click**: CLI framework
 - **tomli**: TOML parsing (Python <3.11)
 
 ### Optional Dependencies
 
+- **pagefind**: Full-text caption search index (install via `pip install 'annextube[search]'`)
 - **YouTube Data API v3**: For using API-based metadata extraction (requires API key)
 - **google-api-python-client**: For YouTube Data API v3 access
 - **Modern web browser**: For web interface (Chrome, Firefox, Safari, Edge)
