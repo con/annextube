@@ -369,6 +369,14 @@ annextube backup
 - [ ] T111 Run quickstart.md validation (verify 15-minute completion per SC-015)
 - [ ] T112 Performance optimization (verify SC-001, SC-002, SC-003 success criteria)
 - [ ] T113 Security review (validate no secrets in plain version control per FR-075)
+- [X] T123 [P] Add duplication detection to CI in tox.ini (Constitution VIII: enforce <3% threshold; jscpd via npx; `tox -e duplication` calling tools/check-duplication.sh; current: 0.66%)
+- [X] T124 [P] Add accessibility testing to Playwright E2E suite in frontend/tests/e2e/ (Constitution IV: WCAG 2.1 AA compliance; integrate axe-core via @axe-core/playwright; test archive-workflow pages for a11y violations)
+- [ ] T125 [P] DRY: Extract shared `_track_api_call`/`get_quota_summary` into a `QuotaTracker` mixin or base class in annextube/services/youtube_api.py (duplicated between `YouTubeCommentService` and `YouTubeAPIMetadataClient`, 12 lines)
+- [ ] T126 [P] DRY: Extract shared video metadata field construction (`video_id`, `title`, `channel`, `published`) into a helper in annextube/services/git_annex.py (duplicated at lines 732-737 and 802-807, 5 lines)
+- [ ] T127 [P] DRY: Extract shared curate-and-write loop (load corrections → parse VTT → curate → report → write → LLM corrections) into a helper function in annextube/cli/curate_captions.py (duplicated between `curate_captions` and `curate_video` commands, two clones: 12+21 lines)
+- [ ] T128 [P] DRY: Extract shared pagefind-import-check + `build_caption_index` invocation + stats reporting into a helper in annextube/cli/build_search_index.py or a shared module (duplicated between `build_search_index.py` and `generate_web.py`, 25 lines)
+- [ ] T129 [P] DRY: Extract shared TSV-to-playlist loading (fetch TSV → parse → map → load metadata) into a helper in frontend/src/services/data-loader.ts (duplicated between `loadPlaylists` and `loadChannelPlaylists`, 14 lines)
+- [ ] T130 Enforce zero-tolerance duplication policy: set threshold to 0 in .jscpd.json so any detected clone fails CI unless suppressed with `jscpd:ignore` pragma; update tools/check-duplication.sh exit code handling if needed (depends on T125-T129)
 
 ---
 
@@ -528,7 +536,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 117 | **Completed**: ~88 | **Remaining**: ~29
+**Total Tasks**: 144 | **Completed**: 97 | **Remaining**: 44 | **Obsolete**: 3
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
@@ -543,7 +551,7 @@ With multiple developers:
 - Phase 10 (US8 - Public Hosting): 2/5
 - Phase 11 (CI/CD): 0/7
 - Phase 12 (Documentation): 0/7
-- Phase 13 (Polish): 4/9
+- Phase 13 (Polish): 4/17
 - Phase 14 (API Enhancement): 7/8
 - Phase 15 (Test Infrastructure): 7/7
 
@@ -557,7 +565,7 @@ With multiple developers:
 - US7 (Caption Curation - P4): 5 tasks
 - US8 (Public Hosting - P4): 5 tasks
 
-**Parallel Opportunities**: 42 tasks marked [P] can run in parallel with others in their phase
+**Parallel Opportunities**: 47 tasks marked [P] can run in parallel with others in their phase
 
 **Independent Test Criteria**:
 - US1: Can create archive and backup channel with all metadata accessible offline
@@ -581,7 +589,7 @@ With multiple developers:
 
 ✅ **All tasks follow the required checklist format**:
 - Checkbox: `- [ ]` at start
-- Task ID: Sequential (T001-T115)
+- Task ID: Sequential (T001-T130)
 - [P] marker: Only for parallelizable tasks (different files, no dependencies)
 - [Story] label: Present for all user story phase tasks (US1-US8)
 - Description: Clear action with exact file path
