@@ -298,7 +298,7 @@
   .version {
     font-size: 12px;
     font-weight: 400;
-    color: #909090;
+    color: #767676;
     vertical-align: middle;
   }
 
