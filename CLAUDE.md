@@ -149,6 +149,14 @@ annextube generate-web --output-dir ~/my-archive
 - 001-youtube-backup: Added Python 3.10+
 
 <!-- MANUAL ADDITIONS START -->
+## Troubleshooting
+
+**MANDATORY**: When debugging ANY issue with yt-dlp, YouTube extraction,
+challenge solvers, bot detection, cookies, or annextube runtime errors,
+**ALWAYS read `docs/content/how-to/troubleshooting.md` FIRST** before
+attempting fixes. It contains known solutions for recurring problems
+(challenge solver version mismatches, quota errors, interrupted backups, etc.).
+
 ## Test Channel
 
 For integration and E2E tests, use the official AnnexTube test channel:

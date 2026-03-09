@@ -60,6 +60,7 @@ See [docs/how-to/container-deployment.md](docs/content/how-to/container-deployme
 - **Installation**: See [docs/tutorial/01-installation.md](docs/content/tutorial/01-installation.md)
 - **Container Deployment**: See [docs/how-to/container-deployment.md](docs/content/how-to/container-deployment.md)
 - **Quick Start**: See [specs/001-youtube-backup/quickstart.md](specs/001-youtube-backup/quickstart.md)
+- **Troubleshooting**: See [docs/how-to/troubleshooting.md](docs/content/how-to/troubleshooting.md) (challenge solver errors, quota, interrupted backups)
 - **API Reference**: See [docs/reference/](docs/content/reference/)
 
 ## System Requirements
