@@ -1,0 +1,18 @@
+{
+  "threshold": 3,
+  "reporters": ["console"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/.git/**",
+    "**/dist/**",
+    "**/.tox/**",
+    "**/.venv/**",
+    "**/__pycache__/**",
+    "**/web/**",
+    "**/.specify/**",
+    "**/specs/**",
+    "**/tools/**"
+  ],
+  "minTokens": 50,
+  "minLines": 5
+}
