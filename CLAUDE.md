@@ -191,16 +191,26 @@ This prevents large, hard-to-review diffs and ensures each change is properly at
 
 These patterns are in `.gitignore` to prevent accidental commits.
 
+## tox.ini and Shell Scripts
+
+- **tox.ini must stay minimal**: each `[testenv]` should be a short
+  `commands =` calling a tool or a script — never inline multi-line bash.
+- **Helper scripts go in `tools/`**, not inlined in tox.ini.
+- **All shell scripts must pass `shellcheck`** before being committed.
+  Run: `shellcheck tools/*.sh`
+- Typical tox pattern:
+  ```ini
+  [testenv:foo]
+  commands = bash {toxinidir}/tools/foo.sh
+  ```
+
 ## Pre-release Checks
 
-Before tagging a release, run the automated sdist check and verify manually:
+Before tagging a release, run the automated sdist and spec checks:
 
 ```bash
-uv run tox -e sdist-check
+uv run tox -e sdist-check,spec-check
 ```
 
-This builds the sdist, installs from it in a clean venv, and verifies the
-built frontend is included and `generate-web` works.  See
-`specs/001-youtube-backup/pre-release-checks.md` for the full checklist
-including manual tarball inspection.
+See `specs/001-youtube-backup/pre-release-checks.md` for the full checklist.
 <!-- MANUAL ADDITIONS END -->
