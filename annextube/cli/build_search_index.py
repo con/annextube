@@ -11,6 +11,40 @@ from annextube.lib.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def require_pagefind_and_build(archive_path: Path, *, force: bool = False) -> None:
+    """Check pagefind is installed, build caption search index, report stats.
+
+    Shared by the ``build-search-index`` CLI command and ``generate-web``.
+    Raises :class:`click.Abort` if pagefind is not installed.
+    """
+    try:
+        from pagefind.index import PagefindIndex  # noqa: F401
+    except ImportError as exc:
+        click.echo(
+            "Error: pagefind package required for search index. "
+            "Install with: pip install 'annextube[search]'",
+            err=True,
+        )
+        raise click.Abort() from exc
+
+    from annextube.services.search_index import build_caption_index
+
+    click.echo("Building caption search index...")
+    stats = asyncio.run(build_caption_index(archive_path, force=force))
+
+    if stats.videos_indexed == 0 and stats.chunks_created == 0:
+        click.echo("  [ok] Search index up to date (no changes)")
+    else:
+        size_mb = stats.index_size_bytes / (1024 * 1024)
+        click.echo(
+            f"  [ok] {stats.videos_indexed} videos "
+            f"({stats.videos_curated} curated, {stats.videos_original} original), "
+            f"{stats.chunks_created:,} chunks, {size_mb:.1f} MB"
+        )
+    if stats.videos_skipped:
+        click.echo(f"  (skipped {stats.videos_skipped} videos without captions)")
+
+
 @click.command("build-search-index")
 @click.option(
     "--output-dir",
@@ -53,29 +87,4 @@ def build_search_index(ctx: click.Context, output_dir: Path, force: bool):
         )
         raise click.Abort()
 
-    try:
-        from pagefind.index import PagefindIndex  # noqa: F401
-    except ImportError as exc:
-        click.echo(
-            "Error: pagefind package required for search index. "
-            "Install with: pip install 'annextube[search]'",
-            err=True,
-        )
-        raise click.Abort() from exc
-
-    from annextube.services.search_index import build_caption_index
-
-    click.echo("Building caption search index...")
-    stats = asyncio.run(build_caption_index(output_dir, force=force))
-
-    if stats.videos_indexed == 0 and stats.chunks_created == 0:
-        click.echo("  [ok] Search index up to date (no changes)")
-    else:
-        size_mb = stats.index_size_bytes / (1024 * 1024)
-        click.echo(
-            f"  [ok] {stats.videos_indexed} videos "
-            f"({stats.videos_curated} curated, {stats.videos_original} original), "
-            f"{stats.chunks_created:,} chunks, {size_mb:.1f} MB"
-        )
-    if stats.videos_skipped:
-        click.echo(f"  (skipped {stats.videos_skipped} videos without captions)")
+    require_pagefind_and_build(output_dir, force=force)

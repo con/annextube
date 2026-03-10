@@ -159,29 +159,9 @@ export class DataLoader {
       );
     }
 
-    const text = await response.text();
-    const rows = parseTSV(text) as unknown as PlaylistTSVRow[];
-
-    // Convert TSV rows to Playlist objects
-    const playlists = rows.map((row) => this.parseTSVPlaylist(row));
-
-    // Load video_ids from playlist.json files
-    await Promise.all(
-      playlists.map(async (playlist) => {
-        try {
-          const fullPlaylist = await this.loadPlaylistMetadata(
-            playlist.playlist_id,
-            playlist.path  // Pass the path from TSV
-          );
-          playlist.video_ids = fullPlaylist.video_ids;
-        } catch (err) {
-          // If playlist.json doesn't exist, keep empty array
-          console.warn(
-            `Could not load video_ids for playlist ${playlist.playlist_id}:`,
-            err
-          );
-        }
-      })
+    const playlists = await this.parseTSVAndLoadVideoIds(
+      await response.text(),
+      (playlist) => this.loadPlaylistMetadata(playlist.playlist_id, playlist.path)
     );
 
     this.playlistsCache = playlists;
@@ -473,33 +453,10 @@ export class DataLoader {
       );
     }
 
-    const text = await response.text();
-    const rows = parseTSV(text) as unknown as PlaylistTSVRow[];
-
-    // Convert TSV rows to Playlist objects
-    const playlists = rows.map((row) => this.parseTSVPlaylist(row));
-
-    // Load video_ids from playlist.json files
-    await Promise.all(
-      playlists.map(async (playlist) => {
-        try {
-          const fullPlaylist = await this.loadChannelPlaylistMetadata(
-            channelDir,
-            playlist.playlist_id,
-            playlist.path
-          );
-          playlist.video_ids = fullPlaylist.video_ids;
-        } catch (err) {
-          // If playlist.json doesn't exist, keep empty array
-          console.warn(
-            `Could not load video_ids for playlist ${playlist.playlist_id}:`,
-            err
-          );
-        }
-      })
+    return this.parseTSVAndLoadVideoIds(
+      await response.text(),
+      (playlist) => this.loadChannelPlaylistMetadata(channelDir, playlist.playlist_id, playlist.path)
     );
-
-    return playlists;
   }
 
   /**
@@ -577,6 +534,33 @@ export class DataLoader {
   /**
    * Convert TSV row to Playlist object
    */
+  /**
+   * Parse TSV text into Playlist objects and load their video_ids.
+   */
+  private async parseTSVAndLoadVideoIds(
+    tsvText: string,
+    loadMetadata: (playlist: Playlist) => Promise<Playlist>,
+  ): Promise<Playlist[]> {
+    const rows = parseTSV(tsvText) as unknown as PlaylistTSVRow[];
+    const playlists = rows.map((row) => this.parseTSVPlaylist(row));
+
+    await Promise.all(
+      playlists.map(async (playlist) => {
+        try {
+          const fullPlaylist = await loadMetadata(playlist);
+          playlist.video_ids = fullPlaylist.video_ids;
+        } catch (err) {
+          console.warn(
+            `Could not load video_ids for playlist ${playlist.playlist_id}:`,
+            err
+          );
+        }
+      })
+    );
+
+    return playlists;
+  }
+
   private parseTSVPlaylist(row: PlaylistTSVRow): Playlist {
     return {
       playlist_id: row.playlist_id,

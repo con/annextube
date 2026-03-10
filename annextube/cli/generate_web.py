@@ -1,6 +1,5 @@
 """Generate web command for annextube."""
 
-import asyncio
 import shutil
 from pathlib import Path
 
@@ -111,37 +110,10 @@ def deploy_frontend(web_dir: Path) -> None:
 
 
 def _build_search_index(archive_path: Path, force: bool = False) -> None:
-    """Build the Pagefind caption search index.
+    """Build the Pagefind caption search index."""
+    from annextube.cli.build_search_index import require_pagefind_and_build
 
-    Verifies that the ``pagefind`` package is installed, then delegates to
-    :func:`annextube.services.search_index.build_caption_index`.
-    """
-    try:
-        from pagefind.index import PagefindIndex  # noqa: F401
-    except ImportError as exc:
-        click.echo(
-            "Error: pagefind package required for search index. "
-            "Install with: pip install 'annextube[search]'",
-            err=True,
-        )
-        raise click.Abort() from exc
-
-    from annextube.services.search_index import build_caption_index
-
-    click.echo("Building caption search index...")
-    stats = asyncio.run(build_caption_index(archive_path, force=force))
-
-    if stats.videos_indexed == 0 and stats.chunks_created == 0:
-        click.echo("  [ok] Search index up to date (no changes)")
-    else:
-        size_mb = stats.index_size_bytes / (1024 * 1024)
-        click.echo(
-            f"  [ok] {stats.videos_indexed} videos "
-            f"({stats.videos_curated} curated, {stats.videos_original} original), "
-            f"{stats.chunks_created:,} chunks, {size_mb:.1f} MB"
-        )
-    if stats.videos_skipped:
-        click.echo(f"  (skipped {stats.videos_skipped} videos without captions)")
+    require_pagefind_and_build(archive_path, force=force)
 
 
 @click.command()

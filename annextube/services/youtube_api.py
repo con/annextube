@@ -25,7 +25,32 @@ from annextube.lib.quota_manager import QuotaManager
 
 logger = get_logger(__name__)
 
-class YouTubeAPICommentsService:
+
+class QuotaTrackingMixin:
+    """Mixin for tracking YouTube API quota usage."""
+
+    _quota_used: int
+    _call_counts: dict[str, int]
+
+    def _init_quota_tracking(self) -> None:
+        """Initialize quota tracking state. Call from subclass __init__."""
+        self._quota_used = 0
+        self._call_counts = {}
+
+    def _track_api_call(self, operation: str, units: int = 1) -> None:
+        """Track an API call for quota accounting."""
+        self._quota_used += units
+        self._call_counts[operation] = self._call_counts.get(operation, 0) + 1
+
+    def get_quota_summary(self) -> dict:
+        """Return summary of API quota usage."""
+        return {
+            "total_units": self._quota_used,
+            "calls": dict(self._call_counts),
+        }
+
+
+class YouTubeAPICommentsService(QuotaTrackingMixin):
     """Fetch comments using YouTube Data API v3 (supports replies)."""
 
     def __init__(self, api_key: str | None = None, quota_manager: QuotaManager | None = None):
@@ -42,20 +67,7 @@ class YouTubeAPICommentsService:
 
         self.youtube = build('youtube', 'v3', developerKey=self.api_key)
         self.quota_manager = quota_manager or QuotaManager()
-        self._quota_used = 0
-        self._call_counts: dict[str, int] = {}
-
-    def _track_api_call(self, operation: str, units: int = 1) -> None:
-        """Track an API call for quota accounting."""
-        self._quota_used += units
-        self._call_counts[operation] = self._call_counts.get(operation, 0) + 1
-
-    def get_quota_summary(self) -> dict:
-        """Return summary of API quota usage."""
-        return {
-            "total_units": self._quota_used,
-            "calls": dict(self._call_counts),
-        }
+        self._init_quota_tracking()
 
     def fetch_comments(
         self,
@@ -230,7 +242,7 @@ class YouTubeAPICommentsService:
         return requests_needed
 
 
-class YouTubeAPIMetadataClient:
+class YouTubeAPIMetadataClient(QuotaTrackingMixin):
     """Client for YouTube Data API v3 enhanced video metadata extraction."""
 
     # API parts to request (quota cost: 1 unit per request regardless of parts)
@@ -260,21 +272,8 @@ class YouTubeAPIMetadataClient:
 
         self.youtube = build("youtube", "v3", developerKey=self.api_key, cache_discovery=False)
         self.quota_manager = quota_manager or QuotaManager()
-        self._quota_used = 0
-        self._call_counts: dict[str, int] = {}
+        self._init_quota_tracking()
         logger.info("YouTube API metadata client initialized")
-
-    def _track_api_call(self, operation: str, units: int = 1) -> None:
-        """Track an API call for quota accounting."""
-        self._quota_used += units
-        self._call_counts[operation] = self._call_counts.get(operation, 0) + 1
-
-    def get_quota_summary(self) -> dict:
-        """Return summary of API quota usage."""
-        return {
-            "total_units": self._quota_used,
-            "calls": dict(self._call_counts),
-        }
 
     def get_video_details(
         self,

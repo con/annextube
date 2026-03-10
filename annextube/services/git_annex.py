@@ -11,6 +11,23 @@ from annextube.lib.logging_config import get_logger
 logger = get_logger(__name__)
 
 
+def _video_metadata_fields(
+    video_meta: dict, *, filetype: str, language: str | None = None
+) -> dict[str, str]:
+    """Build common git-annex metadata fields from video metadata JSON."""
+    published_at = video_meta.get("published_at", "")
+    fields: dict[str, str] = {
+        "video_id": video_meta.get("video_id", ""),
+        "title": video_meta.get("title", ""),
+        "channel": video_meta.get("channel_name", ""),
+        "published": published_at[:10] if published_at else "",
+        "filetype": filetype,
+    }
+    if language is not None:
+        fields["language"] = language
+    return fields
+
+
 class GitAnnexService:
     """Wrapper around git-annex operations using datasalad patterns."""
 
@@ -729,13 +746,7 @@ class GitAnnexService:
                                 video_meta = json.load(f)
 
                             # Set video metadata if not present or different
-                            video_fields = {
-                                "video_id": video_meta.get("video_id", ""),
-                                "title": video_meta.get("title", ""),
-                                "channel": video_meta.get("channel_name", ""),
-                                "published": video_meta.get("published_at", "")[:10] if video_meta.get("published_at") else "",
-                                "filetype": "comments",
-                            }
+                            video_fields = _video_metadata_fields(video_meta, filetype="comments")
 
                             for key, value in video_fields.items():
                                 if value and value not in existing.get(key, []):
@@ -799,14 +810,11 @@ class GitAnnexService:
                     lang_code = caption_meta.get("language_code", "unknown")
 
                     # Prepare comprehensive metadata
-                    new_metadata = {
-                        "video_id": video_meta.get("video_id", ""),
-                        "title": video_meta.get("title", ""),
-                        "channel": video_meta.get("channel_name", ""),
-                        "published": video_meta.get("published_at", "")[:10] if video_meta.get("published_at") else "",
-                        "language": lang_code,
-                        "filetype": f"caption.{lang_code}",
-                    }
+                    new_metadata = _video_metadata_fields(
+                        video_meta,
+                        filetype=f"caption.{lang_code}",
+                        language=lang_code,
+                    )
 
                     # Add flags for auto-generated/auto-translated
                     if caption_meta.get("auto_generated") == "True":

@@ -13,6 +13,7 @@ from annextube.lib.logging_config import get_logger
 if TYPE_CHECKING:
     from annextube.lib.config import CurationConfig
     from annextube.models.curation import Glossary
+    from annextube.services.caption_curator import CaptionCurator
 
 logger = get_logger(__name__)
 
@@ -209,66 +210,92 @@ def curate_captions(
     total_changes = 0
     for vtt_path, out_path in vtt_files:
         click.echo(f"\nProcessing: {vtt_path.relative_to(output_dir)}")
-
-        # Load per-video corrections if they exist
-        per_video_corrections = dict(corrections_dict)
-        llm_corr_path = vtt_path.parent / "llm_corrections.json"
-        if llm_corr_path.exists():
-            per_video = load_corrections(llm_corr_path)
-            per_video_corrections.update(per_video)
-
-        words = curator.parse_youtube_vtt(vtt_path)
-        if not words:
-            click.echo("  No words extracted, skipping")
-            continue
-
-        result = curator.curate(words, merged_glossary, per_video_corrections)
-
-        # Report changes
-        for stage in result.stage_results:
-            if stage["changes"]:
-                click.echo(f"  {stage['stage']}: {stage['changes']} changes")
-                total_changes += stage["changes"]
-
-        if dry_run:
-            click.echo(f"  [dry-run] Would write: {out_path.relative_to(output_dir)}")
-        else:
-            curator.write_curated_vtt(
-                result, out_path, word_timing=not no_word_timing
-            )
-            click.echo(f"  Wrote: {out_path.relative_to(output_dir)}")
-
-        # Generate LLM corrections if requested
-        if generate_corrections and not dry_run:
-            try:
-                from annextube.services.llm_corrector import LLMCorrectionGenerator
-
-                if not curation_config.llm_provider or not curation_config.llm_model:
-                    click.echo(
-                        "  LLM provider/model not configured in [curation] config",
-                        err=True,
-                    )
-                else:
-                    generator = LLMCorrectionGenerator(
-                        provider=curation_config.llm_provider,
-                        model=curation_config.llm_model,
-                        base_url=curation_config.llm_base_url,
-                    )
-                    terms = [t.canonical for t in merged_glossary.terms]
-                    llm_corrections = generator.generate_corrections(
-                        result.curated_text, terms
-                    )
-                    if llm_corrections:
-                        generator.save_corrections(
-                            llm_corrections, vtt_path.parent / "llm_corrections.json"
-                        )
-                        click.echo(
-                            f"  Generated {len(llm_corrections)} LLM correction proposals"
-                        )
-            except ImportError:
-                click.echo("  httpx not installed, skipping LLM corrections", err=True)
+        total_changes += _curate_vtt_file(
+            curator, vtt_path, out_path, corrections_dict, merged_glossary,
+            curation_config, dry_run=dry_run, no_word_timing=no_word_timing,
+            generate_corrections=generate_corrections,
+            display_path=str(out_path.relative_to(output_dir)),
+        )
 
     click.echo(f"\nDone: {len(vtt_files)} file(s), {total_changes} total changes")
+
+
+def _curate_vtt_file(
+    curator: CaptionCurator,
+    vtt_path: Path,
+    out_path: Path,
+    corrections_dict: dict[str, str],
+    merged_glossary: Glossary,
+    curation_config: CurationConfig,
+    *,
+    dry_run: bool,
+    no_word_timing: bool,
+    generate_corrections: bool,
+    display_path: str,
+) -> int:
+    """Curate a single VTT file: load corrections, curate, write, optionally generate LLM corrections.
+
+    Returns the number of changes applied.
+    """
+    from annextube.services.caption_curator import load_corrections
+
+    per_video_corrections = dict(corrections_dict)
+    llm_corr_path = vtt_path.parent / "llm_corrections.json"
+    if llm_corr_path.exists():
+        per_video = load_corrections(llm_corr_path)
+        per_video_corrections.update(per_video)
+
+    words = curator.parse_youtube_vtt(vtt_path)
+    if not words:
+        click.echo("  No words extracted, skipping")
+        return 0
+
+    result = curator.curate(words, merged_glossary, per_video_corrections)
+
+    changes = 0
+    for stage in result.stage_results:
+        if stage["changes"]:
+            click.echo(f"  {stage['stage']}: {stage['changes']} changes")
+            changes += stage["changes"]
+
+    if dry_run:
+        click.echo(f"  [dry-run] Would write: {display_path}")
+    else:
+        curator.write_curated_vtt(
+            result, out_path, word_timing=not no_word_timing
+        )
+        click.echo(f"  Wrote: {display_path}")
+
+    if generate_corrections and not dry_run:
+        try:
+            from annextube.services.llm_corrector import LLMCorrectionGenerator
+
+            if not curation_config.llm_provider or not curation_config.llm_model:
+                click.echo(
+                    "  LLM provider/model not configured in [curation] config",
+                    err=True,
+                )
+            else:
+                generator = LLMCorrectionGenerator(
+                    provider=curation_config.llm_provider,
+                    model=curation_config.llm_model,
+                    base_url=curation_config.llm_base_url,
+                )
+                terms = [t.canonical for t in merged_glossary.terms]
+                llm_corrections = generator.generate_corrections(
+                    result.curated_text, terms
+                )
+                if llm_corrections:
+                    generator.save_corrections(
+                        llm_corrections, vtt_path.parent / "llm_corrections.json"
+                    )
+                    click.echo(
+                        f"  Generated {len(llm_corrections)} LLM correction proposals"
+                    )
+        except ImportError:
+            click.echo("  httpx not installed, skipping LLM corrections", err=True)
+
+    return changes
 
 
 def _load_glossary(
@@ -416,63 +443,11 @@ def _curate_video_dir(
     total_changes = 0
     for vtt_path, out_path in vtt_files:
         click.echo(f"\nProcessing: {vtt_path.name}")
-
-        # Load per-video corrections
-        per_video_corrections = dict(corrections_dict)
-        llm_corr_path = video_dir / "llm_corrections.json"
-        if llm_corr_path.exists():
-            per_video = load_corrections(llm_corr_path)
-            per_video_corrections.update(per_video)
-
-        words = curator.parse_youtube_vtt(vtt_path)
-        if not words:
-            click.echo("  No words extracted, skipping")
-            continue
-
-        result = curator.curate(words, merged_glossary, per_video_corrections)
-
-        for stage in result.stage_results:
-            if stage["changes"]:
-                click.echo(f"  {stage['stage']}: {stage['changes']} changes")
-                total_changes += stage["changes"]
-
-        if dry_run:
-            click.echo(f"  [dry-run] Would write: {out_path.name}")
-        else:
-            curator.write_curated_vtt(
-                result, out_path, word_timing=not no_word_timing
-            )
-            click.echo(f"  Wrote: {out_path.name}")
-
-        if generate_corrections and not dry_run:
-            try:
-                from annextube.services.llm_corrector import LLMCorrectionGenerator
-
-                if not curation_config.llm_provider or not curation_config.llm_model:
-                    click.echo(
-                        "  LLM provider/model not configured in [curation] config",
-                        err=True,
-                    )
-                else:
-                    generator = LLMCorrectionGenerator(
-                        provider=curation_config.llm_provider,
-                        model=curation_config.llm_model,
-                        base_url=curation_config.llm_base_url,
-                    )
-                    terms = [t.canonical for t in merged_glossary.terms]
-                    llm_corrections = generator.generate_corrections(
-                        result.curated_text, terms
-                    )
-                    if llm_corrections:
-                        generator.save_corrections(
-                            llm_corrections, video_dir / "llm_corrections.json"
-                        )
-                        click.echo(
-                            f"  Generated {len(llm_corrections)} LLM correction proposals"
-                        )
-            except ImportError:
-                click.echo(
-                    "  httpx not installed, skipping LLM corrections", err=True
-                )
+        total_changes += _curate_vtt_file(
+            curator, vtt_path, out_path, corrections_dict, merged_glossary,
+            curation_config, dry_run=dry_run, no_word_timing=no_word_timing,
+            generate_corrections=generate_corrections,
+            display_path=out_path.name,
+        )
 
     click.echo(f"\nDone: {len(vtt_files)} file(s), {total_changes} total changes")
