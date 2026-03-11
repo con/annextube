@@ -140,6 +140,31 @@ class TestSearchIndexBuildReal:
         assert stats2.chunks_created == stats1.chunks_created
 
     @pytest.mark.asyncio
+    async def test_rebuild_with_existing_readonly_files(self, tmp_path: Path) -> None:
+        """Rebuild succeeds even when output dir has read-only files.
+
+        Simulates the DataLad subdataset scenario where previous index
+        files are git-annex objects (symlinks to read-only targets).
+        """
+        from annextube.services.search_index import build_caption_index
+
+        archive = tmp_path / "archive"
+        _make_video(archive, "vid1", "First Video", SAMPLE_VTT)
+
+        stats1 = await build_caption_index(archive, force=True)
+        assert stats1.videos_indexed == 1
+
+        # Simulate annex-like read-only files: make some files read-only
+        pagefind_dir = archive / "web" / "pagefind"
+        for f in pagefind_dir.rglob("*"):
+            if f.is_file() and f.suffix in (".pf_meta", ".pf_fragment"):
+                f.chmod(0o444)
+
+        # Rebuild should succeed (writes to temp dir, then syncs)
+        stats2 = await build_caption_index(archive, force=True)
+        assert stats2.videos_indexed == 1
+
+    @pytest.mark.asyncio
     async def test_incremental_skip_no_git(self, tmp_path: Path) -> None:
         """Without git, incremental detection is skipped — always rebuilds."""
         from annextube.services.search_index import build_caption_index

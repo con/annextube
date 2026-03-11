@@ -16,7 +16,9 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -555,6 +557,44 @@ async def _pagefind_write_files(service, index, output_path: str) -> None:
         raise RuntimeError(f"Unexpected pagefind response type: {resp_type}")
 
 
+def _sync_pagefind_output(src: Path, dst: Path) -> None:
+    """Sync pagefind output from *src* (temp dir) into *dst* (final location).
+
+    Removes stale files in *dst* that are not in *src*, preserving ``.git``
+    and ``.build_commit``.  Handles git-annex symlinks by unlinking before
+    overwriting.
+    """
+    preserve = {".git", ".gitattributes", ".build_commit", ".datalad"}
+
+    # Remove stale files in dst that aren't in src
+    if dst.exists():
+        for item in list(dst.iterdir()):
+            if item.name in preserve:
+                continue
+            rel = item.name
+            if not (src / rel).exists():
+                if item.is_dir() and not item.is_symlink():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+
+    # Copy new/updated files from src to dst
+    for item in src.iterdir():
+        dst_item = dst / item.name
+        if item.is_dir():
+            if dst_item.exists():
+                shutil.rmtree(dst_item)
+            shutil.copytree(item, dst_item)
+        else:
+            # Remove annex symlink or existing file before writing
+            if dst_item.is_symlink() or dst_item.exists():
+                dst_item.unlink()
+            shutil.copy2(item, dst_item)
+
+    n_files = sum(1 for _ in dst.rglob("*") if _.is_file() and _.name not in preserve)
+    logger.info("Synced %d pagefind files to %s", n_files, dst)
+
+
 async def build_caption_index(
     archive_path: Path,
     channels: list[str] | None = None,
@@ -608,12 +648,17 @@ async def build_caption_index(
     logger.info("Checking pagefind sub-repository status")
     is_subdataset = _ensure_pagefind_subdataset(archive_path, pagefind_dir)
 
-    # --- Build index ---------------------------------------------------------
+    # --- Build index into temp dir, then sync ---------------------------------
+    # Pagefind writes directly to its output_path.  If that directory is a
+    # DataLad subdataset with git-annex symlinks from a previous build, the
+    # pagefind binary hangs trying to overwrite read-only annex objects.
+    # Writing to a clean temp directory avoids the problem entirely.
     pagefind_dir.mkdir(parents=True, exist_ok=True)
+    tmpdir = tempfile.mkdtemp(prefix="pagefind-build-")
 
-    logger.debug("Initializing Pagefind index")
+    logger.debug("Initializing Pagefind index (output to %s)", tmpdir)
 
-    config = IndexConfig(root_selector="main", output_path=str(pagefind_dir))
+    config = IndexConfig(root_selector="main", output_path=tmpdir)
     logger.info("Starting pagefind subprocess...")
     service = await _create_pagefind_service()
     try:
@@ -704,16 +749,21 @@ async def build_caption_index(
             "Indexed %d videos, %d chunks — writing index files...",
             stats.videos_indexed, stats.chunks_created,
         )
-        await _pagefind_write_files(service, index, str(pagefind_dir))
-        logger.info("Index files written successfully")
+        await _pagefind_write_files(service, index, tmpdir)
+        logger.info("Index files written to temp dir")
     finally:
         await service.close()
+
+    # Sync from temp dir into the real pagefind directory
+    _sync_pagefind_output(Path(tmpdir), pagefind_dir)
+    shutil.rmtree(tmpdir, ignore_errors=True)
 
     # Compute index size
     total = 0
     for f in pagefind_dir.rglob("*"):
-        if f.is_file() and f.name != ".build_commit":
-            total += f.stat().st_size
+        if f.is_file() and f.name not in (".build_commit", ".gitattributes"):
+            if not f.is_symlink():  # skip dangling annex symlinks
+                total += f.stat().st_size
     stats.index_size_bytes = total
 
     # Record build commit for incremental
