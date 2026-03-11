@@ -324,12 +324,20 @@ class TestBuildCaptionIndex:
         """Mock pagefind imports and service creation for all build_caption_index tests."""
         self.fake_index = _FakeIndex()
         fake_service = _FakeService(self.fake_index)
+
+        async def _mock_write(service, index, output_path):
+            self.fake_index.written = True
+
         with (
             patch("annextube.services.search_index.IndexConfig", MagicMock()),
             patch("annextube.services.search_index.PagefindIndex", _FakeIndex),
             patch(
                 "annextube.services.search_index._create_pagefind_service",
                 AsyncMock(return_value=fake_service),
+            ),
+            patch(
+                "annextube.services.search_index._pagefind_write_files",
+                _mock_write,
             ),
         ):
             yield
@@ -594,10 +602,18 @@ class TestDataladSubdatasetHelpers:
 
         fake_index = _FakeIndex()
         fake_service = _FakeService(fake_index)
+
+        async def _mock_write(service, index, output_path):
+            fake_index.written = True
+
         with (
             patch(
                 "annextube.services.search_index._create_pagefind_service",
                 AsyncMock(return_value=fake_service),
+            ),
+            patch(
+                "annextube.services.search_index._pagefind_write_files",
+                _mock_write,
             ),
             patch("annextube.services.search_index.IndexConfig", MagicMock()),
             patch("annextube.services.search_index.PagefindIndex", _FakeIndex),

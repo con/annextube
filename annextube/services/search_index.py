@@ -417,14 +417,16 @@ def _iter_video_dirs(archive_path: Path, channels: list[str] | None = None):
 
 
 async def _create_pagefind_service():
-    """Create a PagefindService with stderr separated from IPC stdout.
+    """Create a PagefindService with stderr discarded.
 
     The upstream pagefind library merges stderr into stdout
     (``stderr=asyncio.subprocess.STDOUT``) which can corrupt the
-    base64-over-comma IPC protocol when the pagefind binary emits
-    warnings or progress text to stderr during long operations like
-    ``WriteFiles``.  This helper launches the service with stderr on
-    its own pipe and drains it to our logger.
+    base64-over-comma IPC protocol.  We redirect stderr to ``DEVNULL``
+    to eliminate any risk of pipe interlocking between stdout and stderr.
+
+    The polling task is wrapped in an error guard so that exceptions
+    (``IncompleteReadError``, JSON decode failures, etc.) cancel all
+    pending futures instead of silently dying and leaving callers stuck.
     """
     import os
 
@@ -438,22 +440,87 @@ async def _create_pagefind_service():
         cwd=os.getcwd(),
         stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,  # NOT STDOUT — prevents IPC corruption
+        stderr=asyncio.subprocess.DEVNULL,
         limit=2**21,
     )
 
-    # Drain stderr so pipe buffer doesn't fill up and cause a deadlock
-    async def _drain_stderr():
-        assert service._backend.stderr is not None
-        while True:
-            line = await service._backend.stderr.readline()
-            if not line:
-                break
-            logger.debug("pagefind: %s", line.decode().rstrip())
+    # Wrap the poller so exceptions are surfaced, not swallowed
+    async def _guarded_poll():
+        try:
+            await service._wait_for_responses()
+        except asyncio.IncompleteReadError:
+            logger.debug("Pagefind process closed stdout (normal shutdown)")
+        except Exception:
+            logger.exception("Pagefind response poller crashed")
+            for future in service._responses.values():
+                if not future.done():
+                    future.cancel()
 
-    service._loop.create_task(_drain_stderr())
-    service._poll_task = service._loop.create_task(service._wait_for_responses())
+    service._poll_task = service._loop.create_task(_guarded_poll())
     return service
+
+
+async def _pagefind_write_files(service, index, output_path: str) -> None:
+    """Send ``WriteFiles`` to the pagefind subprocess and read the response.
+
+    The upstream ``PagefindIndex.write_files()`` relies on a background
+    polling task (``_wait_for_responses``) that silently dies on parse
+    errors, leaving the caller hanging forever.  This helper cancels the
+    polling task and performs the IPC exchange directly, giving us full
+    control over timeouts and error reporting.
+    """
+    import base64 as _b64
+
+    # Stop the polling task — we'll read the response ourselves
+    service._poll_task.cancel()
+    try:
+        await service._poll_task
+    except (asyncio.CancelledError, Exception):
+        pass
+
+    # Send WriteFiles request
+    service._message_id += 1
+    req = {
+        "message_id": service._message_id,
+        "payload": {
+            "type": "WriteFiles",
+            "index_id": index._index_id,
+            "output_path": output_path,
+        },
+    }
+    encoded = _b64.b64encode(json.dumps(req).encode("utf-8"))
+    assert service._backend.stdin is not None
+    service._backend.stdin.write(encoded + b",")
+    await service._backend.stdin.drain()
+    logger.info("WriteFiles request sent, waiting for pagefind to build index...")
+
+    # Read response directly — no intermediary polling task
+    assert service._backend.stdout is not None
+    try:
+        raw = await asyncio.wait_for(
+            service._backend.stdout.readuntil(b","),
+            timeout=300,
+        )
+    except asyncio.TimeoutError:
+        rc = service._backend.returncode
+        if rc is not None:
+            raise RuntimeError(
+                f"Pagefind process exited with code {rc} during WriteFiles"
+            ) from None
+        raise TimeoutError(
+            "Pagefind WriteFiles timed out after 300s — "
+            f"subprocess (PID {service._backend.pid}) appears stuck"
+        ) from None
+
+    resp = json.loads(_b64.b64decode(raw[:-1]))
+    payload = resp.get("payload", {})
+    resp_type = payload.get("type")
+    if resp_type == "Error":
+        raise RuntimeError(
+            f"Pagefind WriteFiles failed: {payload.get('message')}"
+        )
+    if resp_type != "WriteFiles":
+        raise RuntimeError(f"Unexpected pagefind response type: {resp_type}")
 
 
 async def build_caption_index(
@@ -605,14 +672,7 @@ async def build_caption_index(
             "Indexed %d videos, %d chunks — writing index files...",
             stats.videos_indexed, stats.chunks_created,
         )
-        try:
-            await asyncio.wait_for(index.write_files(), timeout=120)
-        except asyncio.TimeoutError:
-            logger.error(
-                "Pagefind write_files() timed out after 120s — "
-                "this may indicate an IPC deadlock with the pagefind subprocess"
-            )
-            raise
+        await _pagefind_write_files(service, index, str(pagefind_dir))
         logger.info("Index files written successfully")
     finally:
         await service.close()
