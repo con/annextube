@@ -448,10 +448,15 @@ async def _create_pagefind_service():
     async def _guarded_poll():
         try:
             await service._wait_for_responses()
-        except asyncio.IncompleteReadError:
-            logger.debug("Pagefind process closed stdout (normal shutdown)")
+        except asyncio.IncompleteReadError as exc:
+            logger.info(
+                "Pagefind poller: stdout closed (IncompleteReadError: %s)", exc
+            )
+        except asyncio.CancelledError:
+            logger.debug("Pagefind poller: cancelled (expected during WriteFiles)")
+            raise
         except Exception:
-            logger.exception("Pagefind response poller crashed")
+            logger.exception("Pagefind response poller CRASHED — cancelling futures")
             for future in service._responses.values():
                 if not future.done():
                     future.cancel()
@@ -478,6 +483,30 @@ async def _pagefind_write_files(service, index, output_path: str) -> None:
     except (asyncio.CancelledError, Exception):
         pass
 
+    # Check: is the process still alive?
+    rc = service._backend.returncode
+    if rc is not None:
+        raise RuntimeError(
+            f"Pagefind process already exited with code {rc} before WriteFiles"
+        )
+    logger.info(
+        "Pagefind process PID %d alive, polling task cancelled, "
+        "stdout buffer has %d bytes queued",
+        service._backend.pid,
+        len(service._backend.stdout._buffer) if service._backend.stdout else -1,
+    )
+
+    # Drain any leftover data in stdout buffer from the polling task
+    assert service._backend.stdout is not None
+    leftover = bytes(service._backend.stdout._buffer)
+    if leftover:
+        logger.warning(
+            "Leftover data in stdout buffer (%d bytes): %r%s",
+            len(leftover),
+            leftover[:200],
+            "..." if len(leftover) > 200 else "",
+        )
+
     # Send WriteFiles request
     service._message_id += 1
     req = {
@@ -489,13 +518,14 @@ async def _pagefind_write_files(service, index, output_path: str) -> None:
         },
     }
     encoded = _b64.b64encode(json.dumps(req).encode("utf-8"))
+    logger.info("Sending WriteFiles request (msg_id=%d, %d bytes encoded)",
+                service._message_id, len(encoded))
     assert service._backend.stdin is not None
     service._backend.stdin.write(encoded + b",")
     await service._backend.stdin.drain()
-    logger.info("WriteFiles request sent, waiting for pagefind to build index...")
+    logger.info("WriteFiles request sent and drained, reading response...")
 
     # Read response directly — no intermediary polling task
-    assert service._backend.stdout is not None
     try:
         raw = await asyncio.wait_for(
             service._backend.stdout.readuntil(b","),
@@ -503,13 +533,15 @@ async def _pagefind_write_files(service, index, output_path: str) -> None:
         )
     except asyncio.TimeoutError:
         rc = service._backend.returncode
+        buf_len = len(service._backend.stdout._buffer) if service._backend.stdout else -1
         if rc is not None:
             raise RuntimeError(
                 f"Pagefind process exited with code {rc} during WriteFiles"
             ) from None
         raise TimeoutError(
-            "Pagefind WriteFiles timed out after 300s — "
-            f"subprocess (PID {service._backend.pid}) appears stuck"
+            f"Pagefind WriteFiles timed out after 300s — "
+            f"subprocess PID {service._backend.pid} still running, "
+            f"stdout buffer has {buf_len} bytes"
         ) from None
 
     resp = json.loads(_b64.b64decode(raw[:-1]))
