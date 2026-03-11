@@ -6,7 +6,7 @@ import json
 import subprocess
 import textwrap
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -292,16 +292,27 @@ class _FakeIndex:
     def __init__(self, config=None):
         self.records: list[dict] = []
         self.written = False
-        self._output_path: str | None = None
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *args):
-        self.written = True
+        self._config = config
 
     async def add_custom_record(self, **kwargs):
         self.records.append(kwargs)
+
+    async def write_files(self, output_path=None):
+        self.written = True
+
+
+class _FakeService:
+    """A fake PagefindService for testing."""
+
+    def __init__(self, fake_index):
+        self._fake_index = fake_index
+
+    async def create_index(self, config=None):
+        self._fake_index._config = config
+        return self._fake_index
+
+    async def close(self):
+        pass
 
 
 @pytest.mark.ai_generated
@@ -310,13 +321,16 @@ class TestBuildCaptionIndex:
 
     @pytest.fixture(autouse=True)
     def _mock_pagefind_imports(self):
-        """Ensure IndexConfig and PagefindIndex are non-None even without pagefind installed.
-
-        Individual tests override PagefindIndex with their own _FakeIndex via nested patches.
-        """
+        """Mock pagefind imports and service creation for all build_caption_index tests."""
+        self.fake_index = _FakeIndex()
+        fake_service = _FakeService(self.fake_index)
         with (
             patch("annextube.services.search_index.IndexConfig", MagicMock()),
             patch("annextube.services.search_index.PagefindIndex", _FakeIndex),
+            patch(
+                "annextube.services.search_index._create_pagefind_service",
+                AsyncMock(return_value=fake_service),
+            ),
         ):
             yield
 
@@ -324,17 +338,10 @@ class TestBuildCaptionIndex:
     async def test_curated_preferred_over_original(self, tmp_path: Path) -> None:
         """When both curated and original VTTs exist, curated is indexed."""
         archive = _make_archive(tmp_path, has_curated=True, has_original=True)
-        fake_index = _FakeIndex()
 
-        with (
-            patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
-            ),
-            patch(
-                "annextube.services.search_index._current_head",
-                return_value="abc123def",
-            ),
+        with patch(
+            "annextube.services.search_index._current_head",
+            return_value="abc123def",
         ):
             from annextube.services.search_index import build_caption_index
 
@@ -344,23 +351,16 @@ class TestBuildCaptionIndex:
         assert stats.videos_curated == 1
         assert stats.videos_original == 0
         assert stats.chunks_created > 0
-        assert fake_index.written
+        assert self.fake_index.written
 
     @pytest.mark.asyncio
     async def test_original_used_as_fallback(self, tmp_path: Path) -> None:
         """When no curated VTT exists, the original VTT is indexed."""
         archive = _make_archive(tmp_path, has_curated=False, has_original=True)
-        fake_index = _FakeIndex()
 
-        with (
-            patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
-            ),
-            patch(
-                "annextube.services.search_index._current_head",
-                return_value="abc123def",
-            ),
+        with patch(
+            "annextube.services.search_index._current_head",
+            return_value="abc123def",
         ):
             from annextube.services.search_index import build_caption_index
 
@@ -375,17 +375,10 @@ class TestBuildCaptionIndex:
     async def test_no_vtt_skipped(self, tmp_path: Path) -> None:
         """Videos with no VTT files are skipped."""
         archive = _make_archive(tmp_path, has_vtt=False)
-        fake_index = _FakeIndex()
 
-        with (
-            patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
-            ),
-            patch(
-                "annextube.services.search_index._current_head",
-                return_value="abc123def",
-            ),
+        with patch(
+            "annextube.services.search_index._current_head",
+            return_value="abc123def",
         ):
             from annextube.services.search_index import build_caption_index
 
@@ -399,24 +392,17 @@ class TestBuildCaptionIndex:
     async def test_record_url_format(self, tmp_path: Path) -> None:
         """Each record URL follows the #/video/{id}?t={seconds} format."""
         archive = _make_archive(tmp_path, has_curated=True, video_id="myVid42")
-        fake_index = _FakeIndex()
 
-        with (
-            patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
-            ),
-            patch(
-                "annextube.services.search_index._current_head",
-                return_value="abc123def",
-            ),
+        with patch(
+            "annextube.services.search_index._current_head",
+            return_value="abc123def",
         ):
             from annextube.services.search_index import build_caption_index
 
             await build_caption_index(archive, force=True)
 
-        assert len(fake_index.records) > 0
-        for rec in fake_index.records:
+        assert len(self.fake_index.records) > 0
+        for rec in self.fake_index.records:
             assert rec["url"].startswith("#/video/myVid42?t=")
             assert rec["language"] == "en"
             assert rec["meta"]["video_id"] == "myVid42"
@@ -475,17 +461,10 @@ class TestBuildCaptionIndex:
         pagefind_dir = archive / "web" / "pagefind"
         pagefind_dir.mkdir(parents=True)
         (pagefind_dir / ".build_commit").write_text("deadbeef\n")
-        fake_index = _FakeIndex()
 
-        with (
-            patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
-            ),
-            patch(
-                "annextube.services.search_index._current_head",
-                return_value="deadbeef",
-            ),
+        with patch(
+            "annextube.services.search_index._current_head",
+            return_value="deadbeef",
         ):
             from annextube.services.search_index import build_caption_index
 
@@ -493,24 +472,17 @@ class TestBuildCaptionIndex:
 
         assert stats.videos_indexed == 1
         assert stats.chunks_created > 0
-        assert fake_index.written
+        assert self.fake_index.written
 
     @pytest.mark.asyncio
     async def test_no_subdataset_when_not_git_repo(self, tmp_path: Path) -> None:
         """When archive is not a git repo, no subdataset ops happen."""
         archive = _make_archive(tmp_path, has_curated=True)
         # No .git dir -- not a git repo
-        fake_index = _FakeIndex()
 
-        with (
-            patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
-            ),
-            patch(
-                "annextube.services.search_index._current_head",
-                return_value="abc123def",
-            ),
+        with patch(
+            "annextube.services.search_index._current_head",
+            return_value="abc123def",
         ):
             from annextube.services.search_index import build_caption_index
 
@@ -621,12 +593,14 @@ class TestDataladSubdatasetHelpers:
         )
 
         fake_index = _FakeIndex()
+        fake_service = _FakeService(fake_index)
         with (
             patch(
-                "annextube.services.search_index.PagefindIndex",
-                return_value=fake_index,
+                "annextube.services.search_index._create_pagefind_service",
+                AsyncMock(return_value=fake_service),
             ),
             patch("annextube.services.search_index.IndexConfig", MagicMock()),
+            patch("annextube.services.search_index.PagefindIndex", _FakeIndex),
         ):
             from annextube.services.search_index import build_caption_index
 

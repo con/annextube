@@ -13,6 +13,7 @@ to git-annex.  This isolates the ~10k derived index files from the main repo.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import subprocess
@@ -415,6 +416,46 @@ def _iter_video_dirs(archive_path: Path, channels: list[str] | None = None):
             yield video_dir.parent
 
 
+async def _create_pagefind_service():
+    """Create a PagefindService with stderr separated from IPC stdout.
+
+    The upstream pagefind library merges stderr into stdout
+    (``stderr=asyncio.subprocess.STDOUT``) which can corrupt the
+    base64-over-comma IPC protocol when the pagefind binary emits
+    warnings or progress text to stderr during long operations like
+    ``WriteFiles``.  This helper launches the service with stderr on
+    its own pipe and drains it to our logger.
+    """
+    import os
+
+    from pagefind.service import PagefindService
+
+    service = PagefindService()  # sets _bin, _loop, _responses
+
+    service._backend = await asyncio.create_subprocess_exec(
+        service._bin,
+        "--service",
+        cwd=os.getcwd(),
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,  # NOT STDOUT — prevents IPC corruption
+        limit=2**21,
+    )
+
+    # Drain stderr so pipe buffer doesn't fill up and cause a deadlock
+    async def _drain_stderr():
+        assert service._backend.stderr is not None
+        while True:
+            line = await service._backend.stderr.readline()
+            if not line:
+                break
+            logger.debug("pagefind: %s", line.decode().rstrip())
+
+    service._loop.create_task(_drain_stderr())
+    service._poll_task = service._loop.create_task(service._wait_for_responses())
+    return service
+
+
 async def build_caption_index(
     archive_path: Path,
     channels: list[str] | None = None,
@@ -475,7 +516,9 @@ async def build_caption_index(
 
     config = IndexConfig(root_selector="main", output_path=str(pagefind_dir))
     logger.info("Starting pagefind subprocess...")
-    async with PagefindIndex(config=config) as index:
+    service = await _create_pagefind_service()
+    try:
+        index = await service.create_index(config)
         logger.info("Pagefind index initialized, scanning video directories")
         video_count = 0
         for video_dir in _iter_video_dirs(archive_path, channels):
@@ -558,10 +601,21 @@ async def build_caption_index(
                 )
                 stats.chunks_created += 1
 
-        logger.debug(
-            "Indexed %d videos, %d chunks — writing files on context exit",
+        logger.info(
+            "Indexed %d videos, %d chunks — writing index files...",
             stats.videos_indexed, stats.chunks_created,
         )
+        try:
+            await asyncio.wait_for(index.write_files(), timeout=120)
+        except asyncio.TimeoutError:
+            logger.error(
+                "Pagefind write_files() timed out after 120s — "
+                "this may indicate an IPC deadlock with the pagefind subprocess"
+            )
+            raise
+        logger.info("Index files written successfully")
+    finally:
+        await service.close()
 
     # Compute index size
     total = 0
