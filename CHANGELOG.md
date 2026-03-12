@@ -5,6 +5,66 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.12.0] - 2026-03-11
+
+### Added
+
+- **`annextube init` modular flags**: `--curation`, `--search`, `--enable-all` for selective feature initialization
+- **`[full]` extra**: `pip install annextube[full]` installs all optional dependencies
+- **Auto-build search index after backup**: Pagefind caption index is rebuilt automatically when captions change
+- **Real-pagefind integration tests**: 7 tests exercise the actual pagefind binary with 30s timeout to catch IPC stalls
+- **WCAG 2.1 AA accessibility tests**: Automated contrast-ratio and a11y checks for the web frontend
+- **Zero-tolerance code duplication**: jscpd enforced at threshold 0 across the codebase
+
+### Fixed
+
+- **Pagefind IPC deadlock on DataLad subdatasets**: The pagefind binary hangs when its output directory contains git-annex symlinks (read-only targets) from a previous build. Fixed by writing to a clean temp directory, then syncing into the subdataset
+- **Pagefind IPC pipe interlocking**: Separate stderr from stdout, bypass the upstream library's fragile polling task, use direct IPC with 300s timeout for WriteFiles
+- **Color contrast violation**: Fixed insufficient contrast ratio in frontend CSS
+
+### Changed
+
+- **DataLad is now a core dependency**: Removed plain git submodule fallback; all subdataset operations use DataLad exclusively
+- **DataLad cfg_text2git for pagefind subdataset**: Use DataLad's built-in text2git configuration instead of manual .gitattributes
+- **yt-dlp[default] co-installs challenge solver**: No longer need separate `yt-dlp-youtube-oauth2` or manual solver setup
+- **Consolidate scripts/ into tools/**: All helper scripts live in `tools/`, tox.ini calls them directly
+- **Spec harmonization**: Aligned specification artifacts with implementation reality
+
+## [0.11.0] - 2026-03-04
+
+### Added
+
+- **Full-text caption search via Pagefind**: Search across all video captions with highlighted results and click-to-seek
+- **`build-search-index` CLI command**: Standalone pagefind index generation
+- **DataLad subdataset management for pagefind index**: Automatic subdataset creation with cfg_text2git
+- **Caption search UX polish**: Improved search result display and git submodule for pagefind frontend assets
+
+### Fixed
+
+- **Duplicate pagefind/ output at archive root**: Index files now go only to `web/pagefind/`
+- **Pagefind 100ms polling sleep**: Removed upstream library's polling delay causing ~140x slowdown
+- **Curated caption writes on annexed files**: Use AtomicFileWriter to handle symlink-to-readonly targets
+- **Pagefind URL resolution**: Fixed incorrect paths in subdirectory deployments
+
+## [0.10.0] - 2026-03-02
+
+### Added
+
+- **Aggregated error reporting**: Record all errors during backup and fail at end with summary instead of aborting on first error
+
+### Fixed
+
+- **metadata.json writes on annexed files**: Use UTF-8 encoding and handle annexed file targets correctly
+- **git diff quoting for non-ASCII paths**: Fixed diff parsing for filenames with special characters
+- **Unavailable video handling**: Skip downloads for known-unavailable videos in incremental channel backup
+- **Thumbnail re-download**: Skip unless in force mode
+- **TSV commit failure**: Target specific files and deduplicate commit logic
+- **Playlist-exclusive detection**: Include existing and unavailable video IDs
+
+### Changed
+
+- **Stop writing volatile timestamps to channel.json**: Removed last_sync/fetched_at fields that caused unnecessary commits
+
 ## [0.9.0] - 2026-02-18
 
 ### Added
@@ -239,6 +299,11 @@ Initial release with core YouTube archival functionality:
 - Comment fetching
 - Basic web UI for browsing archives
 
+[0.12.0]: https://github.com/con/annextube/compare/v0.11.0...v0.12.0
+[0.11.0]: https://github.com/con/annextube/compare/v0.10.0...v0.11.0
+[0.10.0]: https://github.com/con/annextube/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/con/annextube/compare/v0.8.0...v0.9.0
+[0.8.0]: https://github.com/con/annextube/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/con/annextube/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/con/annextube/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/con/annextube/compare/v0.4.0...v0.5.0
