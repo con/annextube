@@ -7,11 +7,33 @@ manual git init + git annex init:
 - datalad_repo: Lightweight Python API init (for GitAnnexService unit tests)
 """
 
+import asyncio
 import subprocess
 import sys
 from pathlib import Path
+from typing import Generator
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def _clear_stale_running_loop() -> Generator[None, None, None]:
+    """Clear any stale running-loop reference before each test.
+
+    pytest-playwright can leave a stale 'running loop' reference in asyncio's
+    thread-local state after its sync-API tests complete, causing subsequent
+    ``@pytest.mark.asyncio`` tests to fail with 'Cannot run the event loop
+    while another loop is running'.  We temporarily clear it so a fresh loop
+    can be created, then restore it so playwright's session-scoped teardown
+    (browser.close) still works.
+    """
+    previous = asyncio._get_running_loop()  # type: ignore[attr-defined]
+    if previous is not None:
+        asyncio._set_running_loop(None)  # type: ignore[attr-defined]
+        yield
+        asyncio._set_running_loop(previous)  # type: ignore[attr-defined]
+    else:
+        yield
 
 
 @pytest.fixture
