@@ -191,8 +191,9 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Initialize archiver with update mode and date filters
         archiver = Archiver(output_dir, config, update_mode=update, date_from=date_from, date_to=date_to)
 
-        # Collect all errors across sources for final summary
+        # Collect all errors/warnings across sources for final summary
         all_errors: list[str] = []
+        all_warnings: list[str] = []
 
         # Determine what to backup
         if url:
@@ -208,6 +209,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 stats = archiver.backup_channel(url)
             _print_stats(stats)
             all_errors.extend(stats["errors"])
+            all_warnings.extend(stats.get("warnings", []))
 
             # Generate channel.json for multi-channel collection integration
             try:
@@ -238,6 +240,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 "videos_tracked": 0,
                 "metadata_saved": 0,
                 "errors": [],
+                "warnings": [],
             }
 
             for i, source in enumerate(enabled_sources, 1):
@@ -255,6 +258,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 total_stats["videos_tracked"] += stats["videos_tracked"]
                 total_stats["metadata_saved"] += stats["metadata_saved"]
                 total_stats["errors"].extend(stats["errors"])
+                total_stats["warnings"].extend(stats.get("warnings", []))
 
                 click.echo()
 
@@ -265,10 +269,13 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             click.echo(f"  Videos tracked: {total_stats['videos_tracked']}")
             click.echo(f"  Metadata files saved: {total_stats['metadata_saved']}")
 
+            if total_stats["warnings"]:
+                click.echo(f"  Warnings: {len(total_stats['warnings'])}")
             if total_stats["errors"]:
                 click.echo(f"  Errors: {len(total_stats['errors'])}")
 
             all_errors.extend(total_stats["errors"])
+            all_warnings.extend(total_stats["warnings"])
 
         # Generate channel.json for multi-channel collection integration
         try:
@@ -312,6 +319,14 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                     click.echo(f"Warning: search index build failed: {e}", err=True)
 
         click.echo()
+        if all_warnings:
+            n = len(all_warnings)
+            click.echo(f"[~] {n} warning(s):")
+            max_shown = 10
+            for w in all_warnings[:max_shown]:
+                click.echo(f"  - {w}")
+            if n > max_shown:
+                click.echo(f"  ... and {n - max_shown} more")
         if all_errors:
             n = len(all_errors)
             click.echo(f"[!] Backup completed with {n} error(s):", err=True)
@@ -348,6 +363,10 @@ def _print_stats(stats: dict, prefix: str = ""):
     click.echo(f"{prefix}  Metadata files: {stats['metadata_saved']}")
     click.echo(f"{prefix}  Captions downloaded: {stats.get('captions_downloaded', 0)}")
 
+    if stats.get("warnings"):
+        click.echo(f"{prefix}  [~] Warnings: {len(stats['warnings'])}")
+        for warn_msg in stats["warnings"]:
+            click.echo(f"{prefix}    - {warn_msg}")
     if stats["errors"]:
         click.echo(f"{prefix}  [!] Errors: {len(stats['errors'])}")
         for err_msg in stats["errors"]:

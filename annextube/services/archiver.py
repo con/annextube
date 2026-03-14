@@ -85,6 +85,7 @@ class Archiver:
         self._current_source_config: SourceConfig | None = None  # Current source being processed (for component overrides)
         self._is_initial_backup: bool | None = None  # Set at start of backup_channel/backup_playlist
         self._current_run_errors: list[str] = []  # Error accumulator for current backup run
+        self._current_run_warnings: list[str] = []  # Warning accumulator (non-fatal, exit 0)
 
         # Configure git-annex with user config settings
         self.git_annex.configure_ytdlp_options(
@@ -849,6 +850,7 @@ class Archiver:
         self._current_source_config = source_config
         self._is_initial_backup = not (self.repo_path / "videos" / "videos.tsv").exists()
         self._current_run_errors = []
+        self._current_run_warnings = []
         logger.info(f"Starting backup for channel: {channel_url} (mode: {self.update_mode})")
 
         stats: dict[str, Any] = {
@@ -1107,6 +1109,7 @@ class Archiver:
                 )
 
         stats["errors"] = list(self._current_run_errors)
+        stats["warnings"] = list(self._current_run_warnings)
         return stats
 
     def backup_playlist(self, playlist_url: str, source_config: SourceConfig | None = None) -> dict:
@@ -1128,10 +1131,12 @@ class Archiver:
         # otherwise check file existence
         if self._is_initial_backup is None:
             self._is_initial_backup = not (self.repo_path / "videos" / "videos.tsv").exists()
-        # Only reset error accumulator when called as standalone entry point
-        # (not when called from backup_channel which already set it up)
+        # Only reset error/warning accumulators when called as standalone entry point
+        # (not when called from backup_channel which already set them up)
         if not self._current_run_errors:
             self._current_run_errors = []
+        if not self._current_run_warnings:
+            self._current_run_warnings = []
         logger.info(f"Starting backup for playlist: {playlist_url}")
 
         stats: dict[str, Any] = {
@@ -1269,6 +1274,7 @@ class Archiver:
         self._generate_and_commit_tsvs()
 
         stats["errors"] = list(self._current_run_errors)
+        stats["warnings"] = list(self._current_run_warnings)
         return stats
 
     def _save_unavailable_stubs(self, playlist: Playlist, fetched_video_ids: set[str]) -> int:
@@ -1800,8 +1806,8 @@ class Archiver:
 
         except Exception as e:
             error_detail = format_subprocess_error(e)
-            logger.error(f"Failed to download thumbnail for {video.video_id}: {error_detail}")
-            self._current_run_errors.append(f"Video {video.video_id} thumbnail: {error_detail}")
+            logger.warning(f"Failed to download thumbnail for {video.video_id}: {error_detail}")
+            self._current_run_warnings.append(f"Video {video.video_id} thumbnail: {error_detail}")
 
     def _curate_captions(
         self, video: Video, video_dir: Path, captions_metadata: list[dict]
