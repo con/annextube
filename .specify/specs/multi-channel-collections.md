@@ -189,14 +189,43 @@ Detailed metadata for a single channel.
 - `archive_stats` is computed from local archive (not YouTube API)
 - Updated during each backup/export run
 
+## Clarifications
+
+### Session 2026-03-12
+
+- Q: Should the collection have its own `.annextube/config.toml` with a `[collection]` section? → A: Yes, collection gets `.annextube/config.toml` with `[collection]` section for defaults, common_config path, and push settings.
+- Q: Should `collection add` run the first backup automatically? → A: Default is init+backup; `--no-backup` flag skips the backup step.
+- Q: Should `cfg_duct` be annextube-specific or general-purpose? → A: Deferred to con/duct upstream (duct#401). Not part of annextube scope.
+- Q: Sequential or parallel channel backups in `collection backup`? → A: Sequential by default, opt-in parallelism via `--parallel N` flag.
+- Q: How should `collection add` derive subdataset directory names? → A: Auto-derive from @handle, allow `--name` override. Fail if directory exists.
+
 ## Configuration
 
-### Architecture: Decentralized Configuration
+### Architecture: Collection-Level + Per-Channel Configuration
 
-**Collection level**: NO configuration file needed
-- Discovery-based: scan for `*/channel.json` (or deeper)
-- No `.annextube/` directory at collection root
-- Just git with submodules
+**Collection level**: `.annextube/config.toml` with `[collection]` section
+- Defines default init options for new channels added via `collection add`
+- Points to a common config file to embed into each channel
+- Configures push remote for `collection backup`
+- Discovery still scans for `*/channel.json` (or deeper)
+
+```toml
+# collection/.annextube/config.toml
+
+[collection]
+# Default init options applied to `collection add`
+comments_depth = 0
+curation = true
+search = true
+include_playlists = "all"
+include_podcasts = "none"
+
+# Common config to auto-embed into each channel on `collection add`
+common_config = ".annextube/common-config.toml"
+
+# Push settings for `collection backup`
+push_remote = "datalad-public"
+```
 
 **Channel level**: Each channel has its own `.annextube/config.toml`
 ```toml
@@ -377,19 +406,131 @@ Generates `channel.json` at archive root with:
 3. Run `annextube aggregate` to generate overview
 4. Web UI displays multi-channel collection properly
 
-### Phase 2: Polish & Automation (Future)
+### Phase 2: Collection Management Layer
+
+**Goal**: Simplify adding channels and backing up collections with robust error handling.
+
+#### 2.1: `annextube collection add <url>`
+
+Single command to add a new channel to an existing collection.
+
+```bash
+annextube collection add https://www.youtube.com/@NewChannel [--name NAME] [--no-backup]
+```
+
+**Behavior**:
+1. Auto-derive directory name from `@handle` in URL (or use `--name`)
+2. Fail if directory already exists
+3. Read `[collection]` defaults from collection's `.annextube/config.toml`
+4. Create DataLad subdataset via `datalad create`
+5. Run `annextube init --datalad` with collection defaults (curation, search, comments_depth, etc.)
+6. Embed common config from `[collection].common_config` path (same logic as `embed-config`)
+7. Unless `--no-backup`: run first backup via `datalad run -m "Add @handle" annextube backup`
+8. `datalad save` at collection level to register the new subdataset
+
+**Example**:
+```bash
+cd /mnt/btrfs/.../ReproTube
+annextube collection add https://www.youtube.com/@NewNeuroChannel
+# Creates NewNeuroChannel/ subdataset with:
+#   - .annextube/config.toml (init defaults from [collection])
+#   - common curation settings embedded from common-config.toml
+#   - first backup completed
+#   - registered as DataLad subdataset
+```
+
+**Equivalent manual workflow** (what this replaces):
+```bash
+t=brain-bbqs; f=bbqstube
+datalad run -m "Add @$t channel with annextube setup" \
+  --explicit --output $f --assume-ready both \
+  "annextube init --datalad --enable-all $f https://www.youtube.com/@$t && \
+   cd $f && duct annextube backup"
+```
+
+#### 2.2: `annextube collection backup`
+
+Robust batch backup replacing fragile bash cron loops.
+
+```bash
+annextube collection backup [DIRECTORY] [--parallel N] [--push] [--save]
+```
+
+**Behavior**:
+1. Discover all channel subdatasets (`*/.annextube/config.toml`)
+2. Process channels **sequentially** by default
+3. For each channel:
+   - Check dataset is clean; if dirty, `datalad save` first (or warn and skip)
+   - Run `datalad run -m "Regular update" annextube backup`
+   - Log result (success/failure) and continue
+4. After all channels: `datalad save -d .` at collection level (if `--save`)
+5. If `--push`: push to configured `push_remote` recursively
+6. Report aggregate results: N succeeded, M failed, which ones failed and why
+7. Exit code: 0 if all succeeded, 1 if any failed (but all were attempted)
+
+**Parallel mode** (`--parallel N`):
+- Run up to N channel backups concurrently
+- Opt-in only — YouTube API quota is shared, parallelism can trigger rate limits
+- Default N=1 (sequential)
+
+**Example**:
+```bash
+# Sequential backup with push (replaces cron script)
+annextube collection backup /mnt/btrfs/.../ReproTube --save --push
+
+# Parallel backup for collections with many small channels
+annextube collection backup /mnt/btrfs/.../src-youtube --parallel 3 --save --push
+```
+
+**Simplified cron script** (replaces current 50-line bash loop):
+```bash
+#!/bin/bash
+set -u
+for topd in \
+    /mnt/btrfs/.../ReproTube \
+    /mnt/btrfs/.../src-youtube \
+    /mnt/btrfs/.../dandi \
+    /mnt/btrfs/.../bbqs; do
+    annextube collection backup "$topd" --save --push || \
+        echo "FAILED: $topd (exit $?)" >&2
+done
+```
+
+#### 2.3: Collection-level config support
+
+Add `[collection]` section to config parser and template generation.
+
+```toml
+# .annextube/config.toml at collection root
+
+[collection]
+# Defaults for `collection add`
+comments_depth = 0
+curation = true
+search = true
+include_playlists = "all"
+include_podcasts = "none"
+
+# Path to common config to embed into new channels
+common_config = ".annextube/common-config.toml"
+
+# Push settings for `collection backup --push`
+push_remote = "datalad-public"
+# recursive_limit = 1
+```
+
+### Phase 3: Polish & Automation
 
 1. Auto-run `aggregate` in `generate-web` if `channels.tsv` missing
-2. Add `--aggregate` flag to `backup` command
+2. Auto-run `aggregate` after `collection backup --save`
 3. Better error handling for malformed `channel.json`
 4. Documentation and examples
 
-### Phase 3: Advanced Features (Optional)
+### Phase 4: Advanced Features (Optional)
 
 1. Nested grouping visualization in web UI
 2. Cross-channel search/filtering
 3. Collection-level statistics
-4. Automatic submodule discovery and init
 
 ## Design Decisions
 
@@ -400,10 +541,11 @@ Generates `channel.json` at archive root with:
 - Folder name stored in `channels.tsv` for web UI navigation
 
 ### 2. Collection-Level Configuration
-**Decision**: No configuration file at collection level
-- Pure discovery-based approach
-- Each channel is independent with own `.annextube/config.toml`
-- Collection repo is just git with submodules
+**Decision** *(revised 2026-03-12)*: Collection gets `.annextube/config.toml` with `[collection]` section
+- Provides default init options, common config path, push remote
+- Enables `collection add` to inherit settings automatically
+- Each channel still has its own independent `.annextube/config.toml`
+- Previous "no config at collection level" was too limiting for practical workflows
 
 ### 3. Aggregated videos.tsv
 **Decision**: Not needed for reasonable collection sizes (<50 channels)
@@ -509,19 +651,18 @@ ukraine-tech-channels/
     └── assets/
 ```
 
-### Updating Collection
+### Updating Collection (with collection management layer)
 
 ```bash
-# Update all channels (parallel)
-git submodule foreach 'annextube backup'
+# Single command replaces manual loop
+annextube collection backup . --save --push
+```
 
-# Regenerate summaries
-git submodule foreach 'annextube export --channel-json'
-annextube aggregate .
+### Adding a New Channel (with collection management layer)
 
-# Commit updates
-git add .
-git commit -m "Update all channels $(date +%Y-%m-%d)"
+```bash
+# Single command replaces 5+ manual steps
+annextube collection add https://www.youtube.com/@NewChannel
 ```
 
 ### Adding Existing Archive
