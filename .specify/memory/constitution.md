@@ -1,32 +1,33 @@
 <!--
-Sync Impact Report - Constitution v1.4.0
+Sync Impact Report - Constitution v1.5.0
 ════════════════════════════════════════
-Version Change: 1.3.1 → 1.4.0
-Rationale: MINOR - Added Data Integrity & Authenticity principle
-           CRITICAL: No fake data injection in production code (tests only)
-           Ensures all archived data is authentic and traceable to source
-           Protects user trust and data archive validity
+Version Change: 1.4.0 → 1.5.0
+Rationale: MINOR - Added DataLad-Native Operations principle (XIII)
+           DataLad is now a core dependency
+           All repo/dataset operations MUST prefer datalad commands
+           over raw git/git-annex equivalents
 
 New Principles:
-  - XII. Data Integrity & Authenticity (NEW)
-    * No fake/synthetic/mock data in production code
-    * Mock data ONLY in tests, development fixtures, demo scripts
-    * All data traceable to original source with provenance metadata
-    * Code reviews MUST verify no fake data in production paths
-    * CI SHOULD detect hardcoded data arrays
+  - XIII. DataLad-Native Operations (NEW)
+    * Use `datalad create` instead of `git init; git annex init`
+    * Use `datalad save` instead of `git add + git commit`
+    * Use `datalad run` for reproducible command execution with provenance
+    * Multi-channel collections use DataLad subdatasets (not raw git submodules)
+    * Use `datalad push` for publishing, `datalad get/drop` for content management
+
+Structural Fix:
+  - XII. Data Integrity & Authenticity: Moved from under ## Governance
+    to under ## Core Principles (was incorrectly nested)
 
 Previous Changes:
+  v1.4.0:
+    - XII. Data Integrity & Authenticity (NEW)
   v1.3.1:
     - XI. Resource Efficiency → Added "Storage Simplicity" subsection
-      * Prefer file-based storage (TSV, JSON, YAML, Markdown) over databases
-      * No database engines required as dependencies (PostgreSQL, MySQL, MongoDB, etc.)
-      * Exception: Only when file-based storage cannot meet performance requirements (must justify)
-
-Previous Changes:
   v1.3.0:
     - II. Multi-Interface Exposure → Added CLI idempotency, exit codes, progress indication
-    - Added X. FOSS Principles (new principle) - licensing, privacy, transparency, offline capability
-    - Added XI. Resource Efficiency (new principle) - network, disk, memory, CPU, energy efficiency
+    - Added X. FOSS Principles (new principle)
+    - Added XI. Resource Efficiency (new principle)
   v1.2.0:
     - VIII. DRY Principle - No Code Duplication
     - Code Review Standards → Enhanced with duplication detection
@@ -37,15 +38,23 @@ Previous Changes:
     - Frontend Architecture subsection
 
 Templates Requiring Updates:
-  ⚠ .specify/templates/plan-template.md - pending validation (storage simplicity, FOSS compliance, resource limits)
-  ⚠ .specify/templates/spec-template.md - pending validation (storage approach, privacy requirements, offline scenarios)
-  ⚠ .specify/templates/tasks-template.md - pending validation (license checks, performance tasks)
+  ✅ .specify/templates/plan-template.md - no changes needed (DataLad is operational, not structural)
+  ✅ .specify/templates/spec-template.md - no changes needed
+  ✅ .specify/templates/tasks-template.md - no changes needed
+
+Specification Congruency Review:
+  ⚠ .specify/specs/multi-channel-collections.md - INCONGRUENCIES FOUND (see below)
+    1. Phase 1 workflow uses `git init` → should use `datalad create`
+    2. Phase 1 workflow uses `git submodule add` → should use `datalad create -d .`
+    3. Phase 1 workflow uses `git commit` → should use `datalad save`
+    4. "Complete Workflow Example" section uses raw git throughout
+    5. "Adding Existing Archive" uses `git submodule add` → should use DataLad
+    6. Phase 2 already uses DataLad correctly (consistent with new principle)
 
 Follow-up TODOs:
+  - Update multi-channel-collections.md workflow examples for DataLad
   - Add LICENSE file to repository
   - Configure license compatibility checking in CI
-  - Add resource profiling to performance tests
-  - Verify all new features use file-based storage (no database dependencies)
 -->
 
 # Annextube Constitution
@@ -295,6 +304,83 @@ All components MUST minimize resource consumption:
 
 **Rationale**: Efficient resource usage enables deployment on resource-constrained environments (edge devices, CI runners, shared hosting), reduces costs, and minimizes environmental impact. Responsible computing practices make the project accessible to more users. File-based storage eliminates infrastructure dependencies and aligns with version control workflows.
 
+### XII. Data Integrity & Authenticity
+
+All data produced by the application MUST be authentic and traceable to its source:
+
+**No Fake Data Injection**:
+- Application code MUST NEVER generate fake, synthetic, or mock data during normal operation
+- All data MUST originate from legitimate sources (APIs, user input, files)
+- Mock/fake data is ONLY permitted in:
+  - Unit tests (explicitly marked with test framework)
+  - Integration tests (test fixtures in test directories)
+  - Development fixtures (clearly separated, documented as non-production)
+  - Demo scripts (explicitly labeled as demonstration/mock data)
+
+**Data Source Transparency**:
+- Every data record MUST be traceable to its original source
+- Metadata MUST indicate data source (API endpoint, file path, user input)
+- Timestamps MUST reflect actual fetch/creation time (not fabricated)
+- Data provenance preserved through transformations
+
+**Production Data Requirements**:
+- Production code paths MUST NEVER contain hardcoded data records
+- Configuration defaults are allowed (but not data records)
+- Error examples in logs/docs are exempt (clearly marked as examples)
+- Seed data for databases MUST be documented as such
+
+**Verification & Detection**:
+- Code reviews MUST verify no fake data injection in production paths
+- Data validation MUST check for realistic values (detect obvious fakes)
+- Automated tests SHOULD detect fake data patterns (placeholder IDs, unrealistic timestamps)
+- CI SHOULD scan for hardcoded data arrays in production code
+
+**Exceptions** (must be explicitly documented):
+- Anonymized/sanitized real data (privacy protection)
+- Aggregated statistics (derived from real data)
+- Default values (not complete records)
+- Cached copies of real data (marked with cache metadata)
+
+**Rationale**: Users trust that archived data is authentic and unmodified. Injecting fake data destroys this trust, corrupts archives, and violates data integrity. Only tests may use fake data, and it must be clearly isolated from production code paths.
+
+### XIII. DataLad-Native Operations
+
+DataLad is a core dependency. All repository and dataset operations MUST prefer DataLad commands over raw git/git-annex equivalents:
+
+**Repository & Dataset Creation**:
+- Use `datalad create` instead of `git init; git annex init`
+- Use `datalad create -d . <name>` for subdatasets instead of manual `git submodule add`
+- Multi-channel collections MUST use DataLad subdatasets for composability
+
+**Recording Changes**:
+- Use `datalad save -m "message"` instead of `git add + git commit`
+- DataLad save handles both git and git-annex content transparently
+- Provenance metadata is recorded automatically
+
+**Reproducible Command Execution**:
+- Use `datalad run -m "message" <command>` for operations that produce outputs
+- Declare inputs/outputs via `--input` and `--output` flags for provenance tracking
+- Use `--explicit` flag when working with dirty trees and known I/O boundaries
+- Every data-producing operation SHOULD be recorded via `datalad run`
+
+**Dataset Publishing & Content Management**:
+- Use `datalad push` for publishing datasets to remotes
+- Use `datalad get` / `datalad drop` for managing large file content (video files, thumbnails)
+- Recursive operations (`-r`) for managing subdataset hierarchies
+
+**Documentation & User-Facing Examples**:
+- CLI documentation, quickstart guides, and workflow examples MUST use DataLad commands
+- Avoid showing raw git/git-annex equivalents as primary instructions
+- Exception: Troubleshooting sections may reference raw git commands for debugging
+
+**Exceptions** (raw git/git-annex allowed):
+- Low-level debugging and troubleshooting
+- Operations not yet supported by DataLad Python or CLI API
+- Performance-critical inner loops where DataLad overhead is measurable
+- Must be documented with rationale
+
+**Rationale**: DataLad provides provenance tracking, reproducibility guarantees, and composable dataset management that raw git/git-annex commands lack. Using DataLad consistently ensures every operation is recorded with full provenance, datasets are composable via subdatasets, and operations are reproducible across environments. This aligns with FOSS principles (Principle X) and Data Integrity (Principle XII) by making data lineage transparent and auditable.
+
 ## Quality Standards
 
 ### Testing Coverage
@@ -422,43 +508,4 @@ Constitution amendments REQUIRE:
 
 For agent-specific development instructions, refer to `.claude/CLAUDE.md` (or equivalent guidance files for other AI assistants). These files provide runtime context while the constitution remains tool-agnostic.
 
-### XII. Data Integrity & Authenticity
-
-All data produced by the application MUST be authentic and traceable to its source:
-
-**No Fake Data Injection**:
-- Application code MUST NEVER generate fake, synthetic, or mock data during normal operation
-- All data MUST originate from legitimate sources (APIs, user input, files)
-- Mock/fake data is ONLY permitted in:
-  - Unit tests (explicitly marked with test framework)
-  - Integration tests (test fixtures in test directories)
-  - Development fixtures (clearly separated, documented as non-production)
-  - Demo scripts (explicitly labeled as demonstration/mock data)
-
-**Data Source Transparency**:
-- Every data record MUST be traceable to its original source
-- Metadata MUST indicate data source (API endpoint, file path, user input)
-- Timestamps MUST reflect actual fetch/creation time (not fabricated)
-- Data provenance preserved through transformations
-
-**Production Data Requirements**:
-- Production code paths MUST NEVER contain hardcoded data records
-- Configuration defaults are allowed (but not data records)
-- Error examples in logs/docs are exempt (clearly marked as examples)
-- Seed data for databases MUST be documented as such
-
-**Verification & Detection**:
-- Code reviews MUST verify no fake data injection in production paths
-- Data validation MUST check for realistic values (detect obvious fakes)
-- Automated tests SHOULD detect fake data patterns (placeholder IDs, unrealistic timestamps)
-- CI SHOULD scan for hardcoded data arrays in production code
-
-**Exceptions** (must be explicitly documented):
-- Anonymized/sanitized real data (privacy protection)
-- Aggregated statistics (derived from real data)
-- Default values (not complete records)
-- Cached copies of real data (marked with cache metadata)
-
-**Rationale**: Users trust that archived data is authentic and unmodified. Injecting fake data destroys this trust, corrupts archives, and violates data integrity. Only tests may use fake data, and it must be clearly isolated from production code paths.
-
-**Version**: 1.4.0 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-01-24
+**Version**: 1.5.0 | **Ratified**: 2026-01-24 | **Last Amended**: 2026-03-16
