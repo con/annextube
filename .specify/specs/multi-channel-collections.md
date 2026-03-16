@@ -43,14 +43,14 @@ archive/
 ### Collection Repository (Aggregation Level)
 
 ```
-collection/                   # Git repository with submodules
+collection/                   # DataLad superdataset
 ├── .git/
-│   └── modules/              # Git submodule metadata
+│   └── modules/              # Git submodule metadata (managed by DataLad)
 │       ├── ch-apopyk/
 │       └── ch-datalad/
-├── .gitmodules               # Submodule configuration
+├── .gitmodules               # Submodule configuration (managed by DataLad)
 ├── channels.tsv              # Generated summary (discover from */channel.json)
-├── ch-apopyk/                # Git submodule → independent datalad dataset
+├── ch-apopyk/                # DataLad subdataset (independent dataset)
 │   ├── .annextube/
 │   │   └── config.toml       # Channel-specific config
 │   ├── .git/                 # Independent git repo
@@ -61,7 +61,7 @@ collection/                   # Git repository with submodules
 │   ├── playlists/
 │   ├── videos.tsv            # Channel-specific video summary
 │   └── playlists.tsv
-├── ch-datalad/               # Git submodule → independent datalad dataset
+├── ch-datalad/               # DataLad subdataset (independent dataset)
 │   ├── .annextube/
 │   │   └── config.toml
 │   ├── .git/
@@ -80,13 +80,14 @@ collection/                   # Git repository with submodules
 
 **Key Architecture Points**:
 
-1. **Each channel is an independent datalad dataset (git repository)**
+1. **Each channel is an independent DataLad dataset**
    - Has its own `.annextube/config.toml`
    - Has its own git history
    - Can be used standalone or as part of collection
+   - Created via `datalad create` (not raw `git init`)
 
-2. **Collection repo uses git submodules**
-   - Channels are added with `git submodule add`
+2. **Collection is a DataLad superdataset**
+   - Channels are added as subdatasets via `datalad create -d . <name>` or `datalad clone -d .`
    - No config needed at aggregation level
    - Discovery-based: scan for `*/channel.json` or `*/*/channel.json`
 
@@ -103,9 +104,9 @@ collection/                   # Git repository with submodules
 | Aspect | Benefit |
 |--------|---------|
 | **Independence** | Each channel is a complete, standalone archive |
-| **Git operations** | Can work on single channel, push/pull independently |
+| **DataLad operations** | Can work on single channel, push/pull independently |
 | **Disk navigation** | Clear separation by channel directory |
-| **Scalability** | Parallel updates (`git submodule foreach`) |
+| **Scalability** | Parallel updates (DataLad recursive operations) |
 | **Flexibility** | Users choose directory structure (flat, nested, grouped) |
 | **mykrok similarity** | Matches pattern with discovery-based approach |
 | **No migration needed** | Existing archives work unchanged, just add to collection |
@@ -251,22 +252,23 @@ video_path_pattern = "{year}/{month}/{date}_{sanitized_title}"
 
 **Creating a multi-channel collection**:
 ```bash
-# 1. Create collection repository
-mkdir my-collection && cd my-collection
-git init
+# 1. Create collection superdataset
+datalad create my-collection && cd my-collection
 
-# 2. Add channel archives as submodules
-mkdir ch-apopyk && cd ch-apopyk
+# 2. Add channel archives as subdatasets
+datalad create -d . ch-apopyk
+cd ch-apopyk
 annextube init https://www.youtube.com/@apopyk
 annextube backup
 cd ..
-git submodule add ./ch-apopyk ch-apopyk
+datalad save -m "Add @apopyk channel"
 
-mkdir ch-datalad && cd ch-datalad
+datalad create -d . ch-datalad
+cd ch-datalad
 annextube init https://www.youtube.com/@datalad
 annextube backup
 cd ..
-git submodule add ./ch-datalad ch-datalad
+datalad save -m "Add @datalad channel"
 
 # 3. Generate collection summary
 annextube aggregate .
@@ -278,8 +280,9 @@ annextube generate-web .
 
 **Updating a collection**:
 ```bash
-# Update all channels
-git submodule foreach 'annextube backup'
+# Update all channels (manual — or use `annextube collection backup`)
+datalad foreach-dataset 'annextube backup'
+datalad save -m "Regular update"
 
 # Regenerate collection summary
 annextube aggregate .
@@ -287,8 +290,8 @@ annextube aggregate .
 
 **Adding an existing channel archive**:
 ```bash
-# Add as submodule
-git submodule add https://github.com/user/ch-example
+# Clone as subdataset
+datalad clone -d . https://github.com/user/ch-example
 
 # Regenerate summary
 annextube aggregate .
@@ -402,7 +405,7 @@ Generates `channel.json` at archive root with:
 
 **Outcome**: Users can:
 1. Create individual channel archives independently
-2. Organize them in collection repository (git submodules)
+2. Organize them in a DataLad superdataset (as subdatasets)
 3. Run `annextube aggregate` to generate overview
 4. Web UI displays multi-channel collection properly
 
@@ -571,55 +574,46 @@ push_remote = "datalad-public"
 ### Scenario: Archive 3 Ukrainian Tech Channels
 
 ```bash
-# 1. Create collection repository
-mkdir ukraine-tech-channels
+# 1. Create collection superdataset
+datalad create ukraine-tech-channels
 cd ukraine-tech-channels
-git init
-echo "# Ukrainian Tech Channels Collection" > README.md
-git add README.md
-git commit -m "Initial commit"
 
-# 2. Create first channel archive
-mkdir ch-apopyk
+# 2. Create first channel subdataset
+datalad create -d . ch-apopyk
 cd ch-apopyk
 annextube init https://www.youtube.com/@apopyk
 annextube backup
 annextube export --channel-json  # Generate channel.json
 cd ..
+datalad save -m "Add Andriy Popyk channel"
 
-# 3. Add as git submodule
-git submodule add ./ch-apopyk ch-apopyk
-git commit -m "Add Andriy Popyk channel"
-
-# 4. Create second channel archive
-mkdir ch-dou
+# 3. Create second channel subdataset
+datalad create -d . ch-dou
 cd ch-dou
 annextube init https://www.youtube.com/@DOU_UKRAINE
 annextube backup
 annextube export --channel-json
 cd ..
-git submodule add ./ch-dou ch-dou
-git commit -m "Add DOU channel"
+datalad save -m "Add DOU channel"
 
-# 5. Create third channel archive
-mkdir ch-cursor
+# 4. Create third channel subdataset
+datalad create -d . ch-cursor
 cd ch-cursor
 annextube init https://www.youtube.com/@CursorEdu
 annextube backup
 annextube export --channel-json
 cd ..
-git submodule add ./ch-cursor ch-cursor
-git commit -m "Add Cursor Education channel"
+datalad save -m "Add Cursor Education channel"
 
-# 6. Generate collection summary
+# 5. Generate collection summary
 annextube aggregate .
 # Creates channels.tsv with 3 channels
 
-# 7. Generate web UI
+# 6. Generate web UI
 annextube generate-web .
 # Web UI detects channels.tsv and creates multi-channel interface
 
-# 8. Open in browser
+# 7. Open in browser
 firefox web/index.html
 # Shows: Overview page with 3 channels → Click channel → Videos grid
 ```
@@ -632,19 +626,19 @@ ukraine-tech-channels/
 ├── .gitmodules
 ├── README.md
 ├── channels.tsv              # Generated by aggregate
-├── ch-apopyk/                # Submodule
+├── ch-apopyk/                # DataLad subdataset
 │   ├── .annextube/
 │   ├── .git/
 │   ├── channel.json          # Generated by export --channel-json
 │   ├── videos/
 │   ├── videos.tsv
 │   └── playlists.tsv
-├── ch-dou/                   # Submodule
+├── ch-dou/                   # DataLad subdataset
 │   ├── .annextube/
 │   ├── .git/
 │   ├── channel.json
 │   └── ...
-├── ch-cursor/                # Submodule
+├── ch-cursor/                # DataLad subdataset
 │   └── ...
 └── web/                      # Generated web UI
     ├── index.html            # Entry point with channel overview
@@ -669,7 +663,7 @@ annextube collection add https://www.youtube.com/@NewChannel
 
 ```bash
 # Someone shared their archive on GitHub
-git submodule add https://github.com/user/ch-example
+datalad clone -d . https://github.com/user/ch-example
 annextube aggregate .  # Rediscover and regenerate channels.tsv
 ```
 
@@ -717,3 +711,4 @@ archive/
 - [mykrok structure](file:///home/yoh/proj/mykrok/mykrok-mine)
 - [annextube data-model.md](file:///home/yoh/proj/annextube/specs/001-youtube-backup/data-model.md)
 - [Constitution Principle XI: Storage Simplicity](file:///home/yoh/proj/annextube/.specify/memory/constitution.md)
+- [Constitution Principle XIII: DataLad-Native Operations](file:///home/yoh/proj/annextube/.specify/memory/constitution.md)
