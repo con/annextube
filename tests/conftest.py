@@ -10,8 +10,8 @@ manual git init + git annex init:
 import asyncio
 import subprocess
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 import pytest
 
