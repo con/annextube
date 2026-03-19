@@ -51,7 +51,7 @@ jobs:
 
           # Initialize archive with test channel (all files in git for GitHub Pages)
           uv run annextube init . https://www.youtube.com/@AnnexTubeTesting \
-            --comments 0 --limit 10 --all-to-git
+            --comments-depth 0 --limit 10 --all-to-git
 
           # Run backup to fetch data
           uv run annextube backup --output-dir .
