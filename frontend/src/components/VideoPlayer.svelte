@@ -4,6 +4,7 @@
   import { checkVideoAvailability } from '@/services/availability';
   import { dataLoader } from '@/services/data-loader';
   import { formatCaptionLang } from '@/utils/format';
+  import { getMkvErrorMessage } from '@/services/browser-detect';
 
   export let video: Video;
   export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
@@ -129,9 +130,13 @@
     }
   }
 
-  // Handle video loading error
+  // Handle video loading error.
+  //
+  // MKV playback strategy (progressive enhancement):
+  //   1. Native <video> — works in Chrome, Edge, Firefox 145+
+  //   2. Error message with actionable guidance + YouTube fallback
+  //      for browsers without native MKV support (Safari, Firefox <145)
   function handleVideoError(event: Event) {
-    videoError = true;
     const videoEl = event.target as HTMLVideoElement;
     const error = videoEl.error;
 
@@ -146,22 +151,37 @@
     });
 
     if (error) {
+      const isMkv = videoEl.currentSrc?.endsWith('.mkv') ||
+                     videoEl.src?.endsWith('.mkv');
+
       switch (error.code) {
         case error.MEDIA_ERR_ABORTED:
+          videoError = true;
           videoErrorMessage = 'Video loading was aborted. Please try again.';
           break;
         case error.MEDIA_ERR_NETWORK:
+          videoError = true;
           videoErrorMessage = 'Network error while loading video. Check your connection.';
           break;
         case error.MEDIA_ERR_DECODE:
+          videoError = true;
           videoErrorMessage = 'Video file is corrupted or in an unsupported format.';
           break;
         case error.MEDIA_ERR_SRC_NOT_SUPPORTED:
-          videoErrorMessage = 'Video file could not be loaded. You may need to run `git annex get` to download the file, or your browser may not support MKV format.';
+          if (isMkv) {
+            videoError = true;
+            videoErrorMessage = getMkvErrorMessage();
+          } else {
+            videoError = true;
+            videoErrorMessage = 'Video file could not be loaded. You may need to run `git annex get` to download the file.';
+          }
           break;
         default:
+          videoError = true;
           videoErrorMessage = 'An unknown error occurred while loading the video.';
       }
+    } else {
+      videoError = true;
     }
   }
 
@@ -283,14 +303,14 @@
         <!-- Local Video Player -->
         {#if videoError}
           <div class="video-error-message">
-            <p class="error-title">⚠️ Video Playback Error</p>
+            <p class="error-title">Video Playback Error</p>
             <p class="error-details">{videoErrorMessage}</p>
             <div class="error-actions">
               <button
-                class="error-button"
+                class="error-button primary"
                 on:click={() => switchTab('youtube')}
               >
-                Watch on YouTube instead
+                Watch on YouTube
               </button>
             </div>
           </div>
@@ -302,6 +322,7 @@
             crossorigin="anonymous"
             preload="metadata"
             poster={getThumbnailPath()}
+            src={getVideoPath()}
             on:error={handleVideoError}
             on:loadstart={handleVideoLoadStart}
             on:loadedmetadata={handleVideoLoadedMetadata}
@@ -309,13 +330,6 @@
             on:timeupdate={handleTimeUpdate}
             on:pause={() => onPause?.()}
           >
-            <!--
-              NOTE: No type attribute specified - let browser auto-detect format.
-              Specifying type="video/x-matroska" causes some browsers to reject the video
-              before even trying to load it (networkState: NETWORK_NO_SOURCE).
-              Without the type attribute, browsers will load the file and detect format.
-            -->
-            <source src={getVideoPath()} />
 
             {#each captionTracks as lang}
               <track
@@ -327,7 +341,7 @@
             {/each}
 
             <p class="video-fallback">
-              Your browser doesn't support HTML5 video or the MKV format.
+              Your browser doesn't support HTML5 video. Try Chrome or Firefox 145+.
               <button class="fallback-button" on:click={() => switchTab('youtube')}>
                 Watch on YouTube
               </button>
@@ -530,6 +544,12 @@
     font-weight: 500;
     cursor: pointer;
     transition: background 0.2s;
+  }
+
+  .error-button.primary {
+    padding: 12px 28px;
+    font-size: 16px;
+    font-weight: 600;
   }
 
   .error-button:hover,
