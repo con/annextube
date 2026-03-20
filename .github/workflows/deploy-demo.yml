@@ -45,9 +45,9 @@ jobs:
           which deno
           deno --version
 
-          # Create temp demo directory
-          mkdir -p demo-build
-          cd demo-build
+          # Build in /tmp so it survives branch switch + cleanup
+          DEMO_DIR=$(mktemp -d)
+          cd "$DEMO_DIR"
 
           # Initialize archive with test channel (all files in git for GitHub Pages)
           uv run annextube init . https://www.youtube.com/@AnnexTubeTesting \
@@ -59,8 +59,8 @@ jobs:
           # Generate web UI
           uv run annextube generate-web --output-dir .
 
-          # The web UI is now in ./web/
-          cd ..
+          # Stash path for deploy step
+          echo "DEMO_WEB_DIR=$DEMO_DIR/web" >> "$GITHUB_ENV"
 
       - name: Deploy to GitHub Pages
         run: |
@@ -71,8 +71,8 @@ jobs:
           git rm -rf . 2>/dev/null || true
           rm -rf * .gitignore .gitattributes 2>/dev/null || true
 
-          # Copy generated web UI
-          cp -r demo-build/web/* .
+          # Copy generated web UI from temp dir
+          cp -r "$DEMO_WEB_DIR"/* .
 
           # Add a README
           cat > README.md << 'EOF'
