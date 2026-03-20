@@ -45,9 +45,9 @@ jobs:
           which deno
           deno --version
 
-          # Build in /tmp so it survives branch switch + cleanup
-          DEMO_DIR=$(mktemp -d)
-          cd "$DEMO_DIR"
+          # Build in-tree (uv run needs pyproject.toml context)
+          mkdir -p demo-build
+          cd demo-build
 
           # Initialize archive with test channel (all files in git for GitHub Pages)
           uv run annextube init . https://www.youtube.com/@AnnexTubeTesting \
@@ -59,11 +59,11 @@ jobs:
           # Generate web UI
           uv run annextube generate-web --output-dir .
 
-          # Stash path for deploy step
-          echo "DEMO_WEB_DIR=$DEMO_DIR/web" >> "$GITHUB_ENV"
-
       - name: Deploy to GitHub Pages
         run: |
+          # Move web output to /tmp before branch switch destroys working tree
+          mv demo-build/web /tmp/demo-web
+
           # Switch to gh-pages branch (create if needed)
           git checkout gh-pages 2>/dev/null || git checkout --orphan gh-pages
 
@@ -71,8 +71,8 @@ jobs:
           git rm -rf . 2>/dev/null || true
           rm -rf * .gitignore .gitattributes 2>/dev/null || true
 
-          # Copy generated web UI from temp dir
-          cp -r "$DEMO_WEB_DIR"/* .
+          # Copy generated web UI from safe location
+          cp -r /tmp/demo-web/* .
 
           # Add a README
           cat > README.md << 'EOF'
