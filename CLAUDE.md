@@ -5,7 +5,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-24
 ## Active Technologies
 
 **Backend/Library**:
-- Python 3.10+ (001-youtube-backup)
+- Python 3.10+ (001-youtube-backup, 003-multi-channel-collections)
 - datasalad (git/git-annex operations)
 - yt-dlp (YouTube downloads and metadata extraction)
 - pytest (testing)
@@ -22,9 +22,10 @@ Auto-generated from all feature plans. Last updated: 2026-01-24
 **Storage**:
 - File-based (NO database dependencies)
 - git-annex repository (URL backend for video URLs)
-- TSV files for summary metadata (videos.tsv, playlists.tsv)
-- JSON for per-video metadata
+- TSV files for summary metadata (videos.tsv, playlists.tsv, channels.tsv)
+- JSON for per-video/channel metadata
 - VTT for captions
+- DataLad superdatasets for multi-channel collections (003)
 
 ## Project Structure
 
@@ -146,6 +147,7 @@ annextube generate-web --output-dir ~/my-archive
 
 ## Recent Changes
 
+- 003-multi-channel-collections: Multi-channel collection management (DataLad superdatasets, aggregate, collection add/backup)
 - 001-youtube-backup: Added Python 3.10+
 
 <!-- MANUAL ADDITIONS START -->
