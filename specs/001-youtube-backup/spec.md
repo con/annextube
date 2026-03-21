@@ -2,7 +2,7 @@
 
 **Feature Branch**: `001-youtube-backup`
 **Created**: 2026-01-24
-**Status**: Draft
+**Status**: Active
 **Input**: User description: "We would like to backup and keep updating such a backup (with new videos, closed captures, and comments) a collection of videos from YouTube. It might be an entire channel (with some filters on what to include or exclude) with all or selected set of playlists, or a specific playlist, like e.g. liked videos. What to backup (just videos or may be comments etc) should be configurable, and backup solution should be efficient in its detection on what has changed in a given source to fetch updates etc. Filters could also be dates based, or other metadata based (e.g. backup only content under specific licenses like creative commons etc). Underlying backup would be a datalad repository with git-annex, and git-annex would need to have files added via its support of downloads from youtube, so later videos could be re-fetched using yt-dlp (relaxed URL annex backend to be used for them). File tree hierarchy would be configurable to allow for customization, generally would allow to separate out all videos from playlists. Likely to have a folder per youtube video in most of the cases, to keep nearby all relevant to that video data, like closed captions in various languages, metadata dump, comments. git-annex will also have metadata for the video associated with the original file. Also potentially have a top level videos/ folder where to collect all folders per posted video, and then playlists/ folder where per playlist just assemble symlinks to the folders under videos/ so we could scale for the cases where the same video is present in multiple playlists. Specific attention to be payed to updates since comments and closed captions would be updating. Ideally we should plan also for workflows to update automatically generated closed captions for upload back into youtube having them fixed up, so it would not only be a backup but curation platform. Similarly to mykrok project, we would like to establish top level aggregates of summary metadata across videos and playlists which would have most important metadata propagated and summarized at the top level for efficient navigation of the collection. For the web frontend we want a purely client-based software like we did in mykrok with interfaces for filtering based on time range on when videos were released or updated, tags, authors or people associated with them. CLI and library interfaces should allow for logging control to troubleshoot, forcing updates for older dates/videos. Web frontend should provide convenient means to navigate the collection, search, see comments, and potentially integrate with external services to edit closed captions or pass them to LLMs for tune ups. Detailed documentation following the principle https://diataxis.fr/ and having demo served through gh-pages."
 
 ## Clarifications
@@ -240,7 +240,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 
 #### Web Interface
 
-- **FR-037**: System MUST generate client-side web interface (single HTML + assets) for browsing archive
+- **FR-037a**: System MUST generate client-side web interface (single HTML + assets) for browsing archive
 - **FR-038**: Web interface MUST work offline via file:// protocol without backend server
 - **FR-039**: Web interface MUST load metadata from TSV files on demand
 - **FR-040**: Web interface MUST support filtering videos by date range
@@ -249,7 +249,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-042a**: Search index MUST support searching within caption text (not just titles/descriptions), chunked by configurable duration windows (default: 60 seconds)
 - **FR-042b**: Search index MUST distinguish between curated (human-edited) and original (auto-generated) captions, prioritizing curated versions
 - **FR-043**: Web interface MUST display video thumbnails, metadata, and allow playback
-- **FR-044**: Web interface MUST display video comments with threading
+- **FR-044**: Web interface MUST display video comments (threading is best-effort; yt-dlp currently returns all comments as top-level with parent="root", see FR-008 note)
 - **FR-045**: Web interface MUST allow caption selection and display during playback
 - **FR-046**: Web interface MUST provide shareable URLs that preserve filter and view state
 - **FR-047**: Web interface MUST support exporting captions to external services for editing via standard export formats
@@ -499,8 +499,7 @@ Deep Learning State of the Art  Lex Fridman  2020-01-10  5261      100000  5000 
 
 ## In Development: Archive Sharing via GitHub Pages
 
-**Status**: Design & Implementation Phase
-**Branch**: `enh-gh_pages`
+**Status**: Design & Implementation Phase (work done on master)
 **Testing Repository**: https://github.com/con/annextubetesting
 
 ### Overview

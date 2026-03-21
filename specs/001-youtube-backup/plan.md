@@ -207,9 +207,8 @@ docs/                         # Hugo documentation site
 └── config.toml               # Hugo config with Congo theme
 
 .github/workflows/            # CI/CD
-├── test.yml                  # Run tests
-├── update-archive.yml        # Automated archive update workflow template
-└── publish-pages.yml         # Publish docs and demo to GitHub Pages
+├── test.yml                  # Run tests (tox-based Python 3.10-3.14 matrix)
+└── deploy-demo.yml           # Deploy demo to GitHub Pages (manual trigger only)
 ```
 
 **Structure Decision**: Web application structure (Option 2 variant) selected due to:

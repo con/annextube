@@ -4,7 +4,7 @@
 **Input**: Design documents from `/specs/001-youtube-backup/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
 
-**Tests**: NOT requested in specification - tasks below focus on implementation only (no test tasks included)
+**Tests**: Tests are written alongside implementation per Constitution III (TDD). Test tasks are implicit in each implementation task rather than tracked separately. Backend tests live in `tests/`, frontend tests in `frontend/tests/`.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -380,7 +380,7 @@ annextube backup
 
 ---
 
-## Phase 9: YouTube API Enhanced Metadata (Optional Enhancement)
+## Phase 14: YouTube API Enhanced Metadata (Optional Enhancement)
 
 **Goal**: Enable accurate license detection and enhanced metadata extraction via YouTube Data API v3
 
@@ -399,7 +399,7 @@ annextube backup
 
 ---
 
-## Phase 10: Test Infrastructure Improvement
+## Phase 15: Test Infrastructure Improvement
 
 **Goal**: Create controlled test environment to eliminate dependency on external YouTube channels
 
@@ -536,7 +536,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 144 | **Completed**: 103 | **Remaining**: 38 | **Obsolete**: 3
+**Total Tasks**: 140 | **Completed**: 104 | **Remaining**: 36 | **Obsolete**: 3
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
@@ -551,7 +551,7 @@ With multiple developers:
 - Phase 10 (US8 - Public Hosting): 2/5
 - Phase 11 (CI/CD): 0/7
 - Phase 12 (Documentation): 0/7
-- Phase 13 (Polish): 10/17
+- Phase 13 (Polish): 12/17
 - Phase 14 (API Enhancement): 7/8
 - Phase 15 (Test Infrastructure): 7/7
 
