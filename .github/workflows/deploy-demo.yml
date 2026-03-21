@@ -1,12 +1,16 @@
 name: Deploy Demo to GitHub Pages
 
 on:
-  push:
-    branches: [ master ]
-    paths:
-      - 'annextube/**'
-      - 'frontend/**'
-      - '.github/workflows/deploy-demo.yml'
+  # Auto-trigger disabled: YouTube blocks datacenter IPs (bot detection).
+  # Use tools/deploy-demo.sh locally, or workflow_dispatch once a
+  # self-hosted runner with cookies is available.
+  #
+  # push:
+  #   branches: [ master ]
+  #   paths:
+  #     - 'annextube/**'
+  #     - 'frontend/**'
+  #     - '.github/workflows/deploy-demo.yml'
   workflow_dispatch:
 
 permissions:
