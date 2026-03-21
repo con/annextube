@@ -188,11 +188,16 @@ Already implemented:
 
 ### Phase 2: Web UI Multi-Channel Mode (P1)
 
-Remaining work:
-- Wire `ChannelList` into `App.svelte` routing for multi-channel mode
-- Load per-channel `videos.tsv` on channel selection (`{channel_dir}/videos/videos.tsv`)
-- Breadcrumb navigation: Home > Channel Name > Video
+Already implemented:
+- `ChannelList` wired into `App.svelte` routing (multi-channel detection, channel overview, drill-down)
+- Per-channel `videos.tsv` loading on channel selection (`loadChannelVideos()`, `loadChannelPlaylists()`)
+- Back-to-channels navigation ("← Back to channels" button)
 - Backward compatibility: single-channel mode unchanged when `channels.tsv` absent
+
+Remaining work:
+- Upgrade "← Back to channels" button to proper breadcrumb navigation (Home > Channel > Video)
+- Unit tests for multi-channel data loading
+- E2E test for multi-channel navigation
 
 ### Phase 3: Collection Management (P2)
 

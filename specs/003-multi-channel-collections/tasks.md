@@ -40,10 +40,10 @@
 
 ### Implementation
 
-- [ ] T008 [US2] Wire ChannelList into App.svelte routing for multi-channel mode in frontend/src/App.svelte (show channel overview when channels.tsv detected)
-- [ ] T009 [US2] Implement per-channel video loading in frontend/src/services/data-loader.ts (load `{channel_dir}/videos/videos.tsv` on channel selection)
-- [ ] T010 [US2] Add breadcrumb navigation in frontend/src/App.svelte (Home > Channel Name > Video for multi-channel mode)
-- [ ] T011 [US2] Verify backward compatibility: single-channel mode unchanged when channels.tsv absent in frontend/src/App.svelte
+- [X] T008 [US2] Wire ChannelList into App.svelte routing for multi-channel mode in frontend/src/App.svelte (show channel overview when channels.tsv detected)
+- [X] T009 [US2] Implement per-channel video loading in frontend/src/services/data-loader.ts (load `{channel_dir}/videos/videos.tsv` on channel selection)
+- [ ] T010 [US2] Add breadcrumb navigation in frontend/src/App.svelte (currently "← Back to channels" button; upgrade to Home > Channel > Video breadcrumb)
+- [X] T011 [US2] Verify backward compatibility: single-channel mode unchanged when channels.tsv absent in frontend/src/App.svelte
 - [ ] T012 [P] [US2] Add unit tests for multi-channel data loading in frontend/tests/unit/channel-list.test.ts
 - [ ] T013 [P] [US2] Add E2E test for multi-channel navigation in frontend/tests/e2e/multi-channel.spec.ts
 
@@ -158,7 +158,7 @@
 ### User Story Dependencies
 
 - **US1 (Aggregate - P1)**: DONE — no work needed
-- **US2 (Browse - P1)**: Can start immediately — frontend-only work
+- **US2 (Browse - P1)**: Mostly done — routing, loading, backward compat implemented; breadcrumb + tests remain
 - **US3 (Add Channel - P2)**: Can start immediately — backend-only work
 - **US4 (Batch Backup - P2)**: Depends on US3 (needs collection service from T016)
 - **US5 (Config - P2)**: Part of US3 phase (T014-T015 feed into T016)
@@ -197,11 +197,11 @@
 
 ## Task Summary
 
-**Total Tasks**: 46 | **Completed**: 7 | **Remaining**: 39
+**Total Tasks**: 46 | **Completed**: 10 | **Remaining**: 36
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Discovery/Aggregation): 7/7 (DONE)
-- Phase 2 (Web UI Multi-Channel): 0/6
+- Phase 2 (Web UI Multi-Channel): 3/6 (routing, loading, compat done; breadcrumb + tests remain)
 - Phase 3 (Collection Add): 0/10
 - Phase 4 (Batch Backup): 0/11
 - Phase 5 (External Import): 0/3

@@ -144,9 +144,7 @@ Run 'annextube aggregate --force' to update channels.tsv.
 
 **Exit Codes**:
 - `0`: Success (channel created and backed up)
-- `1`: Directory already exists
-- `3`: Network error during backup
-- `6`: Collection config error
+- `1`: Error (directory conflict, network failure, config error — reason in stderr)
 
 **Edge Cases**:
 - Directory name conflict: fails with clear error, suggests `--name` override
