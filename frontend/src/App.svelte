@@ -171,10 +171,20 @@
 <main>
   <header>
     <div class="header-content">
-      {#if selectedChannel}
-        <button class="back-button" on:click={handleBackToChannels}>
-          ← Back to channels
-        </button>
+      {#if isMultiChannel && (selectedChannel || selectedVideo)}
+        <nav class="breadcrumb" aria-label="Breadcrumb">
+          <button on:click={handleBackToChannels}>Channels</button>
+          {#if selectedChannel}
+            <span class="separator">/</span>
+            {#if selectedVideo}
+              <button on:click={handleBackToList}>{selectedChannel.title}</button>
+              <span class="separator">/</span>
+              <span class="current">{selectedVideo.title}</span>
+            {:else}
+              <span class="current">{selectedChannel.title}</span>
+            {/if}
+          {/if}
+        </nav>
       {/if}
       <div class="title-row">
         <h1><a href="https://github.com/con/annextube" target="_blank" rel="noopener noreferrer" class="app-link">AnnexTube</a> <span class="version">v{appVersion}</span></h1>
@@ -257,19 +267,38 @@
     padding: 20px 32px;
   }
 
-  .back-button {
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 14px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .breadcrumb button {
     background: none;
     border: none;
     color: #065fd4;
-    font-size: 14px;
     cursor: pointer;
-    padding: 4px 0;
-    margin-bottom: 8px;
-    display: inline-block;
+    padding: 0;
+    font-size: inherit;
   }
 
-  .back-button:hover {
+  .breadcrumb button:hover {
     text-decoration: underline;
+  }
+
+  .breadcrumb .separator {
+    color: #909090;
+  }
+
+  .breadcrumb .current {
+    color: #606060;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 400px;
   }
 
   .title-row {

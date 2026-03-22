@@ -42,7 +42,7 @@
 
 - [X] T008 [US2] Wire ChannelList into App.svelte routing for multi-channel mode in frontend/src/App.svelte (show channel overview when channels.tsv detected)
 - [X] T009 [US2] Implement per-channel video loading in frontend/src/services/data-loader.ts (load `{channel_dir}/videos/videos.tsv` on channel selection)
-- [ ] T010 [US2] Add breadcrumb navigation in frontend/src/App.svelte (currently "← Back to channels" button; upgrade to Home > Channel > Video breadcrumb)
+- [X] T010 [US2] Add breadcrumb navigation in frontend/src/App.svelte (Channels / Channel Name / Video Title breadcrumb)
 - [X] T011 [US2] Verify backward compatibility: single-channel mode unchanged when channels.tsv absent in frontend/src/App.svelte
 - [ ] T012 [P] [US2] Add unit tests for multi-channel data loading in frontend/tests/unit/channel-list.test.ts
 - [ ] T013 [P] [US2] Add E2E test for multi-channel navigation in frontend/tests/e2e/multi-channel.spec.ts
@@ -59,15 +59,15 @@
 
 ### Implementation
 
-- [ ] T014 [US5] Add `CollectionConfig` dataclass to annextube/lib/config.py (`[collection]` section: comments_depth, curation, search, include_playlists, include_podcasts, common_config, push_remote)
-- [ ] T015 [US5] Implement `[collection]` section parsing in annextube/lib/config.py (load from `.annextube/config.toml` at collection root)
-- [ ] T016 [US3] Create collection service in annextube/services/collection.py (`add_channel()`: extract handle, create subdataset, init, apply defaults, embed common config, backup)
-- [ ] T017 [US3] Implement handle extraction from YouTube URL in annextube/services/collection.py (parse @handle from various URL formats)
-- [ ] T018 [US3] Implement common config embedding in annextube/services/collection.py (copy/merge common config file into channel config)
-- [ ] T019 [US3] Create `collection` command group in annextube/cli/collection.py (Click group with `add` subcommand)
-- [ ] T020 [US3] Implement `collection add` CLI command in annextube/cli/collection.py (options: --name, --no-backup, --output-dir per cli-contract.md)
-- [ ] T021 [US3] Register `collection` command group in annextube/cli/__main__.py
-- [ ] T022 [P] [US3] Add unit tests for collection service in tests/unit/test_collection_service.py (handle extraction, config merging)
+- [X] T014 [US5] Add `CollectionConfig` dataclass to annextube/lib/config.py (`[collection]` section: comments_depth, curation, search, include_playlists, include_podcasts, common_config, push_remote)
+- [X] T015 [US5] Implement `[collection]` section parsing in annextube/lib/config.py (load from `.annextube/config.toml` at collection root)
+- [X] T016 [US3] Create collection service in annextube/services/collection.py (`add_channel()`: extract handle, create subdataset, init, apply defaults, embed common config, backup)
+- [X] T017 [US3] Implement handle extraction from YouTube URL in annextube/services/collection.py (parse @handle from various URL formats)
+- [X] T018 [US3] Implement common config embedding in annextube/services/collection.py (copy/merge common config file into channel config)
+- [X] T019 [US3] Create `collection` command group in annextube/cli/collection.py (Click group with `add` subcommand)
+- [X] T020 [US3] Implement `collection add` CLI command in annextube/cli/collection.py (options: --name, --no-backup, --output-dir per cli-contract.md)
+- [X] T021 [US3] Register `collection` command group in annextube/cli/__main__.py
+- [X] T022 [P] [US3] Add unit tests for collection service in tests/unit/test_collection_service.py (handle extraction, config merging)
 - [ ] T023 [P] [US3] Add contract tests for `collection add` in tests/contract/test_collection_cli.py
 
 **Checkpoint**: Can add channels to a collection with a single command; collection defaults are inherited
@@ -82,15 +82,15 @@
 
 ### Implementation
 
-- [ ] T024 [US4] Implement `backup_all()` in annextube/services/collection.py (discover subdatasets, iterate channels, run backup per channel, accumulate results)
-- [ ] T025 [US4] Implement `discover_subdatasets()` in annextube/services/collection.py (find directories with `.annextube/config.toml`)
-- [ ] T026 [US4] Implement continue-on-failure logic in annextube/services/collection.py (catch per-channel errors, log, continue)
-- [ ] T027 [US4] Implement batch result reporting in annextube/services/collection.py (per-channel success/failure summary with reasons)
-- [ ] T028 [US4] Add `--parallel N` support in annextube/services/collection.py (concurrent channel processing with configurable limit)
-- [ ] T029 [US4] Implement `collection backup` CLI command in annextube/cli/collection.py (options: --parallel, --save, --push per cli-contract.md)
-- [ ] T030 [US4] Implement `--save` flag: run aggregate + datalad save at collection level in annextube/cli/collection.py
-- [ ] T031 [US4] Implement `--push` flag: datalad push -r to configured remote in annextube/cli/collection.py
-- [ ] T032 [P] [US4] Add unit tests for batch backup in tests/unit/test_collection_service.py (error accumulation, continue-on-failure)
+- [X] T024 [US4] Implement `backup_all()` in annextube/services/collection.py (discover subdatasets, iterate channels, run backup per channel, accumulate results)
+- [X] T025 [US4] Implement `discover_subdatasets()` in annextube/services/collection.py (find directories with `.annextube/config.toml`)
+- [X] T026 [US4] Implement continue-on-failure logic in annextube/services/collection.py (catch per-channel errors, log, continue)
+- [X] T027 [US4] Implement batch result reporting in annextube/services/collection.py (per-channel success/failure summary with reasons)
+- [X] T028 [US4] Add `--parallel N` support in annextube/services/collection.py (concurrent channel processing with configurable limit)
+- [X] T029 [US4] Implement `collection backup` CLI command in annextube/cli/collection.py (options: --parallel, --save, --push per cli-contract.md)
+- [X] T030 [US4] Implement `--save` flag: run aggregate + datalad save at collection level in annextube/cli/collection.py
+- [X] T031 [US4] Implement `--push` flag: datalad push -r to configured remote in annextube/cli/collection.py
+- [X] T032 [P] [US4] Add unit tests for batch backup in tests/unit/test_collection_service.py (error accumulation, continue-on-failure)
 - [ ] T033 [P] [US4] Add contract tests for `collection backup` in tests/contract/test_collection_cli.py
 - [ ] T034 [P] [US4] Add integration test for full pipeline in tests/integration/test_collection.py (add -> backup -> aggregate -> generate-web)
 
@@ -197,13 +197,13 @@
 
 ## Task Summary
 
-**Total Tasks**: 46 | **Completed**: 10 | **Remaining**: 36
+**Total Tasks**: 46 | **Completed**: 29 | **Remaining**: 17
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Discovery/Aggregation): 7/7 (DONE)
-- Phase 2 (Web UI Multi-Channel): 3/6 (routing, loading, compat done; breadcrumb + tests remain)
-- Phase 3 (Collection Add): 0/10
-- Phase 4 (Batch Backup): 0/11
+- Phase 2 (Web UI Multi-Channel): 4/6 (breadcrumb done; frontend tests remain)
+- Phase 3 (Collection Add): 9/10 (contract tests remain)
+- Phase 4 (Batch Backup): 9/11 (contract + integration tests remain)
 - Phase 5 (External Import): 0/3
 - Phase 6 (Polish): 0/5
 - Phase 7 (Cross-Channel Search): 0/4

@@ -218,6 +218,37 @@ class UserConfig:
 
 
 @dataclass
+class CollectionConfig:
+    """Configuration for multi-channel collection management.
+
+    Parsed from the [collection] section in .annextube/config.toml at the
+    collection root.  These defaults are applied when adding new channels
+    via ``annextube collection add``.
+    """
+
+    comments_depth: int | None = 0
+    curation: bool = True
+    search: bool = False
+    include_playlists: str = "none"
+    include_podcasts: str = "none"
+    common_config: str | None = None
+    push_remote: str | None = None
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "CollectionConfig":
+        """Create CollectionConfig from a dictionary (the [collection] table)."""
+        return cls(
+            comments_depth=data.get("comments_depth", 0),
+            curation=data.get("curation", True),
+            search=data.get("search", False),
+            include_playlists=data.get("include_playlists", "none"),
+            include_podcasts=data.get("include_podcasts", "none"),
+            common_config=data.get("common_config"),
+            push_remote=data.get("push_remote"),
+        )
+
+
+@dataclass
 class Config:
     """Main configuration for annextube."""
 
@@ -232,6 +263,9 @@ class Config:
     backup: BackupConfig = field(default_factory=BackupConfig)
     curation: CurationConfig = field(default_factory=CurationConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+
+    # Collection-level settings (only present at collection root)
+    collection: CollectionConfig | None = None
 
     # Convenience properties for backward compatibility
     @property
@@ -340,6 +374,14 @@ class Config:
             enabled=search_data.get("enabled", False),
         )
 
+        # Optional [collection] section (only at collection root)
+        collection_data = data.get("collection")
+        collection = (
+            CollectionConfig.from_dict(collection_data)
+            if collection_data is not None
+            else None
+        )
+
         return cls(
             sources=sources,
             components=components,
@@ -347,6 +389,7 @@ class Config:
             organization=organization,
             curation=curation,
             search=search,
+            collection=collection,
         )
 
 
@@ -485,6 +528,33 @@ def load_config(config_path: Path | None = None, repo_path: Path | None = None) 
 
     logger.info(f"Loaded config: archive={config_path}, user={get_user_config_path()}")
     return config
+
+
+def load_collection_config(collection_dir: Path) -> CollectionConfig | None:
+    """Load the [collection] section from a collection's config.toml.
+
+    Args:
+        collection_dir: Path to the collection root directory
+
+    Returns:
+        CollectionConfig if [collection] section exists, None otherwise
+    """
+    config_path = collection_dir / ".annextube" / "config.toml"
+    if not config_path.exists():
+        return None
+
+    try:
+        with open(config_path, "rb") as f:
+            data = tomllib.load(f)
+    except Exception as e:
+        logger.warning(f"Failed to parse collection config {config_path}: {e}")
+        return None
+
+    collection_data = data.get("collection")
+    if collection_data is None:
+        return None
+
+    return CollectionConfig.from_dict(collection_data)
 
 
 def generate_config_template(urls: list[str] | None = None, enable_videos: bool = True,
