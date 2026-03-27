@@ -167,6 +167,7 @@ markers = [
     "integration: Integration tests",
     "contract: Contract tests for API boundaries",
     "network: Tests that require network access and may use real APIs",
+    "e2e: End-to-end tests (may require network, cookies, or browser)",
 ]
 
 [tool.coverage.run]
