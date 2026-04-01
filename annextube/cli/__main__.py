@@ -16,9 +16,9 @@ if sys.stderr.encoding != 'utf-8':
 
 from annextube.cli.aggregate import aggregate
 from annextube.cli.backup import backup
-from annextube.cli.collection import collection
 from annextube.cli.build_search_index import build_search_index
 from annextube.cli.check import check
+from annextube.cli.collection import collection
 from annextube.cli.curate_captions import curate_captions
 from annextube.cli.embed_config import embed_config
 from annextube.cli.export import export
