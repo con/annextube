@@ -17,6 +17,7 @@ export interface SearchResult {
   video: Video;
   score: number;       // Relevance score from fuse.js (lower = better)
   matches: string[];   // Which fields matched
+  channelDir?: string; // Channel directory for cross-channel attribution
 }
 
 export class SearchService {
@@ -62,6 +63,7 @@ export class SearchService {
       video: r.item,
       score: r.score || 0,
       matches: r.matches?.map((m) => m.key || '') || [],
+      channelDir: (r.item as Video & { channel_dir?: string }).channel_dir,
     }));
 
     // Apply limit if specified

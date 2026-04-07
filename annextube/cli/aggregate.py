@@ -171,6 +171,11 @@ def aggregate(directory: Path, depth: int, output: Path | None, force: bool):
 
     # Parse each channel and compute stats
     channels_data = []
+    skipped: list[tuple[Path, str]] = []
+
+    def _skip(rel_dir: Path, reason: str) -> None:
+        logger.warning(f"Skipping {rel_dir}: {reason}")
+        skipped.append((rel_dir, reason))
 
     for rel_channel_dir, channel_json_path in discovered:
         logger.debug(f"Processing {rel_channel_dir}")
@@ -179,7 +184,18 @@ def aggregate(directory: Path, depth: int, output: Path | None, force: bool):
             # Load channel.json
             with open(channel_json_path, encoding='utf-8') as f:
                 channel_data = json.load(f)
+        except json.JSONDecodeError as e:
+            _skip(rel_channel_dir, f"malformed JSON: {e}")
+            continue
+        except OSError as e:
+            _skip(rel_channel_dir, f"cannot read file: {e}")
+            continue
 
+        if not isinstance(channel_data, dict):
+            _skip(rel_channel_dir, f"expected JSON object, got {type(channel_data).__name__}")
+            continue
+
+        try:
             # Compute archive stats
             channel_dir_abs = root_dir / rel_channel_dir
             archive_stats = compute_archive_stats(channel_dir_abs)
@@ -203,7 +219,7 @@ def aggregate(directory: Path, depth: int, output: Path | None, force: bool):
             channels_data.append(row)
 
         except Exception as e:
-            logger.error(f"Error processing {rel_channel_dir}: {e}")
+            _skip(rel_channel_dir, str(e))
             continue
 
     if not channels_data:
@@ -237,6 +253,13 @@ def aggregate(directory: Path, depth: int, output: Path | None, force: bool):
         writer.writerows(channels_data)
 
     click.echo(f"Generated {output_file} with {len(channels_data)} channel(s)")
+
+    # Report skipped channels
+    if skipped:
+        click.echo()
+        click.echo(f"Warning: {len(skipped)} channel(s) skipped due to errors:", err=True)
+        for rel_dir, reason in skipped:
+            click.echo(f"  - {rel_dir}: {reason}", err=True)
 
     # Display summary
     click.echo()
