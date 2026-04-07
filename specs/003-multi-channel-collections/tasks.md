@@ -4,7 +4,7 @@
 **Input**: Design documents from `/specs/003-multi-channel-collections/`
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/
 
-**Tests**: Tests are written alongside implementation per Constitution III (TDD). Test tasks are implicit in each implementation task rather than tracked separately.
+**Tests**: Constitution III mandates TDD. Test tasks for Phases 2-4 are tracked explicitly below (T012, T013, T023, T033, T034). These MUST be completed before starting Phase 5+.
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
@@ -47,7 +47,7 @@
 - [ ] T012 [P] [US2] Add unit tests for multi-channel data loading in frontend/tests/unit/channel-list.test.ts
 - [ ] T013 [P] [US2] Add E2E test for multi-channel navigation in frontend/tests/e2e/multi-channel.spec.ts
 
-**Checkpoint**: Web UI displays channel overview for collections and falls back to single-channel mode
+**Checkpoint**: Web UI displays channel overview for collections and falls back to single-channel mode. **GATE**: T012 and T013 must pass before Phase 3 work continues.
 
 ---
 
@@ -69,8 +69,9 @@
 - [X] T021 [US3] Register `collection` command group in annextube/cli/__main__.py
 - [X] T022 [P] [US3] Add unit tests for collection service in tests/unit/test_collection_service.py (handle extraction, config merging)
 - [ ] T023 [P] [US3] Add contract tests for `collection add` in tests/contract/test_collection_cli.py
+- [ ] T023a [P] [US5] Add unit test for per-channel config precedence over collection defaults in tests/unit/test_collection_service.py (FR-022: set collection default, override at channel level, verify channel wins)
 
-**Checkpoint**: Can add channels to a collection with a single command; collection defaults are inherited
+**Checkpoint**: Can add channels to a collection with a single command; collection defaults are inherited. **GATE**: T023 and T023a must pass before Phase 4 work continues.
 
 ---
 
@@ -94,7 +95,7 @@
 - [ ] T033 [P] [US4] Add contract tests for `collection backup` in tests/contract/test_collection_cli.py
 - [ ] T034 [P] [US4] Add integration test for full pipeline in tests/integration/test_collection.py (add -> backup -> aggregate -> generate-web)
 
-**Checkpoint**: Can batch-update all channels; partial failures don't stop the run; summary report shows status
+**Checkpoint**: Can batch-update all channels; partial failures don't stop the run; summary report shows status. **GATE**: T033 and T034 must pass before Phase 5 work continues.
 
 ---
 
@@ -197,12 +198,12 @@
 
 ## Task Summary
 
-**Total Tasks**: 46 | **Completed**: 29 | **Remaining**: 17
+**Total Tasks**: 47 | **Completed**: 29 | **Remaining**: 18
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Discovery/Aggregation): 7/7 (DONE)
 - Phase 2 (Web UI Multi-Channel): 4/6 (breadcrumb done; frontend tests remain)
-- Phase 3 (Collection Add): 9/10 (contract tests remain)
+- Phase 3 (Collection Add): 9/11 (contract tests + FR-022 precedence test remain)
 - Phase 4 (Batch Backup): 9/11 (contract + integration tests remain)
 - Phase 5 (External Import): 0/3
 - Phase 6 (Polish): 0/5

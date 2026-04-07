@@ -199,22 +199,31 @@ Remaining work:
 - Unit tests for multi-channel data loading
 - E2E test for multi-channel navigation
 
-### Phase 3: Collection Management (P2)
+### Phase 3: Collection Management — Add Channel (P2)
 
 New commands:
 - `annextube collection add <url>` -- create DataLad subdataset, init, backup
-- `annextube collection backup` -- batch update all channels with error reporting
 - Collection-level config: `[collection]` section in `.annextube/config.toml`
 - Config inheritance: collection defaults applied to new channels via `collection add`
 
-### Phase 4: Polish & Automation (P2)
+### Phase 4: Collection Management — Batch Backup (P2)
+
+- `annextube collection backup` -- batch update all channels with error reporting
+- Sequential by default, opt-in `--parallel N`
+- `--save` and `--push` flags for collection-level operations
+
+### Phase 5: External Archive Import (P3)
+
+- Add existing external archives via `datalad clone -d .`
+- Document import workflow
+
+### Phase 6: Polish & Automation (P2)
 
 - Auto-run `aggregate` in `generate-web` if `channels.tsv` missing
 - Auto-run `aggregate` after `collection backup --save`
 - Better error handling for malformed `channel.json`
 
-### Phase 5: Advanced (P3-P4)
+### Phase 7: Cross-Channel Search (P4)
 
-- Add existing external archives via `datalad clone -d .`
 - Cross-channel search and filtering in web UI
 - Nested grouping visualization
