@@ -68,6 +68,7 @@ export interface Video {
   fetched_at: string; // ISO 8601 datetime
   updated_at: string; // ISO 8601 datetime
   related_resources?: RelatedResource[];
+  channel_dir?: string; // Channel directory for cross-channel search attribution
 }
 
 export interface Playlist {

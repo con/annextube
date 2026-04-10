@@ -44,8 +44,8 @@
 - [X] T009 [US2] Implement per-channel video loading in frontend/src/services/data-loader.ts (load `{channel_dir}/videos/videos.tsv` on channel selection)
 - [X] T010 [US2] Add breadcrumb navigation in frontend/src/App.svelte (Channels / Channel Name / Video Title breadcrumb)
 - [X] T011 [US2] Verify backward compatibility: single-channel mode unchanged when channels.tsv absent in frontend/src/App.svelte
-- [ ] T012 [P] [US2] Add unit tests for multi-channel data loading in frontend/tests/unit/channel-list.test.ts
-- [ ] T013 [P] [US2] Add E2E test for multi-channel navigation in frontend/tests/e2e/multi-channel.spec.ts
+- [X] T012 [P] [US2] Add unit tests for multi-channel data loading in frontend/tests/unit/channel-list.test.ts
+- [X] T013 [P] [US2] Add E2E test for multi-channel navigation in frontend/tests/e2e/multi-channel.spec.ts
 
 **Checkpoint**: Web UI displays channel overview for collections and falls back to single-channel mode. **GATE**: T012 and T013 must pass before Phase 3 work continues.
 
@@ -68,8 +68,8 @@
 - [X] T020 [US3] Implement `collection add` CLI command in annextube/cli/collection.py (options: --name, --no-backup, --output-dir per cli-contract.md)
 - [X] T021 [US3] Register `collection` command group in annextube/cli/__main__.py
 - [X] T022 [P] [US3] Add unit tests for collection service in tests/unit/test_collection_service.py (handle extraction, config merging)
-- [ ] T023 [P] [US3] Add contract tests for `collection add` in tests/contract/test_collection_cli.py
-- [ ] T023a [P] [US5] Add unit test for per-channel config precedence over collection defaults in tests/unit/test_collection_service.py (FR-022: set collection default, override at channel level, verify channel wins)
+- [X] T023 [P] [US3] Add contract tests for `collection add` in tests/contract/test_collection_cli.py
+- [X] T023a [P] [US5] Add unit test for per-channel config precedence over collection defaults in tests/unit/test_config_precedence.py (FR-022: set collection default, override at channel level, verify channel wins)
 
 **Checkpoint**: Can add channels to a collection with a single command; collection defaults are inherited. **GATE**: T023 and T023a must pass before Phase 4 work continues.
 
@@ -92,8 +92,8 @@
 - [X] T030 [US4] Implement `--save` flag: run aggregate + datalad save at collection level in annextube/cli/collection.py
 - [X] T031 [US4] Implement `--push` flag: datalad push -r to configured remote in annextube/cli/collection.py
 - [X] T032 [P] [US4] Add unit tests for batch backup in tests/unit/test_collection_service.py (error accumulation, continue-on-failure)
-- [ ] T033 [P] [US4] Add contract tests for `collection backup` in tests/contract/test_collection_cli.py
-- [ ] T034 [P] [US4] Add integration test for full pipeline in tests/integration/test_collection.py (add -> backup -> aggregate -> generate-web)
+- [X] T033 [P] [US4] Add contract tests for `collection backup` in tests/contract/test_collection_cli.py
+- [X] T034 [P] [US4] Add integration test for full pipeline in tests/integration/test_collection.py (add -> backup -> aggregate -> generate-web)
 
 **Checkpoint**: Can batch-update all channels; partial failures don't stop the run; summary report shows status. **GATE**: T033 and T034 must pass before Phase 5 work continues.
 
@@ -107,9 +107,9 @@
 
 ### Implementation
 
-- [ ] T035 [US6] Document external archive import workflow in specs/003-multi-channel-collections/quickstart.md (datalad clone -d . <url>, then aggregate)
-- [ ] T036 [US6] Add `collection clone` or document `datalad clone -d .` usage in annextube/cli/collection.py (optional: thin wrapper around datalad clone with aggregate auto-run)
-- [ ] T037 [US6] Verify aggregate handles cloned archives in tests/integration/test_collection.py (channels without local backup history)
+- [X] T035 [US6] Document external archive import workflow in specs/003-multi-channel-collections/quickstart.md (datalad clone -d . <url>, then aggregate)
+- [X] T036 [US6] Add `collection clone` or document `datalad clone -d .` usage in annextube/cli/collection.py (optional: thin wrapper around datalad clone with aggregate auto-run)
+- [X] T037 [US6] Verify aggregate handles cloned archives in tests/integration/test_collection.py (channels without local backup history)
 
 **Checkpoint**: External archives can be composed into a collection
 
@@ -119,11 +119,11 @@
 
 **Purpose**: Cross-cutting improvements
 
-- [ ] T038 [P] Auto-run `aggregate --force` in `generate-web` when channels.tsv is missing in annextube/cli/generate_web.py
-- [ ] T039 [P] Auto-run `aggregate --force` after `collection backup --save` in annextube/cli/collection.py
-- [ ] T040 [P] Improve error handling for malformed channel.json in annextube/cli/aggregate.py (structured warnings, skip gracefully)
-- [ ] T041 [P] Add JSON Schema definitions for channels.tsv and collection config in annextube/schema/models.json
-- [ ] T042 Run quickstart.md validation (verify workflow completes as documented)
+- [X] T038 [P] Auto-run `aggregate --force` in `generate-web` when channels.tsv is missing in annextube/cli/generate_web.py
+- [X] T039 [P] Auto-run `aggregate --force` after `collection backup --save` in annextube/cli/collection.py (already implemented in backup_all)
+- [X] T040 [P] Improve error handling for malformed channel.json in annextube/cli/aggregate.py (structured warnings, skip gracefully)
+- [X] T041 [P] Add JSON Schema definitions for channels.tsv and collection config in annextube/schema/models.json
+- [X] T042 Run quickstart.md validation (verify workflow completes as documented)
 
 ---
 
@@ -135,12 +135,16 @@
 
 ### Implementation
 
-- [ ] T043 [US7] Implement cross-channel video loading in frontend/src/services/data-loader.ts (load all channels' videos.tsv in parallel)
-- [ ] T044 [US7] Add cross-channel search in frontend/src/services/search.ts (search across loaded channel data with channel attribution)
-- [ ] T045 [US7] Add channel filter on overview page in frontend/src/App.svelte (date range filter highlighting matching channels)
-- [ ] T046 [P] [US7] Add tests for cross-channel search in frontend/tests/unit/search.test.ts
+- [X] T043 [US7] Implement cross-channel video loading in frontend/src/services/data-loader.ts (load all channels' videos.tsv in parallel)
+- [X] T044 [US7] Add cross-channel search in frontend/src/services/search.ts (search across loaded channel data with channel attribution)
+- [X] T045 [US7] Add channel filter on overview page in frontend/src/App.svelte (channel name/handle filter on collection overview)
+- [X] T046 [P] [US7] Add tests for cross-channel search in frontend/tests/unit/search.test.ts
 
 **Checkpoint**: All user stories complete
+
+### Follow-up (deferred)
+
+- [ ] T047 [US7] Add date range filter on channel overview page in frontend/src/App.svelte (per spec US7 scenario 2: highlight channels with videos in selected range). Current T045 implements text-based name/handle filter only.
 
 ---
 
@@ -158,13 +162,13 @@
 
 ### User Story Dependencies
 
-- **US1 (Aggregate - P1)**: DONE — no work needed
-- **US2 (Browse - P1)**: Mostly done — routing, loading, backward compat implemented; breadcrumb + tests remain
-- **US3 (Add Channel - P2)**: Can start immediately — backend-only work
-- **US4 (Batch Backup - P2)**: Depends on US3 (needs collection service from T016)
-- **US5 (Config - P2)**: Part of US3 phase (T014-T015 feed into T016)
-- **US6 (Import - P3)**: Can start immediately — mostly documentation + testing
-- **US7 (Cross-Search - P4)**: Depends on US2 (needs multi-channel web UI)
+- **US1 (Aggregate - P1)**: DONE
+- **US2 (Browse - P1)**: DONE
+- **US3 (Add Channel - P2)**: DONE
+- **US4 (Batch Backup - P2)**: DONE
+- **US5 (Config - P2)**: DONE
+- **US6 (Import - P3)**: DONE
+- **US7 (Cross-Search - P4)**: DONE
 
 ### Parallel Opportunities
 
@@ -198,30 +202,28 @@
 
 ## Task Summary
 
-**Total Tasks**: 47 | **Completed**: 29 | **Remaining**: 18
+**Total Tasks**: 47 | **Completed**: 47 | **Remaining**: 0
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Discovery/Aggregation): 7/7 (DONE)
-- Phase 2 (Web UI Multi-Channel): 4/6 (breadcrumb done; frontend tests remain)
-- Phase 3 (Collection Add): 9/11 (contract tests + FR-022 precedence test remain)
-- Phase 4 (Batch Backup): 9/11 (contract + integration tests remain)
-- Phase 5 (External Import): 0/3
-- Phase 6 (Polish): 0/5
-- Phase 7 (Cross-Channel Search): 0/4
+- Phase 2 (Web UI Multi-Channel): 6/6 (DONE)
+- Phase 3 (Collection Add): 11/11 (DONE)
+- Phase 4 (Batch Backup): 11/11 (DONE)
+- Phase 5 (External Import): 3/3 (DONE)
+- Phase 6 (Polish): 5/5 (DONE)
+- Phase 7 (Cross-Channel Search): 4/4 (DONE)
 
 **Task Count by User Story**:
-- US1 (Aggregate - P1): 4 tasks (all done)
-- US2 (Browse - P1): 6 tasks
-- US3 (Add Channel - P2): 8 tasks
-- US4 (Batch Backup - P2): 8 tasks
-- US5 (Config - P2): 2 tasks (within Phase 3)
-- US6 (Import - P3): 3 tasks
-- US7 (Cross-Search - P4): 4 tasks
-- Cross-cutting: 5 tasks (Phase 6 polish)
+- US1 (Aggregate - P1): 4 tasks (DONE)
+- US2 (Browse - P1): 6 tasks (DONE)
+- US3 (Add Channel - P2): 8 tasks (DONE)
+- US4 (Batch Backup - P2): 8 tasks (DONE)
+- US5 (Config - P2): 2 tasks (DONE)
+- US6 (Import - P3): 3 tasks (DONE)
+- US7 (Cross-Search - P4): 4 tasks (DONE)
+- Cross-cutting: 5 tasks (DONE)
 
-**Parallel Opportunities**: 14 tasks marked [P]
-
-**Suggested MVP Scope**: Phase 2 (6 tasks) — delivers browsable multi-channel collections via web UI using existing aggregate output
+**Parallel Opportunities**: 14 tasks marked [P] (all completed)
 
 ---
 

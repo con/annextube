@@ -491,6 +491,28 @@ export class DataLoader {
   }
 
   /**
+   * Load videos from ALL channels in parallel (for cross-channel search).
+   *
+   * @param channels - Array of channels with channel_dir set
+   * @returns All videos with channel attribution (channel_dir added)
+   */
+  async loadAllChannelVideos(channels: Channel[]): Promise<Video[]> {
+    const results = await Promise.all(
+      channels.map(async (channel) => {
+        try {
+          const videos = await this.loadChannelVideos(channel.channel_dir!);
+          // Tag each video with its channel directory for attribution
+          return videos.map((v) => ({ ...v, channel_dir: channel.channel_dir }));
+        } catch (err) {
+          console.warn(`Could not load videos for ${channel.channel_dir}:`, err);
+          return [];
+        }
+      })
+    );
+    return results.flat();
+  }
+
+  /**
    * Clear all caches (useful for testing or manual refresh)
    */
   clearCache(): void {

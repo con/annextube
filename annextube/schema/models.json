@@ -584,6 +584,108 @@
         }
       },
       "required": ["name", "components"]
+    },
+    "ChannelTSVRow": {
+      "type": "object",
+      "description": "A row in channels.tsv representing one channel in a multi-channel collection",
+      "properties": {
+        "channel_id": {
+          "type": "string",
+          "description": "YouTube channel ID"
+        },
+        "title": {
+          "type": "string",
+          "description": "Channel name/title"
+        },
+        "custom_url": {
+          "type": "string",
+          "description": "Channel custom URL (e.g., @username)"
+        },
+        "description": {
+          "type": "string",
+          "description": "Channel description"
+        },
+        "subscriber_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of subscribers"
+        },
+        "video_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total video count on YouTube"
+        },
+        "playlist_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of playlists"
+        },
+        "total_videos_archived": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of videos archived locally"
+        },
+        "first_video_date": {
+          "type": "string",
+          "description": "Published date of earliest archived video (YYYY-MM-DD)"
+        },
+        "last_video_date": {
+          "type": "string",
+          "description": "Published date of most recent archived video (YYYY-MM-DD)"
+        },
+        "last_sync": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of last backup sync"
+        },
+        "channel_dir": {
+          "type": "string",
+          "description": "Relative path to channel directory within the collection"
+        }
+      },
+      "required": ["channel_id", "title", "channel_dir"]
+    },
+    "CollectionConfig": {
+      "type": "object",
+      "description": "Configuration for multi-channel collection management ([collection] section in config.toml)",
+      "properties": {
+        "comments_depth": {
+          "type": ["integer", "null"],
+          "minimum": 0,
+          "default": 0,
+          "description": "Default comment fetch depth for new channels"
+        },
+        "curation": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable caption curation for new channels"
+        },
+        "search": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable search index building for new channels"
+        },
+        "include_playlists": {
+          "type": "string",
+          "enum": ["none", "all"],
+          "default": "none",
+          "description": "Playlist inclusion mode for new channels"
+        },
+        "include_podcasts": {
+          "type": "string",
+          "enum": ["none", "all", "rss"],
+          "default": "none",
+          "description": "Podcast inclusion mode for new channels"
+        },
+        "common_config": {
+          "type": ["string", "null"],
+          "description": "Path to common config file to embed in new channels"
+        },
+        "push_remote": {
+          "type": ["string", "null"],
+          "description": "Remote name for batch push operations"
+        }
+      }
     }
   }
 }

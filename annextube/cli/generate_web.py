@@ -181,6 +181,23 @@ def generate_web(
 
     # Discover archive type
     archive_info = discover_annextube(output_dir)
+
+    # If not recognized but has channel.json files, auto-aggregate first
+    if archive_info is None:
+        from annextube.cli.aggregate import discover_channels
+
+        channels = discover_channels(output_dir, depth=1)
+        if channels:
+            click.echo(
+                f"No channels.tsv found, but {len(channels)} channel(s) "
+                "discovered. Running aggregate..."
+            )
+            from annextube.cli.aggregate import aggregate as aggregate_cmd
+
+            ctx.invoke(aggregate_cmd, directory=output_dir, depth=1, output=None, force=True)
+            # Re-discover after aggregate
+            archive_info = discover_annextube(output_dir)
+
     if archive_info is None:
         click.echo(
             f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first.",

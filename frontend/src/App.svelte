@@ -158,6 +158,18 @@
   }
 
   let captionSearchActive = false;
+  let channelSearchQuery = '';
+
+  $: filteredChannels = channelSearchQuery.trim()
+    ? channels.filter((ch) => {
+        const q = channelSearchQuery.toLowerCase();
+        return (
+          (ch.name || '').toLowerCase().includes(q) ||
+          (ch.custom_url || '').toLowerCase().includes(q) ||
+          (ch.description || '').toLowerCase().includes(q)
+        );
+      })
+    : channels;
 
   function handleFilterChange(filtered: Video[]) {
     filteredVideos = filtered;
@@ -210,8 +222,23 @@
       <VideoDetail video={selectedVideo} onBack={handleBackToList} channelDir={selectedChannel?.channel_dir} />
     {:else if isMultiChannel && !selectedChannel}
       <!-- Multi-channel mode: show channels overview -->
+      {#if channels.length > 1}
+        <div class="channel-filter">
+          <input
+            type="text"
+            placeholder="Filter channels..."
+            bind:value={channelSearchQuery}
+            class="channel-search-input"
+          />
+          {#if channelSearchQuery && filteredChannels.length !== channels.length}
+            <span class="channel-filter-count">
+              {filteredChannels.length} of {channels.length} channels
+            </span>
+          {/if}
+        </div>
+      {/if}
       <ChannelList
-        {channels}
+        channels={filteredChannels}
         {loading}
         {error}
         onChannelClick={handleChannelClick}
@@ -341,6 +368,33 @@
     max-width: 1400px;
     margin: 0 auto;
     padding: 0 32px 40px 32px;
+  }
+
+  .channel-filter {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 0;
+  }
+
+  .channel-search-input {
+    flex: 1;
+    max-width: 400px;
+    padding: 8px 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .channel-search-input:focus {
+    border-color: #065fd4;
+    box-shadow: 0 0 0 2px rgba(6, 95, 212, 0.1);
+  }
+
+  .channel-filter-count {
+    font-size: 13px;
+    color: #606060;
   }
 
   @media (max-width: 768px) {

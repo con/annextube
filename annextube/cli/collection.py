@@ -20,6 +20,14 @@ def collection():
 
     Commands for adding channels to a collection and performing
     batch backups across all channels in the collection.
+
+    To import an existing external archive into a collection, use
+    DataLad directly:
+
+    \b
+        datalad clone -d . <archive-url>
+        datalad save -m "Add cloned archive"
+        annextube aggregate --force
     """
 
 
