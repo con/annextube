@@ -142,6 +142,10 @@
 
 **Checkpoint**: All user stories complete
 
+### Follow-up (deferred)
+
+- [ ] T047 [US7] Add date range filter on channel overview page in frontend/src/App.svelte (per spec US7 scenario 2: highlight channels with videos in selected range). Current T045 implements text-based name/handle filter only.
+
 ---
 
 ## Dependencies & Execution Order
@@ -158,13 +162,13 @@
 
 ### User Story Dependencies
 
-- **US1 (Aggregate - P1)**: DONE — no work needed
-- **US2 (Browse - P1)**: Mostly done — routing, loading, backward compat implemented; breadcrumb + tests remain
-- **US3 (Add Channel - P2)**: Can start immediately — backend-only work
-- **US4 (Batch Backup - P2)**: Depends on US3 (needs collection service from T016)
-- **US5 (Config - P2)**: Part of US3 phase (T014-T015 feed into T016)
-- **US6 (Import - P3)**: Can start immediately — mostly documentation + testing
-- **US7 (Cross-Search - P4)**: Depends on US2 (needs multi-channel web UI)
+- **US1 (Aggregate - P1)**: DONE
+- **US2 (Browse - P1)**: DONE
+- **US3 (Add Channel - P2)**: DONE
+- **US4 (Batch Backup - P2)**: DONE
+- **US5 (Config - P2)**: DONE
+- **US6 (Import - P3)**: DONE
+- **US7 (Cross-Search - P4)**: DONE
 
 ### Parallel Opportunities
 
@@ -198,30 +202,28 @@
 
 ## Task Summary
 
-**Total Tasks**: 47 | **Completed**: 29 | **Remaining**: 18
+**Total Tasks**: 47 | **Completed**: 47 | **Remaining**: 0
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Discovery/Aggregation): 7/7 (DONE)
-- Phase 2 (Web UI Multi-Channel): 4/6 (breadcrumb done; frontend tests remain)
-- Phase 3 (Collection Add): 9/11 (contract tests + FR-022 precedence test remain)
-- Phase 4 (Batch Backup): 9/11 (contract + integration tests remain)
-- Phase 5 (External Import): 0/3
-- Phase 6 (Polish): 0/5
-- Phase 7 (Cross-Channel Search): 0/4
+- Phase 2 (Web UI Multi-Channel): 6/6 (DONE)
+- Phase 3 (Collection Add): 11/11 (DONE)
+- Phase 4 (Batch Backup): 11/11 (DONE)
+- Phase 5 (External Import): 3/3 (DONE)
+- Phase 6 (Polish): 5/5 (DONE)
+- Phase 7 (Cross-Channel Search): 4/4 (DONE)
 
 **Task Count by User Story**:
-- US1 (Aggregate - P1): 4 tasks (all done)
-- US2 (Browse - P1): 6 tasks
-- US3 (Add Channel - P2): 8 tasks
-- US4 (Batch Backup - P2): 8 tasks
-- US5 (Config - P2): 2 tasks (within Phase 3)
-- US6 (Import - P3): 3 tasks
-- US7 (Cross-Search - P4): 4 tasks
-- Cross-cutting: 5 tasks (Phase 6 polish)
+- US1 (Aggregate - P1): 4 tasks (DONE)
+- US2 (Browse - P1): 6 tasks (DONE)
+- US3 (Add Channel - P2): 8 tasks (DONE)
+- US4 (Batch Backup - P2): 8 tasks (DONE)
+- US5 (Config - P2): 2 tasks (DONE)
+- US6 (Import - P3): 3 tasks (DONE)
+- US7 (Cross-Search - P4): 4 tasks (DONE)
+- Cross-cutting: 5 tasks (DONE)
 
-**Parallel Opportunities**: 14 tasks marked [P]
-
-**Suggested MVP Scope**: Phase 2 (6 tasks) — delivers browsable multi-channel collections via web UI using existing aggregate output
+**Parallel Opportunities**: 14 tasks marked [P] (all completed)
 
 ---
 

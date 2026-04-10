@@ -282,6 +282,22 @@ class TestCollectionPipeline:
         assert cloned_row["channel_dir"] == "ch-cloned"
 
     @pytest.mark.ai_generated
+    def test_channel_usable_standalone(self, collection_dir) -> None:
+        """FR-029: Channel archive works independently outside collection."""
+        ch_dir = collection_dir / "ch-alpha"
+        assert (ch_dir / "channel.json").exists()
+        assert (ch_dir / "videos" / "videos.tsv").exists()
+        assert (ch_dir / ".annextube" / "config.toml").exists()
+
+        # aggregate on a single channel dir finds no sub-channels
+        channels = discover_channels(ch_dir, depth=1)
+        assert len(channels) == 0
+
+        # but its own archive stats are computable
+        stats = compute_archive_stats(ch_dir)
+        assert stats["total_videos_archived"] == 3
+
+    @pytest.mark.ai_generated
     def test_empty_collection(self, tmp_path) -> None:
         """Aggregate on empty dir exits 0 with no channels.tsv created."""
         from click.testing import CliRunner
