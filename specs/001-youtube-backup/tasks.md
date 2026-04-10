@@ -224,6 +224,25 @@ annextube backup
 
 ---
 
+## Phase 5b: Automatic Playlist Discovery (US3 extension) — Priority: P2
+
+**Goal**: Auto-discover and filter playlists from channels (FR-002a, FR-002b, FR-002c)
+
+**Independent Test**: Configure `include_playlists = "all"` on a channel source, run backup, verify all channel playlists are discovered and backed up without manual enumeration
+
+### Implementation
+
+- [ ] T131 [US3] Add `get_channel_playlists()` to YouTubeService in annextube/services/youtube.py (yt-dlp fetch of channel /playlists tab)
+- [ ] T132 [US3] Add `get_channel_podcasts()` to YouTubeService in annextube/services/youtube.py (yt-dlp fetch of channel /podcasts tab, FR-002c)
+- [ ] T133 [US3] Implement `_discover_playlists()` in Archiver in annextube/services/archiver.py (include/exclude regex filtering per FR-002b)
+- [ ] T134 [US3] Integrate playlist discovery into `backup_channel()` in annextube/services/archiver.py (call after channel video backup)
+- [ ] T135 [P] [US3] Add unit tests for playlist discovery filtering in tests/unit/ (mock playlist data, regex matching)
+- [ ] T136 [P] [US3] Add integration test for playlist discovery in tests/integration/ (channel with playlists, filter to subset)
+
+**Checkpoint**: `include_playlists = "all"` auto-discovers and backs up all channel playlists
+
+---
+
 ## Phase 6: User Story 4 - Browse and Search Archive via Web Interface (Priority: P2)
 
 **Goal**: Generate client-side web interface for browsing offline archive with search, filtering, video playback, comments (FR-037 to FR-047)
@@ -484,7 +503,7 @@ annextube backup
 
 ```bash
 # After T015 completes, launch in parallel:
-Task T016: "Implement create-dataset command in annextube/cli/create_dataset.py"
+Task T016: "Implement init command in annextube/cli/init.py"
 Task T017: "Implement backup command in annextube/cli/backup.py"
 
 # After T018 completes, launch in parallel:
@@ -536,7 +555,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 140 | **Completed**: 104 | **Remaining**: 36 | **Obsolete**: 3
+**Total Tasks**: 146 | **Completed**: 104 | **Remaining**: 42 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
@@ -544,6 +563,7 @@ With multiple developers:
 - Phase 3 (US1 - Initial Archive): 18/19
 - Phase 4 (US2 - Incremental Updates): 11/12
 - Phase 5 (US3 - Filtering): 5/9
+- Phase 5b (Playlist Discovery): 0/6
 - Phase 6 (US4 - Web Interface): 19/19
 - Phase 7 (US5 - Organization): 2/6
 - Phase 8 (US6 - Export Metadata): 2/4
@@ -597,8 +617,19 @@ With multiple developers:
 **Example valid tasks**:
 - `- [ ] T001 Create Python package structure (annextube/, tests/, frontend/, docs/)` ✅
 - `- [ ] T003 [P] Configure ruff for linting and code formatting` ✅
-- `- [ ] T016 [P] [US1] Implement create-dataset command in annextube/cli/create_dataset.py` ✅
+- `- [ ] T016 [P] [US1] Implement init command in annextube/cli/init.py` ✅
 - `- [ ] T052 [P] [US4] Implement export command in annextube/cli/export.py` ✅
+
+---
+
+## Deferred (Not Targeted for v1)
+
+The following requirements are documented in spec.md but explicitly deferred:
+
+- **FR-065** (sample/demo data generation) — deferred to post-v1
+- **FR-082b** (re-check unavailable videos via `--update-mode unavailable`) — deferred, spec marks as SHOULD
+- **TD-012 to TD-020** (annex remote URL video playback in web UI) — deferred to v0.2.0 per spec "Near Future TODO" section
+- **T115** (estimate-cost command) — marked DEFERRED in Phase 14
 
 ---
 
@@ -609,6 +640,6 @@ With multiple developers:
 - Each user story should be independently completable and testable
 - Tasks reference functional requirements (FR-XXX) and success criteria (SC-XXX) from spec.md
 - All file paths follow plan.md project structure
-- No test tasks included (tests NOT requested in specification)
+- Tests are implicit in each implementation task (Constitution III: TDD)
 - Commit after each task or logical group
 - Stop at any checkpoint to validate story independently
