@@ -81,8 +81,11 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
     git_annex = GitAnnexService(output_dir)
 
     try:
-        # Initialize git-annex or DataLad dataset
-        if datalad:
+        # Initialize git-annex or DataLad dataset (skip if already a repo,
+        # e.g. when called from `collection add` which creates the subdataset first)
+        if git_annex.is_annex_repo():
+            logger.info("Directory is already a git-annex repo, skipping repo init")
+        elif datalad:
             logger.info("Initializing DataLad dataset")
             git_annex.init_datalad_dataset(description="annextube YouTube archive")
         else:
