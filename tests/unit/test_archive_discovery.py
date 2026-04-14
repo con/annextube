@@ -24,6 +24,10 @@ def single_channel_archive(tmp_path):
     git_dir.mkdir()
     annex_dir = git_dir / "annex"
     annex_dir.mkdir()
+    # Create .annextube/config.toml (required for detection)
+    config_dir = temp_path / ".annextube"
+    config_dir.mkdir()
+    (config_dir / "config.toml").write_text('[[sources]]\nurl = "https://www.youtube.com/@test"\n')
     return temp_path
 
 
@@ -104,6 +108,23 @@ class TestDiscoverAnnextube:
         file_path = tmp_path / "file.txt"
         file_path.write_text("content")
         info = discover_annextube(file_path)
+        assert info is None
+
+    @pytest.mark.ai_generated
+    def test_bare_annex_repo_not_detected(self, tmp_path):
+        """Test that a bare git-annex/DataLad repo without .annextube/config.toml is NOT detected.
+
+        This is the key scenario: `datalad create` makes a subdataset with
+        .git/annex, but until `annextube init` runs, it is not an annextube archive.
+        """
+        bare_repo = tmp_path / "bare_datalad"
+        bare_repo.mkdir()
+        git_dir = bare_repo / ".git"
+        git_dir.mkdir()
+        (git_dir / "annex").mkdir()
+        # No .annextube/config.toml
+
+        info = discover_annextube(bare_repo)
         assert info is None
 
     def test_multi_channel_takes_precedence(self, tmp_path):

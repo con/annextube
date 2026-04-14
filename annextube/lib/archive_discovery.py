@@ -37,7 +37,7 @@ def discover_annextube(path: Path) -> ArchiveInfo | None:
 
     Detection logic:
     1. If channels.tsv exists -> multi-channel collection
-    2. If .git/annex exists -> single-channel archive
+    2. If .annextube/config.toml exists -> single-channel archive
     3. Otherwise -> not an annextube archive
 
     Args:
@@ -67,15 +67,19 @@ def discover_annextube(path: Path) -> ArchiveInfo | None:
             is_git_annex=False,
         )
 
-    # Check for single-channel archive (git-annex repo)
-    git_annex = GitAnnexService(path)
-    if git_annex.is_annex_repo():
+    # Check for single-channel archive (git-annex repo WITH annextube config)
+    # A bare git-annex/DataLad repo without .annextube/config.toml is NOT
+    # an annextube archive — it may be a freshly-created subdataset that
+    # hasn't been initialized yet.
+    config_toml = path / ".annextube" / "config.toml"
+    if config_toml.exists():
+        git_annex = GitAnnexService(path)
         return ArchiveInfo(
             type="single-channel",
             path=path,
             web_exists=(path / "web").exists(),
             channels_tsv=None,
-            is_git_annex=True,
+            is_git_annex=git_annex.is_annex_repo(),
         )
 
     return None
