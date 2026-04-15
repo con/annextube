@@ -286,6 +286,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-060**: System MUST provide interface to prepare captions for YouTube upload
 - **FR-061**: System MUST provide interface to send captions to external editing services
 - **FR-062**: System MUST support batch caption export for multiple videos
+- **FR-062a**: During backup, system MUST retroactively curate existing auto-generated captions that lack a curated variant when curation is enabled and a glossary is configured. This ensures that enabling curation or adding a glossary after initial backup causes all existing captions to be curated on the next backup run, not only newly-downloaded ones.
 
 #### Publishing and Sharing
 

@@ -324,6 +324,7 @@ annextube backup
 - [ ] T083 [US7] Add caption upload preparation interface (generate upload-ready format per FR-060)
 - [X] T084 [US7] Add LLM integration for caption correction (llm_corrector.py using Claude API)
 - [X] T085 [US7] Implement batch caption curation via CLI (curate-captions command processes multiple videos)
+- [X] T086 [US7] Retroactive curation during backup: after video processing, scan for existing auto-generated VTTs missing curated variants and curate them (FR-062a)
 
 **Checkpoint**: User Stories 1-7 complete - caption curation workflow enabled
 

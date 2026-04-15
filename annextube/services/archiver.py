@@ -1098,6 +1098,15 @@ class Archiver:
         # ── Phase 5: TSV generation ───────────────────────────────────────
         self._generate_and_commit_tsvs()
 
+        # ── Phase 5b: Retroactive caption curation (FR-062a) ─────────────
+        retroactive_curated = self._curate_uncurated_captions()
+        if retroactive_curated > 0:
+            logger.info(f"Retroactively curated {retroactive_curated} caption(s)")
+            if self._has_uncommitted_changes():
+                self.git_annex.add_and_commit(
+                    f"Curate {retroactive_curated} existing caption(s)"
+                )
+
         # Log API quota usage summary
         if self.youtube.api_client:
             summary = self.youtube.api_client.get_quota_summary()
@@ -1906,6 +1915,97 @@ class Archiver:
                 self._current_run_errors.append(f"Video {video.video_id} caption curation ({lang}): {error_detail}")
 
         return curated_entries
+
+    def _curate_uncurated_captions(self) -> int:
+        """Retroactively curate existing auto-generated captions that lack curated variants.
+
+        Scans all video directories for auto-generated VTT files without a
+        corresponding curated VTT. This ensures that enabling curation or adding
+        a glossary after initial backup curates all existing captions on the
+        next backup run (FR-062a).
+
+        Returns:
+            Number of captions curated
+        """
+        # Check if curation is enabled
+        curation_enabled = self.config.curation.enabled
+        if self._current_source_config and self._current_source_config.curation is not None:
+            curation_enabled = self._current_source_config.curation
+        if not curation_enabled:
+            return 0
+
+        # Load glossary
+        from annextube.models.curation import Glossary
+
+        curation_cfg = self.config.curation
+        glossary = Glossary()
+
+        if self.config.user.glossary_path:
+            user_path = Path(self.config.user.glossary_path).expanduser()
+            if user_path.exists():
+                glossary = Glossary.from_yaml(user_path)
+
+        if curation_cfg.glossary_path:
+            discovered = Glossary.discover(
+                self.repo_path / "videos",
+                curation_cfg.glossary_path,
+                collate_parents=curation_cfg.glossary_collate_parents,
+            )
+            glossary = glossary.merge(discovered)
+
+        if not glossary.terms:
+            logger.debug("No glossary terms found, skipping retroactive curation")
+            return 0
+
+        from annextube.services.caption_curator import CaptionCurator, load_corrections
+
+        curator = CaptionCurator(self.config.curation)
+        curated_suffix = curation_cfg.curated_suffix
+        curated_count = 0
+
+        videos_dir = self.repo_path / "videos"
+        if not videos_dir.exists():
+            return 0
+
+        for vtt_path in videos_dir.rglob("*.vtt"):
+            # Skip already-curated files
+            if f"-{curated_suffix}" in vtt_path.stem:
+                continue
+            # Only curate auto-generated captions (named like video.en.vtt)
+            parts = vtt_path.stem.split(".")
+            if len(parts) < 2:
+                continue
+            lang = parts[-1]
+
+            # Check if curated variant already exists
+            output_path = vtt_path.parent / f"{vtt_path.stem}-{curated_suffix}.vtt"
+            if output_path.exists():
+                continue
+
+            # Load per-video corrections
+            corrections: dict[str, str] = {}
+            llm_corr_path = vtt_path.parent / "llm_corrections.json"
+            if llm_corr_path.exists():
+                corrections = load_corrections(llm_corr_path)
+
+            try:
+                result = curator.curate_vtt_file(
+                    vtt_path, output_path, glossary, corrections
+                )
+                if result.segments:
+                    curated_count += 1
+                    logger.info(
+                        f"Retroactively curated {lang} captions: "
+                        f"{vtt_path.relative_to(self.repo_path)}"
+                    )
+            except Exception as e:
+                error_detail = format_subprocess_error(e)
+                logger.error(
+                    f"Failed to retroactively curate {vtt_path.relative_to(self.repo_path)}: "
+                    f"{error_detail}"
+                )
+
+        return curated_count
 
     def _download_captions(self, video: Video, video_dir: Path) -> list[str]:
         """Download video captions, generate captions.tsv, and set git-annex metadata.
