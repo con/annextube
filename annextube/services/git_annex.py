@@ -59,15 +59,21 @@ class GitAnnexService:
             check=True,
         )
 
-        # Configure git-annex to allow yt-dlp access to any IP addresses
-        # This is needed for git-annex addurl --no-raw to work with YouTube URLs
+        self.configure_annex_security()
+
+        logger.info("Git-annex repository initialized")
+
+    def configure_annex_security(self) -> None:
+        """Configure git-annex security settings for yt-dlp URL tracking.
+
+        Sets annex.security.allowed-ip-addresses=all so that git-annex
+        allows yt-dlp to access YouTube URLs via addurl/get.
+        """
         subprocess.run(
             ["git", "config", "annex.security.allowed-ip-addresses", "all"],
             cwd=self.repo_path,
             check=True,
         )
-
-        logger.info("Git-annex repository initialized")
 
     def init_datalad_dataset(self, description: str = "annextube archive") -> None:
         """Initialize DataLad dataset (alternative to manual git/git-annex init).
@@ -98,12 +104,7 @@ class GitAnnexService:
             logger.error(f"DataLad dataset creation failed: {e}")
             raise
 
-        # Configure git-annex security settings (same as init_repo)
-        subprocess.run(
-            ["git", "config", "annex.security.allowed-ip-addresses", "all"],
-            cwd=self.repo_path,
-            check=True,
-        )
+        self.configure_annex_security()
 
         logger.info("DataLad dataset initialized")
 

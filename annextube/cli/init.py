@@ -85,6 +85,8 @@ def init(ctx: click.Context, directory: Path, urls: tuple, videos: bool, comment
         # e.g. when called from `collection add` which creates the subdataset first)
         if git_annex.is_annex_repo():
             logger.info("Directory is already a git-annex repo, skipping repo init")
+            # Still configure annex security (needed for yt-dlp URL tracking)
+            git_annex.configure_annex_security()
         elif datalad:
             logger.info("Initializing DataLad dataset")
             git_annex.init_datalad_dataset(description="annextube YouTube archive")
