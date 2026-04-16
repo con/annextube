@@ -338,7 +338,7 @@ annextube backup
 
 ### Implementation for User Story 8
 
-- [X] T086 [US8] Implement prepare-ghpages command in annextube/cli/prepare_ghpages.py (restructure files for GitHub Pages hosting)
+- [X] T137 [US8] Implement prepare-ghpages command in annextube/cli/prepare_ghpages.py (restructure files for GitHub Pages hosting)
 - [ ] T087 [US8] Implement isolated publishing branch creation (gh-pages branch without history per FR-064)
 - [ ] T088 [US8] Add incremental publish support (only update changed files per FR-067)
 - [X] T089 [US8] Metadata-only publish mode works by default (videos are git-annex symlinks, web UI links to YouTube)
@@ -359,6 +359,7 @@ annextube backup
 - [ ] T095 [P] Create Codeberg Actions workflow template in .codeberg/workflows/update-archive.yml (Forgejo compatibility per FR-084)
 - [ ] T096 [P] Document environment variable authentication in workflow templates (AWS keys, WebDAV creds per research.md CI/CD pattern)
 - [ ] T097 Add remote verification command in GitAnnexService in annextube/services/git_annex.py (check content availability per FR-095)
+- [ ] T138 [P] Configure license compatibility checking in CI (Constitution X: verify all dependencies use OSI-compatible licenses; add `tox -e license-check` using pip-licenses or similar)
 
 ---
 
@@ -373,6 +374,8 @@ annextube backup
 - [ ] T102 [P] Create Explanation section in docs/content/explanation/ (architecture.md, git-annex-integration.md, incremental-updates.md per research.md)
 - [ ] T103 Configure Hugo for GitHub Pages in docs/config.toml (baseURL, theme settings per research.md)
 - [ ] T104 Create GitHub Actions workflow for docs deployment in .github/workflows/publish-docs.yml (auto-build on push)
+- [ ] T139 [P] Create CONTRIBUTING.md as canonical contribution guide for both humans and agentic systems (development setup, Conventional Commits format, testing requirements, code style, PR process). Refactor CLAUDE.md to reference CONTRIBUTING.md instead of duplicating these sections (Constitution Governance: CONTRIBUTING.md + Code of Conduct required)
+- [ ] T140 [P] Create CODE_OF_CONDUCT.md (Contributor Covenant per Constitution Governance requirements)
 
 ---
 
@@ -453,6 +456,18 @@ annextube backup
 - Fixed unicode encoding errors (replaced ✓✗⚠→ with ASCII equivalents)
 
 **Status:** ✅ COMPLETE - All tasks finished, all tests passing
+
+---
+
+## Future Work (Not Yet Scheduled)
+
+### Archive Sharing via GitHub Pages (TD-001–TD-020)
+
+**Status**: Deferred — requirements defined in spec.md "In Development" section but not yet scheduled for implementation.
+
+**Scope**: Unannex workflow (TD-001–TD-006), GitHub Pages deployment (TD-007–TD-011), annex remote URL integration for video playback (TD-012–TD-020).
+
+These requirements will be tracked in a future phase once core features (Phases 1–13) are sufficiently complete. See spec.md § "In Development: Archive Sharing via GitHub Pages" for full requirement descriptions.
 
 ---
 
@@ -556,7 +571,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 146 | **Completed**: 104 | **Remaining**: 42 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
+**Total Tasks**: 150 | **Completed**: 104 | **Remaining**: 46 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
@@ -570,8 +585,8 @@ With multiple developers:
 - Phase 8 (US6 - Export Metadata): 2/4
 - Phase 9 (US7 - Caption Curation): 4/5
 - Phase 10 (US8 - Public Hosting): 2/5
-- Phase 11 (CI/CD): 0/7
-- Phase 12 (Documentation): 0/7
+- Phase 11 (CI/CD): 0/8
+- Phase 12 (Documentation): 0/9
 - Phase 13 (Polish): 12/17
 - Phase 14 (API Enhancement): 7/8
 - Phase 15 (Test Infrastructure): 7/7
@@ -585,6 +600,7 @@ With multiple developers:
 - US6 (Export Metadata - P3): 4 tasks
 - US7 (Caption Curation - P4): 5 tasks
 - US8 (Public Hosting - P4): 5 tasks
+- Cross-cutting (CI/CD, Docs, Polish): includes T138 (license CI), T139 (CONTRIBUTING.md), T140 (CODE_OF_CONDUCT.md)
 
 **Parallel Opportunities**: 47 tasks marked [P] can run in parallel with others in their phase
 
