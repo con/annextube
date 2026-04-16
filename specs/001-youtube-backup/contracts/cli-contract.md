@@ -500,6 +500,40 @@ Web interface generated: /path/to/repo/web/
 
 ---
 
+### 6. completion
+
+Output shell completion script for bash, zsh, or fish.
+
+**Usage**:
+```bash
+annextube completion [SHELL]
+```
+
+**Arguments**:
+- `SHELL`: Shell type (`bash`, `zsh`, `fish`). Auto-detected from `$SHELL` if omitted.
+
+**Behavior**:
+- Outputs a shell-specific completion script using Click's built-in `ShellComplete.source()`
+- Script enables tab-completion for all annextube commands, options, and arguments
+
+**Usage examples**:
+```bash
+# Add to ~/.bashrc
+eval "$(annextube completion bash)"
+
+# Add to ~/.zshrc
+eval "$(annextube completion zsh)"
+
+# Add to ~/.config/fish/config.fish
+annextube completion fish | source
+```
+
+**Exit codes**:
+- `0`: Completion script output successfully
+- `1`: Shell not detected or unsupported
+
+---
+
 ## Idempotency
 
 All commands are idempotent:

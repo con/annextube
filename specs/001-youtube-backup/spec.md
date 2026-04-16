@@ -278,6 +278,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-057f**: System MUST provide CLI command to build or rebuild the caption search index (`annextube build-search-index`): standalone command for Pagefind index generation without running a full backup
 - **FR-057g**: System MUST provide CLI command to curate captions (`annextube curate-captions`): export VTT files for editing, validate edited captions, and prepare for YouTube upload
 - **FR-057h**: System MUST provide CLI command to initialize user-level configuration (`annextube init-user-config`): create platform-specific config directory with default settings (cookie file path, parallel download limits, etc.)
+- **FR-057i**: System MUST provide CLI command to output shell completion scripts (`annextube completion [SHELL]`): auto-detect current shell when SHELL argument is omitted; support bash, zsh, and fish; use Click's built-in shell completion mechanism (`ShellComplete.source()`); output script suitable for `eval "$(annextube completion)"` usage
 
 #### Caption Curation Workflow
 

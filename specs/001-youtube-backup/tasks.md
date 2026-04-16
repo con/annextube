@@ -400,6 +400,7 @@ annextube backup
 - [X] T128 [P] DRY: Extract shared pagefind-import-check + `build_caption_index` invocation + stats reporting into a helper in annextube/cli/build_search_index.py or a shared module (duplicated between `build_search_index.py` and `generate_web.py`, 25 lines)
 - [X] T129 [P] DRY: Extract shared TSV-to-playlist loading (fetch TSV → parse → map → load metadata) into a helper in frontend/src/services/data-loader.ts (duplicated between `loadPlaylists` and `loadChannelPlaylists`, 14 lines)
 - [X] T130 Enforce zero-tolerance duplication policy: set threshold to 0 in .jscpd.json so any detected clone fails CI unless suppressed with `jscpd:ignore` pragma; update tools/check-duplication.sh exit code handling if needed (depends on T125-T129)
+- [X] T141 [P] Implement `annextube completion` command in annextube/cli/completion.py (FR-057i: output shell completion script for bash/zsh/fish using Click's ShellComplete.source(); auto-detect shell from $SHELL)
 
 ---
 
@@ -571,7 +572,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 150 | **Completed**: 106 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
+**Total Tasks**: 151 | **Completed**: 107 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6

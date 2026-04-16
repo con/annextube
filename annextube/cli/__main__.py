@@ -19,6 +19,7 @@ from annextube.cli.backup import backup
 from annextube.cli.build_search_index import build_search_index
 from annextube.cli.check import check
 from annextube.cli.collection import collection
+from annextube.cli.completion import completion
 from annextube.cli.curate_captions import curate_captions
 from annextube.cli.embed_config import embed_config
 from annextube.cli.export import export
@@ -81,6 +82,7 @@ def cli(
     ctx.obj["json_output"] = json_output
 
 
+cli.add_command(completion)
 cli.add_command(init)
 cli.add_command(init_user_config)
 cli.add_command(backup)
