@@ -1,6 +1,8 @@
 """Backup command for annextube."""
 
 import asyncio
+import json as json_mod
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -16,6 +18,28 @@ from annextube.services.export import ExportService
 from annextube.services.search_index import build_caption_index
 
 logger = get_logger(__name__)
+
+
+def _echo(msg: str = "", json_output: bool = False, **kwargs: Any) -> None:
+    """Print message only in human-readable mode."""
+    if not json_output:
+        click.echo(msg, **kwargs)
+
+
+def _json_error(command: str, code: int, message: str, details: str = "") -> str:
+    """Build JSON error response string."""
+    result: dict[str, Any] = {
+        "status": "error",
+        "command": command,
+        "timestamp": datetime.now().isoformat(),
+        "error": {
+            "code": code,
+            "message": message,
+        },
+    }
+    if details:
+        result["error"]["details"] = details
+    return json_mod.dumps(result, indent=2)
 
 
 @click.command()
@@ -94,6 +118,9 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Backup with limit
         annextube backup --limit 10
     """
+    json_output: bool = ctx.obj.get("json_output", False)
+    start_time = time.monotonic()
+
     # Log versions at INFO level (like duct does)
     try:
         from annextube._version import version as annextube_version
@@ -113,11 +140,14 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
     archive_info = discover_annextube(output_dir)
     if archive_info is None or archive_info.type == "multi-channel":
         error_msg = (
-            f"Error: {output_dir} is not a single-channel annextube archive."
+            f"{output_dir} is not a single-channel annextube archive."
             if archive_info
-            else f"Error: {output_dir} is not an annextube archive. Run 'annextube init' first."
+            else f"{output_dir} is not an annextube archive. Run 'annextube init' first."
         )
-        click.echo(error_msg, err=True)
+        if json_output:
+            click.echo(_json_error("backup", 4, error_msg))
+        else:
+            click.echo(f"Error: {error_msg}", err=True)
         raise click.Abort()
 
     try:
@@ -133,7 +163,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         if comments_depth is not None:
             # Convert -1 (unlimited) to None, same as init does
             config.components.comments_depth = None if comments_depth == -1 else comments_depth
-            click.echo(f"Comments depth override: {comments_depth} ({'unlimited' if comments_depth == -1 else 'disabled' if comments_depth == 0 else f'up to {comments_depth}'})")
+            _echo(f"Comments depth override: {comments_depth} ({'unlimited' if comments_depth == -1 else 'disabled' if comments_depth == 0 else f'up to {comments_depth}'})", json_output)
 
         # Override yt_dlp_max_parallel if specified
         if yt_dlp_max_parallel is not None:
@@ -142,24 +172,33 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Handle deprecated --skip-existing flag
         if skip_existing:
             update = "all-incremental"
-            click.echo("Note: --skip-existing is deprecated, use --update=all-incremental instead")
+            _echo("Note: --skip-existing is deprecated, use --update=all-incremental instead", json_output)
 
         # Default update mode if not specified
         if not update:
             update = "all-incremental"
 
-        click.echo(f"Update mode: {update}")
+        _echo(f"Update mode: {update}", json_output)
 
         # Handle tsv_metadata mode - regenerate TSVs only
         if update == "tsv_metadata":
-            click.echo("Regenerating TSV metadata files from existing JSON...")
+            _echo("Regenerating TSV metadata files from existing JSON...", json_output)
             exporter = ExportService(output_dir)
             videos_tsv, playlists_tsv, authors_tsv = exporter.generate_all()
-            click.echo(f"[ok] Generated: {videos_tsv}")
-            click.echo(f"[ok] Generated: {playlists_tsv}")
-            click.echo(f"[ok] Generated: {authors_tsv}")
-            click.echo()
-            click.echo("[ok] TSV metadata regeneration complete!")
+            if json_output:
+                click.echo(json_mod.dumps({
+                    "status": "success",
+                    "command": "backup",
+                    "timestamp": datetime.now().isoformat(),
+                    "update_mode": "tsv_metadata",
+                    "files_generated": [str(videos_tsv), str(playlists_tsv), str(authors_tsv)],
+                }, indent=2))
+            else:
+                click.echo(f"[ok] Generated: {videos_tsv}")
+                click.echo(f"[ok] Generated: {playlists_tsv}")
+                click.echo(f"[ok] Generated: {authors_tsv}")
+                click.echo()
+                click.echo("[ok] TSV metadata regeneration complete!")
             return
 
         # Parse date range (for all-incremental mode)
@@ -169,24 +208,30 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         if from_date:
             try:
                 date_from = parse_date(from_date)
-                click.echo(f"From date: {date_from.strftime('%Y-%m-%d')}")
+                _echo(f"From date: {date_from.strftime('%Y-%m-%d')}", json_output)
             except ValueError as e:
-                click.echo(f"Error: Invalid --from-date: {e}", err=True)
+                if json_output:
+                    click.echo(_json_error("backup", 2, f"Invalid --from-date: {e}"))
+                else:
+                    click.echo(f"Error: Invalid --from-date: {e}", err=True)
                 raise click.Abort() from None
 
         if to_date:
             try:
                 date_to = parse_date(to_date)
-                click.echo(f"To date: {date_to.strftime('%Y-%m-%d')}")
+                _echo(f"To date: {date_to.strftime('%Y-%m-%d')}", json_output)
             except ValueError as e:
-                click.echo(f"Error: Invalid --to-date: {e}", err=True)
+                if json_output:
+                    click.echo(_json_error("backup", 2, f"Invalid --to-date: {e}"))
+                else:
+                    click.echo(f"Error: Invalid --to-date: {e}", err=True)
                 raise click.Abort() from None
 
         # For all-incremental mode, default to 1 week window for social updates if no dates specified
         if update == "all-incremental" and not from_date:
             from annextube.lib.date_utils import parse_duration
             date_from = datetime.now() - parse_duration("1 week")
-            click.echo(f"Default social window: {date_from.strftime('%Y-%m-%d')} to now")
+            _echo(f"Default social window: {date_from.strftime('%Y-%m-%d')} to now", json_output)
 
         # Initialize archiver with update mode and date filters
         archiver = Archiver(output_dir, config, update_mode=update, date_from=date_from, date_to=date_to)
@@ -194,22 +239,34 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         # Collect all errors/warnings across sources for final summary
         all_errors: list[str] = []
         all_warnings: list[str] = []
+        # Collect per-source stats for JSON output
+        source_results: list[dict[str, Any]] = []
 
         # Determine what to backup
         if url:
             # Ad-hoc mode: backup single URL
-            click.echo(f"Backing up: {url}")
+            _echo(f"Backing up: {url}", json_output)
             if config.filters.limit:
-                click.echo(f"Limit: {config.filters.limit} most recent videos")
+                _echo(f"Limit: {config.filters.limit} most recent videos", json_output)
 
             # Detect if URL is a playlist or channel
             if _is_playlist_url(url):
                 stats = archiver.backup_playlist(url)
+                source_type = "playlist"
             else:
                 stats = archiver.backup_channel(url)
-            _print_stats(stats)
+                source_type = "channel"
+            _print_stats(stats, json_output=json_output)
             all_errors.extend(stats["errors"])
             all_warnings.extend(stats.get("warnings", []))
+            source_results.append({
+                "url": url,
+                "type": source_type,
+                "videos_tracked": stats["videos_tracked"],
+                "metadata_saved": stats["metadata_saved"],
+                "captions_downloaded": stats.get("captions_downloaded", 0),
+                "errors": len(stats["errors"]),
+            })
 
             # Generate channel.json for multi-channel collection integration
             try:
@@ -225,14 +282,17 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             enabled_sources = [s for s in config.sources if s.enabled]
 
             if not enabled_sources:
-                click.echo("No enabled sources found in configuration", err=True)
-                click.echo("Edit .annextube/config.toml to add sources")
+                if json_output:
+                    click.echo(_json_error("backup", 6, "No enabled sources found in configuration"))
+                else:
+                    click.echo("No enabled sources found in configuration", err=True)
+                    click.echo("Edit .annextube/config.toml to add sources")
                 raise click.Abort()
 
-            click.echo(f"Found {len(enabled_sources)} enabled source(s)")
+            _echo(f"Found {len(enabled_sources)} enabled source(s)", json_output)
             if config.filters.limit:
-                click.echo(f"Limit: {config.filters.limit} videos per source (most recent)")
-            click.echo()
+                _echo(f"Limit: {config.filters.limit} videos per source (most recent)", json_output)
+            _echo(json_output=json_output)
 
             total_stats: dict[str, Any] = {
                 "sources_processed": 0,
@@ -244,14 +304,14 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             }
 
             for i, source in enumerate(enabled_sources, 1):
-                click.echo(f"[{i}/{len(enabled_sources)}] {source.type.capitalize()}: {source.url}")
+                _echo(f"[{i}/{len(enabled_sources)}] {source.type.capitalize()}: {source.url}", json_output)
 
                 # Route to appropriate backup method
                 if source.type == "playlist":
                     stats = archiver.backup_playlist(source.url, source_config=source)
                 else:
                     stats = archiver.backup_channel(source.url, source_config=source)
-                _print_stats(stats, prefix="  ")
+                _print_stats(stats, prefix="  ", json_output=json_output)
 
                 total_stats["sources_processed"] += 1
                 total_stats["videos_processed"] += stats["videos_processed"]
@@ -260,19 +320,28 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                 total_stats["errors"].extend(stats["errors"])
                 total_stats["warnings"].extend(stats.get("warnings", []))
 
-                click.echo()
+                source_results.append({
+                    "url": source.url,
+                    "type": source.type,
+                    "videos_tracked": stats["videos_tracked"],
+                    "metadata_saved": stats["metadata_saved"],
+                    "captions_downloaded": stats.get("captions_downloaded", 0),
+                    "errors": len(stats["errors"]),
+                })
+
+                _echo(json_output=json_output)
 
             # Print total summary
-            click.echo("=" * 60)
-            click.echo("Total Summary:")
-            click.echo(f"  Sources processed: {total_stats['sources_processed']}")
-            click.echo(f"  Videos tracked: {total_stats['videos_tracked']}")
-            click.echo(f"  Metadata files saved: {total_stats['metadata_saved']}")
+            _echo("=" * 60, json_output)
+            _echo("Total Summary:", json_output)
+            _echo(f"  Sources processed: {total_stats['sources_processed']}", json_output)
+            _echo(f"  Videos tracked: {total_stats['videos_tracked']}", json_output)
+            _echo(f"  Metadata files saved: {total_stats['metadata_saved']}", json_output)
 
             if total_stats["warnings"]:
-                click.echo(f"  Warnings: {len(total_stats['warnings'])}")
+                _echo(f"  Warnings: {len(total_stats['warnings'])}", json_output)
             if total_stats["errors"]:
-                click.echo(f"  Errors: {len(total_stats['errors'])}")
+                _echo(f"  Errors: {len(total_stats['errors'])}", json_output)
 
             all_errors.extend(total_stats["errors"])
             all_warnings.extend(total_stats["warnings"])
@@ -293,31 +362,67 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
             try:
                 from pagefind.index import PagefindIndex  # noqa: F401
             except ImportError:
-                click.echo(
+                _echo(
                     "Error: pagefind package required for search index. "
                     "Install with: pip install 'annextube[search]'",
-                    err=True,
+                    json_output, err=True,
                 )
-                ctx.exit(1)
+                if not json_output:
+                    ctx.exit(1)
             else:
                 try:
-                    click.echo()
-                    click.echo("Building caption search index...")
+                    _echo(json_output=json_output)
+                    _echo("Building caption search index...", json_output)
                     search_stats = asyncio.run(build_caption_index(output_dir))
-                    if search_stats.videos_indexed == 0 and search_stats.chunks_created == 0:
-                        click.echo("  [ok] Search index up to date (no changes)")
-                    else:
-                        size_mb = search_stats.index_size_bytes / (1024 * 1024)
-                        click.echo(
-                            f"  [ok] {search_stats.videos_indexed} videos "
-                            f"({search_stats.videos_curated} curated, {search_stats.videos_original} original), "
-                            f"{search_stats.chunks_created:,} chunks, {size_mb:.1f} MB"
-                        )
-                    if search_stats.videos_skipped:
-                        click.echo(f"  (skipped {search_stats.videos_skipped} videos without captions)")
+                    if not json_output:
+                        if search_stats.videos_indexed == 0 and search_stats.chunks_created == 0:
+                            click.echo("  [ok] Search index up to date (no changes)")
+                        else:
+                            size_mb = search_stats.index_size_bytes / (1024 * 1024)
+                            click.echo(
+                                f"  [ok] {search_stats.videos_indexed} videos "
+                                f"({search_stats.videos_curated} curated, {search_stats.videos_original} original), "
+                                f"{search_stats.chunks_created:,} chunks, {size_mb:.1f} MB"
+                            )
+                        if search_stats.videos_skipped:
+                            click.echo(f"  (skipped {search_stats.videos_skipped} videos without captions)")
                 except Exception as e:
-                    click.echo(f"Warning: search index build failed: {e}", err=True)
+                    if not json_output:
+                        click.echo(f"Warning: search index build failed: {e}", err=True)
+                    else:
+                        logger.warning(f"Search index build failed: {e}")
 
+        duration_seconds = round(time.monotonic() - start_time, 1)
+
+        # Emit JSON output
+        if json_output:
+            has_errors = len(all_errors) > 0
+            total_videos = sum(s["videos_tracked"] for s in source_results)
+            total_metadata = sum(s["metadata_saved"] for s in source_results)
+            total_captions = sum(s["captions_downloaded"] for s in source_results)
+            result: dict[str, Any] = {
+                "status": "error" if has_errors else "success",
+                "command": "backup",
+                "timestamp": datetime.now().isoformat(),
+                "sources_processed": len(source_results),
+                "sources": source_results,
+                "summary": {
+                    "videos_tracked": total_videos,
+                    "metadata_saved": total_metadata,
+                    "captions_downloaded": total_captions,
+                    "duration_seconds": duration_seconds,
+                },
+            }
+            if all_errors:
+                result["errors"] = all_errors
+            if all_warnings:
+                result["warnings"] = all_warnings
+            click.echo(json_mod.dumps(result, indent=2))
+            if has_errors:
+                ctx.exit(1)
+            return
+
+        # Human-readable final output
         click.echo()
         if all_warnings:
             n = len(all_warnings)
@@ -339,24 +444,37 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         else:
             click.echo("[ok] Backup complete!")
 
+    except click.exceptions.Exit:
+        raise  # Let Click handle exit codes from ctx.exit()
+
     except FileNotFoundError as e:
-        click.echo(f"Error: {e}", err=True)
-        click.echo("Edit .annextube/config.toml to configure sources")
+        if json_output:
+            click.echo(_json_error("backup", 5, str(e)))
+        else:
+            click.echo(f"Error: {e}", err=True)
+            click.echo("Edit .annextube/config.toml to configure sources")
         raise click.Abort() from e
 
     except Exception as e:
         logger.error(f"Backup failed: {e}")
-        click.echo(f"Error: {e}", err=True)
+        if json_output:
+            click.echo(_json_error("backup", 1, str(e)))
+        else:
+            click.echo(f"Error: {e}", err=True)
         raise click.Abort() from e
 
 
-def _print_stats(stats: dict, prefix: str = ""):
-    """Print backup statistics.
+def _print_stats(stats: dict, prefix: str = "", json_output: bool = False) -> None:
+    """Print backup statistics in human-readable mode.
 
     Args:
         stats: Statistics dictionary
         prefix: Optional prefix for each line
+        json_output: If True, suppress output (JSON emitted at end)
     """
+    if json_output:
+        return
+
     click.echo(f"{prefix}Summary:")
     click.echo(f"{prefix}  Videos processed: {stats['videos_processed']}")
     click.echo(f"{prefix}  Videos tracked: {stats['videos_tracked']}")

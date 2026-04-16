@@ -1225,12 +1225,46 @@ class Archiver:
             self._update_playlist_symlinks(playlist_dir, playlist, video_id_map)
             return stats
 
+        # Batch pre-fetch API data for efficiency (same pattern as backup_channel)
+        prefetched_stats: dict[str, dict[str, int]] | None = None
+        api_metadata_cache: dict[str, dict] | None = None
+
+        if self.youtube.api_client:
+            if self.update_mode == "all-incremental":
+                existing_ids: list[str] = [
+                    vid
+                    for v in videos_metadata
+                    if v.get("video_id")
+                    for vid in [v.get("video_id") or v.get("id")]
+                    if vid is not None
+                ]
+                if existing_ids:
+                    logger.info(f"Batch-fetching statistics for {len(existing_ids)} existing video(s)")
+                    try:
+                        prefetched_stats = self.youtube.api_client.batch_get_video_statistics(existing_ids)
+                        logger.info(f"Pre-fetched statistics for {len(prefetched_stats)} video(s)")
+                    except Exception as e:
+                        logger.warning(f"Failed to batch-fetch statistics: {e}")
+
+            new_video_ids: list[str] = [
+                v["id"]
+                for v in videos_metadata
+                if v.get("id") and not v.get("video_id")
+            ]
+            if new_video_ids:
+                logger.info(f"Batch-fetching API metadata for {len(new_video_ids)} new video(s)")
+                try:
+                    api_metadata_cache = self.youtube.api_client.batch_enhance_video_metadata(new_video_ids)
+                    logger.info(f"Pre-fetched API metadata for {len(api_metadata_cache)} video(s)")
+                except Exception as e:
+                    logger.warning(f"Failed to batch-fetch API metadata: {e}")
+
         # Process each video with checkpoint support
         checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
 
         try:
             for i, video_meta in enumerate(videos_metadata, 1):
-                video = self.youtube.metadata_to_video(video_meta)
+                video = self.youtube.metadata_to_video(video_meta, api_metadata_cache=api_metadata_cache)
                 video_id = video.video_id
 
                 # Check if video was already processed in this run (e.g., from channel backup)
@@ -1238,7 +1272,7 @@ class Archiver:
                     logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
                 else:
                     logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                    caption_count = self._process_video(video)
+                    caption_count = self._process_video(video, prefetched_stats=prefetched_stats)
 
                     stats["videos_processed"] += 1
                     stats["videos_tracked"] += 1

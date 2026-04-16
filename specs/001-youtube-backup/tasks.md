@@ -162,7 +162,7 @@ annextube backup
 - [X] T027 [US1] Add URL tracking to GitAnnexService in annextube/services/git_annex.py (git annex addurl --relaxed --fast per FR-029)
 - [X] T028 [US1] Add progress indicators to backup command in annextube/cli/backup.py (per-source progress in backup output)
 - [X] T029 [US1] Implement exit codes in CLI commands (0=success, non-zero for errors via click context)
-- [ ] T030 [US1] Add JSON output mode to backup command in annextube/cli/backup.py (--json flag per cli-contract.md)
+- [X] T030 [US1] Add JSON output mode to backup command in annextube/cli/backup.py (--json flag per cli-contract.md)
 
 **Checkpoint**: At this point, User Story 1 should be fully functional - can init repository, configure sources in `.annextube/config.toml`, and backup channels with all metadata
 
@@ -193,7 +193,7 @@ annextube backup
 - [X] T036 [US2] Add caption update detection in Archiver (detect new/changed captions)
 - [X] T037 [US2] Add metadata change detection in Archiver (timestamp filtering via _filter_timestamp_only_changes in git_annex.py)
 - [X] T038 [US2] Implement yt-dlp archive file integration in YouTubeService (skip already-processed videos)
-- [ ] T039 [US2] Add batch API request optimization to YouTubeService in annextube/services/youtube.py (minimize API calls per FR-016)
+- [X] T039 [US2] Add batch API request optimization to YouTubeService in annextube/services/youtube.py (minimize API calls per FR-016)
 - [X] T040 [US2] Implement retry logic with exponential backoff (ytdlp_ratelimit.py + quota_manager.py)
 - [X] T041 [US2] ~~Update SyncState~~ OBSOLETE — state derived from data files; timestamp-only commit filtering in git_annex.py
 - [X] T042 [US2] Add --force and date range options to backup command (--date-start, --date-end, --limit, --update modes)
@@ -571,13 +571,13 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 150 | **Completed**: 104 | **Remaining**: 46 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
+**Total Tasks**: 150 | **Completed**: 106 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
 - Phase 2 (Foundational): 9/9
-- Phase 3 (US1 - Initial Archive): 18/19
-- Phase 4 (US2 - Incremental Updates): 11/12
+- Phase 3 (US1 - Initial Archive): 19/19
+- Phase 4 (US2 - Incremental Updates): 12/12
 - Phase 5 (US3 - Filtering): 5/9
 - Phase 5b (Playlist Discovery): 0/6
 - Phase 6 (US4 - Web Interface): 19/19
