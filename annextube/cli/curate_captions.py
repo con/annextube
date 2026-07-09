@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 import click
 
+from annextube.lib.cli_options import output_dir_option
 from annextube.lib.logging_config import get_logger
 
 if TYPE_CHECKING:
@@ -25,12 +26,7 @@ logger = get_logger(__name__)
     required=False,
     default=None,
 )
-@click.option(
-    "-o", "--output-dir",
-    type=click.Path(path_type=Path),
-    default=None,
-    help="Archive directory (default: current directory)",
-)
+@output_dir_option(short=True, default=None)
 @click.option(
     "--video-id",
     multiple=True,

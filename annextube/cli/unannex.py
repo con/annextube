@@ -5,19 +5,14 @@ from pathlib import Path
 
 import click
 
+from annextube.lib.cli_options import output_dir_option
 from annextube.lib.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
 @click.command()
-@click.option(
-    "--output-dir",
-    "-o",
-    type=click.Path(path_type=Path),
-    default=Path.cwd(),
-    help="Archive directory (default: current directory)",
-)
+@output_dir_option(short=True)
 @click.option(
     "--update-gitattributes/--no-update-gitattributes",
     default=True,

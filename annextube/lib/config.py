@@ -778,43 +778,22 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
 '''
 
 
-def save_config_template(config_dir: Path, urls: list[str] | None = None,
-                        enable_videos: bool = True, comments_depth: int | None = None,
-                        enable_captions: bool = True, enable_thumbnails: bool = True,
-                        limit: int | None = None, include_playlists: str = "none",
-                        include_podcasts: str = "none",
-                        video_path_pattern: str = "{year}/{month}/{date}_{sanitized_title}",
-                        enable_curation: bool = False,
-                        enable_search: bool = False) -> Path:
-    """Save configuration template to directory.
+def save_config_template(config_dir: Path, **template_kwargs: Any) -> Path:
+    """Write ``generate_config_template(**template_kwargs)`` under ``config_dir``.
+
+    See :func:`generate_config_template` for the full parameter list.
 
     Args:
         config_dir: Directory to save config template (e.g., .annextube/)
-        urls: List of YouTube channel/playlist URLs to add
-        enable_videos: Enable video downloading (default: True)
-        comments_depth: Comments to fetch (None=unlimited, 0=disabled, default: None)
-        enable_captions: Enable captions (default: True)
-        enable_thumbnails: Enable thumbnails (default: True)
-        limit: Limit to N most recent videos (default: None = no limit)
-        include_playlists: Playlist inclusion ("none", "all", or regex pattern, default: "none")
-        include_podcasts: Podcast inclusion ("none", "all", or regex pattern, default: "none")
-        video_path_pattern: Path pattern for video directories (default: "{year}/{month}/{date}_{sanitized_title}")
-        enable_curation: Enable caption curation during backup (default: False)
-        enable_search: Enable search index build after backup (default: False)
+        **template_kwargs: Forwarded verbatim to ``generate_config_template``.
 
     Returns:
-        Path to created config file
+        Path to the created config file.
     """
     config_dir.mkdir(parents=True, exist_ok=True)
     config_path = config_dir / "config.toml"
-
     with open(config_path, "w") as f:
-        f.write(generate_config_template(urls, enable_videos, comments_depth, enable_captions,
-                                        enable_thumbnails, limit, include_playlists, include_podcasts,
-                                        video_path_pattern,
-                                        enable_curation=enable_curation,
-                                        enable_search=enable_search))
-
+        f.write(generate_config_template(**template_kwargs))
     return config_path
 
 

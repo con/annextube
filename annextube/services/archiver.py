@@ -774,7 +774,24 @@ class Archiver:
             logger.info(f"Symlinks unchanged for {playlist_dir.name}")
             return False
 
-        # Different — remove all old symlinks, recreate all
+        self._write_playlist_symlinks(playlist_dir, desired, action="Updated")
+        return True
+
+    def _write_playlist_symlinks(
+        self,
+        playlist_dir: Path,
+        desired: list[tuple[Any, Any, Path]],
+        action: str,
+    ) -> None:
+        """Wipe and rewrite the playlist directory's symlinks.
+
+        Args:
+            playlist_dir: Playlist directory whose symlinks will be replaced.
+            desired: Sequence of ``(_, _, video_dir)`` tuples in the intended
+                order — third element is the video directory the symlink
+                should point at.
+            action: Human-readable verb for the log line ("Updated"/"Rebuilt").
+        """
         for item in playlist_dir.iterdir():
             if item.is_symlink():
                 item.unlink()
@@ -785,10 +802,9 @@ class Archiver:
             (playlist_dir / symlink_name).symlink_to(relative_target)
 
         logger.info(
-            f"Updated {len(desired)} symlinks in {playlist_dir.name} "
+            f"{action} {len(desired)} symlinks in {playlist_dir.name} "
             f"(chronological order)"
         )
-        return True
 
     def _rebuild_playlist_symlinks(self, playlist_dir: Path, playlist: Playlist) -> None:
         """Rebuild all symlinks in a playlist directory from scratch.
@@ -801,23 +817,8 @@ class Archiver:
             playlist: Playlist model with video_ids
         """
         video_id_map = self._build_video_id_map(use_cache=False)
-
-        # Remove all existing symlinks
-        for item in playlist_dir.iterdir():
-            if item.is_symlink():
-                item.unlink()
-
-        # Compute desired order and create symlinks
         desired = self._compute_desired_symlinks(playlist, video_id_map)
-        for index, (_, _, video_dir) in enumerate(desired, 1):
-            symlink_name = self._get_playlist_symlink_name(video_dir, index)
-            relative_target = Path("..") / ".." / video_dir.relative_to(self.repo_path)
-            (playlist_dir / symlink_name).symlink_to(relative_target)
-
-        logger.info(
-            f"Rebuilt {len(desired)} symlinks in {playlist_dir.name} "
-            f"(chronological order)"
-        )
+        self._write_playlist_symlinks(playlist_dir, desired, action="Rebuilt")
 
     def _discover_playlists(self, channel_url: str, include_pattern: str,
                            exclude_pattern: str | None, include_podcasts: str) -> list[str]:
@@ -1066,57 +1067,14 @@ class Archiver:
         if self.update_mode != "playlists" and videos_metadata:
             logger.info(f"Found {len(videos_metadata)} videos to process")
 
-            # Batch pre-fetch API data for efficiency
-            prefetched_stats: dict[str, dict[str, int]] | None = None
-            api_metadata_cache: dict[str, dict] | None = None
-
-            if self.youtube.api_client:
-                if self.update_mode == "all-incremental":
-                    existing_ids: list[str] = [
-                        vid
-                        for v in videos_metadata
-                        if v.get("video_id")
-                        for vid in [v.get("video_id") or v.get("id")]
-                        if vid is not None
-                    ]
-                    if existing_ids:
-                        logger.info(f"Batch-fetching statistics for {len(existing_ids)} existing video(s)")
-                        try:
-                            prefetched_stats = self.youtube.api_client.batch_get_video_statistics(existing_ids)
-                            logger.info(f"Pre-fetched statistics for {len(prefetched_stats)} video(s)")
-                        except Exception as e:
-                            logger.warning(f"Failed to batch-fetch statistics: {e}")
-
-                new_video_ids: list[str] = [
-                    v["id"]
-                    for v in videos_metadata
-                    if v.get("id") and not v.get("video_id")
-                ]
-                if new_video_ids:
-                    logger.info(f"Batch-fetching API metadata for {len(new_video_ids)} new video(s)")
-                    try:
-                        api_metadata_cache = self.youtube.api_client.batch_enhance_video_metadata(new_video_ids)
-                        logger.info(f"Pre-fetched API metadata for {len(api_metadata_cache)} video(s)")
-                    except Exception as e:
-                        logger.warning(f"Failed to batch-fetch API metadata: {e}")
-
-            # Process each video with checkpoint support
-            checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
+            prefetched_stats, api_metadata_cache = self._batch_prefetch_api_data(videos_metadata)
 
             try:
-                for i, video_meta in enumerate(videos_metadata, 1):
-                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                    video = self.youtube.metadata_to_video(video_meta, api_metadata_cache=api_metadata_cache)
-                    caption_count = self._process_video(video, prefetched_stats=prefetched_stats)
-
-                    stats["videos_processed"] += 1
-                    stats["videos_tracked"] += 1
-                    stats["metadata_saved"] += 1
-                    stats["captions_downloaded"] += caption_count
-
-                    # Periodic checkpoint
-                    if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
-                        self._checkpoint(channel_url, i, len(videos_metadata))
+                self._process_video_batch(
+                    videos_metadata, stats,
+                    prefetched_stats, api_metadata_cache,
+                    checkpoint_target=channel_url,
+                )
 
                 # Final commit for video work
                 if self._has_uncommitted_changes():
@@ -1291,62 +1249,15 @@ class Archiver:
             return stats
 
         # Batch pre-fetch API data for efficiency (same pattern as backup_channel)
-        prefetched_stats: dict[str, dict[str, int]] | None = None
-        api_metadata_cache: dict[str, dict] | None = None
-
-        if self.youtube.api_client:
-            if self.update_mode == "all-incremental":
-                existing_ids: list[str] = [
-                    vid
-                    for v in videos_metadata
-                    if v.get("video_id")
-                    for vid in [v.get("video_id") or v.get("id")]
-                    if vid is not None
-                ]
-                if existing_ids:
-                    logger.info(f"Batch-fetching statistics for {len(existing_ids)} existing video(s)")
-                    try:
-                        prefetched_stats = self.youtube.api_client.batch_get_video_statistics(existing_ids)
-                        logger.info(f"Pre-fetched statistics for {len(prefetched_stats)} video(s)")
-                    except Exception as e:
-                        logger.warning(f"Failed to batch-fetch statistics: {e}")
-
-            new_video_ids: list[str] = [
-                v["id"]
-                for v in videos_metadata
-                if v.get("id") and not v.get("video_id")
-            ]
-            if new_video_ids:
-                logger.info(f"Batch-fetching API metadata for {len(new_video_ids)} new video(s)")
-                try:
-                    api_metadata_cache = self.youtube.api_client.batch_enhance_video_metadata(new_video_ids)
-                    logger.info(f"Pre-fetched API metadata for {len(api_metadata_cache)} video(s)")
-                except Exception as e:
-                    logger.warning(f"Failed to batch-fetch API metadata: {e}")
-
-        # Process each video with checkpoint support
-        checkpoint_interval = self.config.backup.checkpoint_interval if self.config.backup.checkpoint_enabled else 0
+        prefetched_stats, api_metadata_cache = self._batch_prefetch_api_data(videos_metadata)
 
         try:
-            for i, video_meta in enumerate(videos_metadata, 1):
-                video = self.youtube.metadata_to_video(video_meta, api_metadata_cache=api_metadata_cache)
-                video_id = video.video_id
-
-                # Check if video was already processed in this run (e.g., from channel backup)
-                if video_id in self._processed_video_ids:
-                    logger.info(f"Video {i}/{len(videos_metadata)} already processed in this run: {video.title}")
-                else:
-                    logger.info(f"Processing video {i}/{len(videos_metadata)}: {video_meta.get('title', 'Unknown')}")
-                    caption_count = self._process_video(video, prefetched_stats=prefetched_stats)
-
-                    stats["videos_processed"] += 1
-                    stats["videos_tracked"] += 1
-                    stats["metadata_saved"] += 1
-                    stats["captions_downloaded"] += caption_count
-
-                # Periodic checkpoint
-                if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < len(videos_metadata):
-                    self._checkpoint(playlist_url, i, len(videos_metadata))
+            self._process_video_batch(
+                videos_metadata, stats,
+                prefetched_stats, api_metadata_cache,
+                checkpoint_target=playlist_url,
+                skip_already_processed=True,
+            )
 
             # Commit video work
             if self._has_uncommitted_changes():
@@ -1385,6 +1296,55 @@ class Archiver:
         stats["warnings"] = list(self._current_run_warnings)
         return stats
 
+    def _record_unavailable_videos(self, entries: dict[str, dict]) -> int:
+        """Merge new entries into .annextube/unavailable_videos.json.
+
+        Reads the existing file if present, appends only IDs not already
+        recorded (existing entries are never overwritten — they keep their
+        original ``detected_at``), and writes the result back atomically.
+
+        Args:
+            entries: Mapping of ``video_id`` → payload dict.  Each payload
+                must include at least ``detected_at`` and ``reason``.
+                Callers supply the ``playlist_id`` / ``source`` label
+                appropriate to their code path.
+
+        Returns:
+            Number of newly recorded IDs (0 if all were already present or
+            ``entries`` was empty).
+        """
+        if not entries:
+            return 0
+
+        unavail_path = self.repo_path / ".annextube" / "unavailable_videos.json"
+        existing: dict[str, dict] = {}
+        if unavail_path.exists():
+            try:
+                with open(unavail_path, encoding="utf-8") as f:
+                    existing = json.load(f)
+            except Exception as e:
+                logger.warning(f"Failed to load {unavail_path}: {e}")
+
+        new_count = 0
+        for video_id, payload in entries.items():
+            if video_id in existing:
+                continue
+            existing[video_id] = payload
+            new_count += 1
+            logger.debug(f"Recorded unavailable video: {video_id}")
+
+        if new_count == 0:
+            return 0
+
+        unavail_path.parent.mkdir(parents=True, exist_ok=True)
+        with AtomicFileWriter(unavail_path) as f:
+            json.dump(existing, f, indent=2, ensure_ascii=False)
+
+        logger.info(
+            f"Recorded {new_count} newly unavailable video(s) in {unavail_path.name}"
+        )
+        return new_count
+
     def _save_unavailable_stubs(self, playlist: Playlist, fetched_video_ids: set[str]) -> int:
         """Record unavailable playlist videos in .annextube/unavailable_videos.json.
 
@@ -1399,57 +1359,23 @@ class Archiver:
         Returns:
             Number of newly recorded unavailable video IDs
         """
-        # Collect IDs that were explicitly detected as unavailable during extraction
         newly_unavailable = set(self.youtube._last_unavailable_ids)
-
-        # Also find IDs in the playlist that weren't fetched and don't have metadata
-        all_playlist_ids = set(playlist.video_ids)
-        missing_ids = all_playlist_ids - fetched_video_ids
-
-        # Check which missing IDs already have metadata.json in the archive
+        missing_ids = set(playlist.video_ids) - fetched_video_ids
         video_id_map = self._build_video_id_map()
-
         for video_id in missing_ids:
             if video_id not in video_id_map:
                 newly_unavailable.add(video_id)
 
-        if not newly_unavailable:
-            return 0
-
-        # Load existing unavailable_videos.json
-        unavail_path = self.repo_path / ".annextube" / "unavailable_videos.json"
-        existing: dict[str, dict] = {}
-        if unavail_path.exists():
-            try:
-                with open(unavail_path, encoding="utf-8") as f:
-                    existing = json.load(f)
-            except Exception as e:
-                logger.warning(f"Failed to load {unavail_path}: {e}")
-
-        # Add new entries (skip already-recorded IDs)
         now = datetime.now().isoformat()
-        new_count = 0
-        for video_id in newly_unavailable:
-            if video_id in existing:
-                continue
-            existing[video_id] = {
+        entries = {
+            vid: {
                 "detected_at": now,
                 "reason": "unavailable",
                 "playlist_id": playlist.playlist_id,
             }
-            new_count += 1
-            logger.debug(f"Recorded unavailable video: {video_id}")
-
-        if new_count == 0:
-            return 0
-
-        # Write updated file
-        unavail_path.parent.mkdir(parents=True, exist_ok=True)
-        with AtomicFileWriter(unavail_path) as f:
-            json.dump(existing, f, indent=2, ensure_ascii=False)
-
-        logger.info(f"Recorded {new_count} newly unavailable video(s) in {unavail_path.name}")
-        return new_count
+            for vid in newly_unavailable
+        }
+        return self._record_unavailable_videos(entries)
 
     def _save_unavailable_video_ids(self, video_ids: set[str], source: str = "channel") -> int:
         """Record unavailable video IDs in .annextube/unavailable_videos.json.
@@ -1461,40 +1387,134 @@ class Archiver:
         Returns:
             Number of newly recorded IDs
         """
-        if not video_ids:
-            return 0
-
-        unavail_path = self.repo_path / ".annextube" / "unavailable_videos.json"
-        existing: dict[str, dict] = {}
-        if unavail_path.exists():
-            try:
-                with open(unavail_path, encoding="utf-8") as f:
-                    existing = json.load(f)
-            except Exception as e:
-                logger.warning(f"Failed to load {unavail_path}: {e}")
-
         now = datetime.now().isoformat()
-        new_count = 0
-        for video_id in video_ids:
-            if video_id in existing:
-                continue
-            existing[video_id] = {
+        entries = {
+            vid: {
                 "detected_at": now,
                 "reason": "unavailable",
                 "source": source,
             }
-            new_count += 1
-            logger.debug(f"Recorded unavailable video: {video_id}")
+            for vid in video_ids
+        }
+        return self._record_unavailable_videos(entries)
 
-        if new_count == 0:
-            return 0
+    def _batch_prefetch_api_data(
+        self, videos_metadata: list[dict]
+    ) -> tuple[dict[str, dict[str, int]] | None, dict[str, dict] | None]:
+        """Prefetch API stats + enhanced metadata to avoid per-video calls.
 
-        unavail_path.parent.mkdir(parents=True, exist_ok=True)
-        with AtomicFileWriter(unavail_path) as f:
-            json.dump(existing, f, indent=2, ensure_ascii=False)
+        Consolidates the batch pre-fetch used by both ``backup_channel`` and
+        ``backup_playlist``.  In ``all-incremental`` mode we batch-refresh
+        statistics for already-archived videos; independently, for any new
+        (not-yet-archived) videos we batch-fetch enhanced metadata.
 
-        logger.info(f"Recorded {new_count} newly unavailable video(s) in {unavail_path.name}")
-        return new_count
+        Args:
+            videos_metadata: List of video dicts.  Each dict may carry
+                ``video_id`` (already in archive) or ``id`` (yt-dlp fresh
+                extraction) — distinguishing the two selects which batch
+                fetch applies.
+
+        Returns:
+            ``(prefetched_stats, api_metadata_cache)``.  Either or both may
+            be ``None`` when no API client is configured, no eligible IDs
+            were found, or the batch fetch failed (already logged).
+        """
+        prefetched_stats: dict[str, dict[str, int]] | None = None
+        api_metadata_cache: dict[str, dict] | None = None
+
+        if not self.youtube.api_client:
+            return prefetched_stats, api_metadata_cache
+
+        if self.update_mode == "all-incremental":
+            existing_ids: list[str] = [
+                vid
+                for v in videos_metadata
+                if v.get("video_id")
+                for vid in [v.get("video_id") or v.get("id")]
+                if vid is not None
+            ]
+            if existing_ids:
+                logger.info(f"Batch-fetching statistics for {len(existing_ids)} existing video(s)")
+                try:
+                    prefetched_stats = self.youtube.api_client.batch_get_video_statistics(existing_ids)
+                    logger.info(f"Pre-fetched statistics for {len(prefetched_stats)} video(s)")
+                except Exception as e:
+                    logger.warning(f"Failed to batch-fetch statistics: {e}")
+
+        new_video_ids: list[str] = [
+            v["id"]
+            for v in videos_metadata
+            if v.get("id") and not v.get("video_id")
+        ]
+        if new_video_ids:
+            logger.info(f"Batch-fetching API metadata for {len(new_video_ids)} new video(s)")
+            try:
+                api_metadata_cache = self.youtube.api_client.batch_enhance_video_metadata(new_video_ids)
+                logger.info(f"Pre-fetched API metadata for {len(api_metadata_cache)} video(s)")
+            except Exception as e:
+                logger.warning(f"Failed to batch-fetch API metadata: {e}")
+
+        return prefetched_stats, api_metadata_cache
+
+    def _process_video_batch(
+        self,
+        videos_metadata: list[dict],
+        stats: dict[str, Any],
+        prefetched_stats: dict[str, dict[str, int]] | None,
+        api_metadata_cache: dict[str, dict] | None,
+        *,
+        checkpoint_target: str,
+        skip_already_processed: bool = False,
+    ) -> None:
+        """Process each video, accumulate stats, and checkpoint periodically.
+
+        Consolidates the video-processing loop used by both ``backup_channel``
+        and ``backup_playlist``.
+
+        Args:
+            videos_metadata: Video dicts to iterate.
+            stats: Mutated in place; ``videos_processed``, ``videos_tracked``,
+                ``metadata_saved``, and ``captions_downloaded`` are incremented.
+            prefetched_stats: Batch-fetched statistics passed through to
+                :meth:`_process_video`.
+            api_metadata_cache: Batch-fetched enhanced metadata used when
+                turning a video-meta dict into a ``Video`` model.
+            checkpoint_target: Passed to :meth:`_checkpoint` for the periodic
+                progress markers (a channel URL or a playlist URL).
+            skip_already_processed: When True, skip videos whose ``video_id``
+                is in ``self._processed_video_ids`` — used by
+                ``backup_playlist`` to avoid double-processing videos that
+                were already handled during the channel pass.
+        """
+        checkpoint_interval = (
+            self.config.backup.checkpoint_interval
+            if self.config.backup.checkpoint_enabled else 0
+        )
+        total = len(videos_metadata)
+        for i, video_meta in enumerate(videos_metadata, 1):
+            video = self.youtube.metadata_to_video(
+                video_meta, api_metadata_cache=api_metadata_cache,
+            )
+
+            if skip_already_processed and video.video_id in self._processed_video_ids:
+                logger.info(
+                    f"Video {i}/{total} already processed in this run: {video.title}"
+                )
+            else:
+                logger.info(
+                    f"Processing video {i}/{total}: "
+                    f"{video_meta.get('title', 'Unknown')}"
+                )
+                caption_count = self._process_video(
+                    video, prefetched_stats=prefetched_stats,
+                )
+                stats["videos_processed"] += 1
+                stats["videos_tracked"] += 1
+                stats["metadata_saved"] += 1
+                stats["captions_downloaded"] += caption_count
+
+            if checkpoint_interval > 0 and i % checkpoint_interval == 0 and i < total:
+                self._checkpoint(checkpoint_target, i, total)
 
     def _process_video(self, video: Video, prefetched_stats: dict[str, dict[str, int]] | None = None) -> int:
         """Process a single video.

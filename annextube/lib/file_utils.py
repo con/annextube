@@ -4,15 +4,24 @@ from pathlib import Path
 from typing import IO, Any
 
 
+def _prepare_atomic_target(file_path: Path) -> Path:
+    """Ready ``file_path`` for a fresh write in a git-annex repo.
+
+    git-annex files are symlinks to read-only content under
+    ``.git/annex/objects/``; overwriting the target directly raises
+    "Permission denied".  This helper unlinks any existing file or
+    symlink at ``file_path`` and ensures the parent directory exists,
+    returning the normalized ``Path``.
+    """
+    file_path = Path(file_path)
+    if file_path.exists() or file_path.is_symlink():
+        file_path.unlink()
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    return file_path
+
+
 def atomic_write(file_path: Path, content: str, encoding: str = 'utf-8') -> None:
-    """Atomically write content to a file, handling git-annex symlinks.
-
-    In git-annex repositories, files may be symlinks to read-only content in
-    .git/annex/objects/. This function ensures safe updates by:
-    1. Removing the existing file/symlink if it exists
-    2. Writing the new content
-
-    This prevents "Permission denied" errors when trying to modify annexed files.
+    """Atomically write text content to a file, handling git-annex symlinks.
 
     Args:
         file_path: Path to file to write
@@ -22,28 +31,11 @@ def atomic_write(file_path: Path, content: str, encoding: str = 'utf-8') -> None
     Example:
         >>> atomic_write(Path("video/metadata.json"), json.dumps(data, indent=2))
     """
-    file_path = Path(file_path)
-
-    # Remove existing file/symlink if it exists
-    if file_path.exists() or file_path.is_symlink():
-        file_path.unlink()
-
-    # Ensure parent directory exists
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write new content
-    file_path.write_text(content, encoding=encoding)
+    _prepare_atomic_target(file_path).write_text(content, encoding=encoding)
 
 
 def atomic_write_bytes(file_path: Path, content: bytes) -> None:
     """Atomically write binary content to a file, handling git-annex symlinks.
-
-    In git-annex repositories, files may be symlinks to read-only content in
-    .git/annex/objects/. This function ensures safe updates by:
-    1. Removing the existing file/symlink if it exists
-    2. Writing the new content
-
-    This prevents "Permission denied" errors when trying to modify annexed files.
 
     Args:
         file_path: Path to file to write
@@ -52,17 +44,7 @@ def atomic_write_bytes(file_path: Path, content: bytes) -> None:
     Example:
         >>> atomic_write_bytes(Path("video/thumbnail.jpg"), image_data)
     """
-    file_path = Path(file_path)
-
-    # Remove existing file/symlink if it exists
-    if file_path.exists() or file_path.is_symlink():
-        file_path.unlink()
-
-    # Ensure parent directory exists
-    file_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write new content
-    file_path.write_bytes(content)
+    _prepare_atomic_target(file_path).write_bytes(content)
 
 
 class AtomicFileWriter:
@@ -88,19 +70,11 @@ class AtomicFileWriter:
 
     def __enter__(self):
         """Enter context: remove existing file and open for writing."""
-        # Remove existing file/symlink if it exists
-        if self.file_path.exists() or self.file_path.is_symlink():
-            self.file_path.unlink()
-
-        # Ensure parent directory exists
-        self.file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Open file for writing
+        _prepare_atomic_target(self.file_path)
         if self.encoding:
             self.file = open(self.file_path, self.mode, encoding=self.encoding)
         else:
             self.file = open(self.file_path, self.mode)
-
         return self.file
 
     def __exit__(self, exc_type, exc_val, exc_tb):

@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from annextube.lib.archive_discovery import discover_annextube
+from annextube.lib.cli_options import output_dir_option
 from annextube.lib.config import load_config
 from annextube.lib.logging_config import get_logger
 
@@ -13,7 +14,7 @@ logger = get_logger(__name__)
 
 
 @click.command()
-@click.option("--output-dir", "-o", type=click.Path(path_type=Path), default=Path.cwd(), help="Archive directory (default: current directory)")
+@output_dir_option(short=True)
 @click.option("--skip-git-status", is_flag=True, help="Skip git status check")
 @click.option("--skip-config", is_flag=True, help="Skip config validation")
 @click.option("--skip-tsv", is_flag=True, help="Skip TSV consistency checks")

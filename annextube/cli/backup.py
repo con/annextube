@@ -10,6 +10,7 @@ from typing import Any
 import click
 
 from annextube.lib.archive_discovery import discover_annextube
+from annextube.lib.cli_options import output_dir_option
 from annextube.lib.config import load_config
 from annextube.lib.date_utils import parse_date
 from annextube.lib.logging_config import get_logger
@@ -44,12 +45,7 @@ def _json_error(command: str, code: int, message: str, details: str = "") -> str
 
 @click.command()
 @click.argument("url", required=False)
-@click.option(
-    "--output-dir",
-    type=click.Path(path_type=Path),
-    default=Path.cwd(),
-    help="Archive directory (default: current directory)",
-)
+@output_dir_option()
 @click.option("--limit", type=int, help="Limit number of videos (most recent)")
 @click.option(
     "--update",

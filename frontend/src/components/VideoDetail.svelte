@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import type { Video, Comment } from '@/types/models';
   import { dataLoader } from '@/services/data-loader';
-  import { formatViews, formatRelativeTime } from '@/utils/format';
+  import { formatViews, formatRelativeTime, formatDuration } from '@/utils/format';
   import VideoPlayer from './VideoPlayer.svelte';
   import CaptionBrowser from './CaptionBrowser.svelte';
   import CommentView from './CommentView.svelte';
@@ -129,16 +129,6 @@
     }
   });
 
-  function formatDuration(seconds: number): string {
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-
-    if (hours > 0) {
-      return `${hours}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    }
-    return `${minutes}:${String(secs).padStart(2, '0')}`;
-  }
 </script>
 
 <svelte:window on:keydown={handleKeydown} />

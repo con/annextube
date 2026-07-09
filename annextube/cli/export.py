@@ -5,6 +5,7 @@ from pathlib import Path
 import click
 
 from annextube.lib.archive_discovery import discover_annextube
+from annextube.lib.cli_options import output_dir_option
 from annextube.lib.logging_config import get_logger
 from annextube.services.export import ExportService
 
@@ -20,12 +21,7 @@ logger = get_logger(__name__)
     default="all",
     required=False,
 )
-@click.option(
-    "--output-dir",
-    type=click.Path(path_type=Path),
-    default=Path.cwd(),
-    help="Archive directory (default: current directory)",
-)
+@output_dir_option()
 @click.option(
     "--output",
     "-o",

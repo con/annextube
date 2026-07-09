@@ -11,6 +11,7 @@ import click
 from annextube.cli.aggregate import discover_channels
 from annextube.cli.generate_web import deploy_frontend
 from annextube.lib.archive_discovery import discover_annextube
+from annextube.lib.cli_options import output_dir_option
 from annextube.lib.logging_config import get_logger
 from annextube.lib.range_server import RangeHTTPRequestHandler
 from annextube.services.export import ExportService
@@ -88,12 +89,7 @@ class ArchiveWatcher:
 
 
 @click.command()
-@click.option(
-    "--output-dir",
-    type=click.Path(path_type=Path),
-    default=Path.cwd(),
-    help="Archive directory (default: current directory)",
-)
+@output_dir_option()
 @click.option(
     "--port",
     type=int,

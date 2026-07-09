@@ -947,23 +947,31 @@ class YouTubeService:
             logger.warning(f"No playlists found for channel: {channel_url}")
             return []
 
-        playlists = []
-        for entry in info["entries"]:
-            if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
-                playlist_id = None
-                url = entry.get("url", "")
-                if "list=" in url:
-                    playlist_id = url.split("list=")[1].split("&")[0]
-
-                playlists.append({
-                    "id": playlist_id or entry.get("id"),
-                    "title": entry.get("title") or "Unknown",
-                    "url": url,
-                    "video_count": entry.get("playlist_count", 0),
-                })
-
+        playlists = self._parse_playlist_tab_entries(info["entries"])
         logger.info(f"Discovered {len(playlists)} playlists from {channel_url}")
         return playlists
+
+    @staticmethod
+    def _parse_playlist_tab_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Extract playlist-like dicts from a YouTube tab-extractor entries list.
+
+        Used for both the /playlists and /podcasts channel tabs.  Each entry
+        that identifies as a YoutubeTab URL result is turned into a dict with
+        ``id``, ``title``, ``url``, and ``video_count`` keys, preserving order.
+        """
+        results: list[dict[str, Any]] = []
+        for entry in entries:
+            if not entry or entry.get("_type") != "url" or entry.get("ie_key") != "YoutubeTab":
+                continue
+            url = entry.get("url", "")
+            playlist_id = url.split("list=")[1].split("&")[0] if "list=" in url else None
+            results.append({
+                "id": playlist_id or entry.get("id"),
+                "title": entry.get("title") or "Unknown",
+                "url": url,
+                "video_count": entry.get("playlist_count", 0),
+            })
+        return results
 
     def get_channel_podcasts(self, channel_url: str) -> list[dict[str, Any]]:
         """Get all podcasts from a channel's Podcasts tab.
@@ -996,21 +1004,7 @@ class YouTubeService:
             logger.debug(f"No podcasts found for channel: {channel_url}")
             return []
 
-        podcasts = []
-        for entry in info["entries"]:
-            if entry and entry.get("_type") == "url" and entry.get("ie_key") == "YoutubeTab":
-                playlist_id = None
-                url = entry.get("url", "")
-                if "list=" in url:
-                    playlist_id = url.split("list=")[1].split("&")[0]
-
-                podcasts.append({
-                    "id": playlist_id or entry.get("id"),
-                    "title": entry.get("title") or "Unknown",
-                    "url": url,
-                    "video_count": entry.get("playlist_count", 0),
-                })
-
+        podcasts = self._parse_playlist_tab_entries(info["entries"])
         logger.info(f"Discovered {len(podcasts)} podcasts from {channel_url}")
         return podcasts
 

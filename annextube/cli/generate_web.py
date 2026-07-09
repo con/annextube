@@ -7,6 +7,7 @@ import click
 
 from annextube._version import __version__
 from annextube.lib.archive_discovery import discover_annextube
+from annextube.lib.cli_options import output_dir_option
 from annextube.lib.logging_config import get_logger
 from annextube.services.export import ExportService
 
@@ -117,12 +118,7 @@ def _build_search_index(archive_path: Path, force: bool = False) -> None:
 
 
 @click.command()
-@click.option(
-    "--output-dir",
-    type=click.Path(path_type=Path),
-    default=Path.cwd(),
-    help="Archive directory (default: current directory)",
-)
+@output_dir_option()
 @click.option(
     "--force",
     is_flag=True,
