@@ -114,17 +114,27 @@ class YouTubeAPICommentsService(QuotaTrackingMixin):
 
         try:
             while True:
-                # Fetch comment threads (top-level comments + their replies)
-                request = self.youtube.commentThreads().list(
-                    part='snippet,replies',
-                    videoId=video_id,
-                    maxResults=min(100, max_comments - fetched_threads) if max_comments else 100,
-                    pageToken=next_page_token,
-                    textFormat='plainText',
-                    order='time'  # Newest first
-                )
+                # Fetch comment threads (top-level comments + their replies).
+                # Per-page HttpError handling so a mid-pagination quota
+                # exhaustion resumes from the current pageToken rather than
+                # restarting from scratch.
+                try:
+                    request = self.youtube.commentThreads().list(
+                        part='snippet,replies',
+                        videoId=video_id,
+                        maxResults=min(100, max_comments - fetched_threads) if max_comments else 100,
+                        pageToken=next_page_token,
+                        textFormat='plainText',
+                        order='time'  # Newest first
+                    )
+                    response = request.execute()
+                except HttpError as e:
+                    if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                        # Retry the SAME page after quota reset.
+                        self.quota_manager.handle_quota_exceeded(str(e))
+                        continue
+                    raise
 
-                response = request.execute()
                 self._track_api_call("commentThreads.list")
 
                 for item in response.get('items', []):
@@ -197,20 +207,14 @@ class YouTubeAPICommentsService(QuotaTrackingMixin):
             return all_comments
 
         except HttpError as e:
-            if e.resp.status == 403:
-                # Comments disabled or quota exceeded
-                if 'commentsDisabled' in str(e):
-                    return []  # Video has comments disabled
-                elif 'quotaExceeded' in str(e):
-                    # Handle quota exceeded - wait until midnight PT or raise error
-                    self.quota_manager.handle_quota_exceeded(str(e))
-                    # If we get here, quota has reset - retry the operation
-                    return self.fetch_comments(video_id, max_comments, max_replies_per_thread, existing_comment_ids)
-                raise  # Other 403 error (permissions, etc.)
-            elif e.resp.status == 404:
-                # Video not found
-                return []
-            raise
+            # Quota-exhaustion is handled inside the loop so pagination
+            # resumes rather than restarting. Only these end-of-life
+            # conditions are handled here.
+            if e.resp.status == 403 and 'commentsDisabled' in str(e):
+                return []  # Video has comments disabled
+            if e.resp.status == 404:
+                return []  # Video not found
+            raise  # Other errors (permissions, unexpected 403, etc.)
 
     def _parse_timestamp(self, iso_timestamp: str) -> int:
         """Convert ISO 8601 timestamp to Unix timestamp."""
@@ -353,7 +357,7 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
                 return self.get_video_details(video_ids, parts)
 
             logger.error(
-                f"YouTube API HTTP error: {e.resp.status} - {e.content.decode()}",
+                f"YouTube API HTTP error: {e.resp.status} - {e.content.decode(errors='replace')}",
                 exc_info=True,
             )
             return {}
@@ -639,7 +643,7 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
                 return self.get_channel_details(channel_id)
 
             logger.error(
-                f"YouTube API HTTP error: {e.resp.status} - {e.content.decode()}",
+                f"YouTube API HTTP error: {e.resp.status} - {e.content.decode(errors='replace')}",
                 exc_info=True,
             )
             return None
@@ -653,6 +657,10 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
 
         Uses playlistItems.list to paginate through the entire playlist.
         Returns IDs in the same order YouTube stores them (owner-defined).
+
+        On mid-pagination quota exhaustion, waits for reset and resumes
+        from the current ``pageToken`` — does not restart from page 1.
+        This avoids re-spending the units already consumed on earlier pages.
 
         Args:
             playlist_id: YouTube playlist ID (e.g., "PLxxxxxx")
@@ -668,9 +676,8 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
         page_token: str | None = None
         page_num = 0
 
-        try:
-            while True:
-                page_num += 1
+        while True:
+            try:
                 request = self.youtube.playlistItems().list(
                     part="contentDetails",
                     playlistId=playlist_id,
@@ -678,44 +685,48 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
                     pageToken=page_token,
                 )
                 response = request.execute()
-                self._track_api_call("playlistItems.list")
+            except HttpError as e:
+                if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                    # Retry the SAME page after quota reset — page_token
+                    # unchanged, video_ids accumulated so far preserved.
+                    self.quota_manager.handle_quota_exceeded(str(e))
+                    continue
 
-                for item in response.get("items", []):
-                    vid = item.get("contentDetails", {}).get("videoId")
-                    if vid:
-                        video_ids.append(vid)
+                if e.resp.status == 404 and page_num == 0:
+                    logger.warning(f"Playlist not found via API: {playlist_id}")
+                    return None
 
-                page_token = response.get("nextPageToken")
-                if not page_token:
-                    break
-
-            logger.info(
-                f"Fetched {len(video_ids)} video ID(s) from playlist {playlist_id} "
-                f"via YouTube API ({page_num} page(s))"
-            )
-            return video_ids
-
-        except HttpError as e:
-            if e.resp.status == 403 and 'quotaExceeded' in str(e):
-                self.quota_manager.handle_quota_exceeded(str(e))
-                return self.get_playlist_video_ids(playlist_id)
-
-            if e.resp.status == 404:
-                logger.warning(f"Playlist not found via API: {playlist_id}")
+                logger.error(
+                    f"YouTube API HTTP error fetching playlist {playlist_id} "
+                    f"page {page_num + 1}: {e.resp.status} - "
+                    f"{e.content.decode(errors='replace')}"
+                )
                 return None
 
-            logger.error(
-                f"YouTube API HTTP error fetching playlist {playlist_id}: "
-                f"{e.resp.status} - {e.content.decode()}"
-            )
-            return None
+            except Exception as e:
+                logger.error(
+                    f"Failed to fetch playlist video IDs via YouTube API: {e}",
+                    exc_info=True,
+                )
+                return None
 
-        except Exception as e:
-            logger.error(
-                f"Failed to fetch playlist video IDs via YouTube API: {e}",
-                exc_info=True,
-            )
-            return None
+            self._track_api_call("playlistItems.list")
+            page_num += 1
+
+            for item in response.get("items", []):
+                vid = item.get("contentDetails", {}).get("videoId")
+                if vid:
+                    video_ids.append(vid)
+
+            page_token = response.get("nextPageToken")
+            if not page_token:
+                break
+
+        logger.info(
+            f"Fetched {len(video_ids)} video ID(s) from playlist {playlist_id} "
+            f"via YouTube API ({page_num} page(s))"
+        )
+        return video_ids
 
 
 def create_api_client(api_key: str | None) -> YouTubeAPIMetadataClient | None:

@@ -203,6 +203,106 @@ class TestCommentsServiceQuotaHandling:
 
 
 @pytest.mark.ai_generated
+class TestPlaylistPaginationResumeOnQuota:
+    """Mid-pagination quota exhaustion must resume, not restart from page 1."""
+
+    def test_get_playlist_video_ids_resumes_after_quota_reset(self):
+        """Quota exhaustion on page 2 must resume from page 2, not restart."""
+        mock_youtube = MagicMock()
+        mock_403 = Mock(status=403)
+
+        page1 = {
+            "items": [{"contentDetails": {"videoId": f"vid{i}"}} for i in range(50)],
+            "nextPageToken": "PAGE2",
+        }
+        page2_success = {
+            "items": [{"contentDetails": {"videoId": f"vid{i}"}} for i in range(50, 100)],
+            "nextPageToken": "PAGE3",
+        }
+        page3 = {
+            "items": [{"contentDetails": {"videoId": f"vid{i}"}} for i in range(100, 130)],
+        }
+
+        # page1 OK → page2 quotaExceeded → page2 OK → page3 OK.
+        mock_youtube.playlistItems().list().execute.side_effect = [
+            page1,
+            HttpError(resp=mock_403, content=b'quotaExceeded'),
+            page2_success,
+            page3,
+        ]
+
+        with patch("annextube.services.youtube_api.build") as mock_build:
+            mock_build.return_value = mock_youtube
+            quota_manager = MagicMock(spec=QuotaManager)
+            quota_manager.handle_quota_exceeded.return_value = None
+
+            client = YouTubeAPIMetadataClient(
+                api_key="test-key", quota_manager=quota_manager,
+            )
+            result = client.get_playlist_video_ids("PL_test")
+
+        # Full playlist reconstructed — no duplication from a page-1 restart.
+        assert result is not None
+        assert len(result) == 130
+        assert result[0] == "vid0"
+        assert result[-1] == "vid129"
+
+        # Only three PAGES actually consumed quota (page1, page2_success, page3);
+        # the quotaExceeded attempt did not.
+        assert client._call_counts.get("playlistItems.list") == 3
+        quota_manager.handle_quota_exceeded.assert_called_once()
+
+    def test_fetch_comments_resumes_after_quota_reset(self):
+        """Same invariant for fetch_comments: quota on page 2 resumes on page 2."""
+        mock_youtube = MagicMock()
+        mock_403 = Mock(status=403)
+
+        def _thread(cid: str) -> dict:
+            return {
+                "snippet": {
+                    "topLevelComment": {
+                        "id": cid,
+                        "snippet": {
+                            "authorDisplayName": "u",
+                            "authorChannelId": {"value": "c"},
+                            "textDisplay": "hi",
+                            "publishedAt": "2026-01-01T00:00:00Z",
+                            "likeCount": 0,
+                        },
+                    }
+                },
+            }
+
+        page1 = {
+            "items": [_thread(f"c{i}") for i in range(3)],
+            "nextPageToken": "PAGE2",
+        }
+        page2 = {
+            "items": [_thread(f"c{i}") for i in range(3, 6)],
+        }
+        mock_youtube.commentThreads().list().execute.side_effect = [
+            page1,
+            HttpError(resp=mock_403, content=b'quotaExceeded'),
+            page2,
+        ]
+
+        with patch("annextube.services.youtube_api.build") as mock_build:
+            mock_build.return_value = mock_youtube
+            quota_manager = MagicMock(spec=QuotaManager)
+            quota_manager.handle_quota_exceeded.return_value = None
+
+            client = YouTubeAPICommentsService(
+                api_key="test-key", quota_manager=quota_manager,
+            )
+            comments = client.fetch_comments("video123")
+
+        # Six unique comments — no duplication from restart, no gap from resume.
+        assert [c["comment_id"] for c in comments] == [f"c{i}" for i in range(6)]
+        assert client._call_counts.get("commentThreads.list") == 2
+        quota_manager.handle_quota_exceeded.assert_called_once()
+
+
+@pytest.mark.ai_generated
 def test_default_quota_manager_initialization():
     """Test that both services initialize with default quota manager."""
     with patch("annextube.services.youtube_api.build") as mock_build:
