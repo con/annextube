@@ -23,7 +23,7 @@ classifiers = [
 
 dependencies = [
     "datasalad>=0.3.0",
-    "yt-dlp[default]>=2026.2.0",  # [default] extra includes yt-dlp-ejs challenge solver scripts
+    "yt-dlp[default]>=2026.07.04",  # yt-dlp/yt-dlp#16948 fixes YouTube playlist pagination truncation at ~100 entries; [default] includes yt-dlp-ejs challenge solver
     "deno>2.6.6",  # JS runtime required by yt-dlp for YouTube extraction
     "click>=8.0.0",
     "jsonschema>=4.0.0",
