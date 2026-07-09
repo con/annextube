@@ -648,6 +648,75 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
             logger.error(f"Failed to fetch channel metadata from YouTube API: {e}", exc_info=True)
             return None
 
+    def get_playlist_video_ids(self, playlist_id: str) -> list[str] | None:
+        """Fetch the authoritative ordered video-ID list for a playlist.
+
+        Uses playlistItems.list to paginate through the entire playlist.
+        Returns IDs in the same order YouTube stores them (owner-defined).
+
+        Args:
+            playlist_id: YouTube playlist ID (e.g., "PLxxxxxx")
+
+        Returns:
+            Ordered list of video IDs, or None if the API call fails.
+            An empty list is a valid result (empty playlist).
+
+        Quota cost: 1 unit per page of up to 50 items.
+        A 500-video playlist costs 10 units.
+        """
+        video_ids: list[str] = []
+        page_token: str | None = None
+        page_num = 0
+
+        try:
+            while True:
+                page_num += 1
+                request = self.youtube.playlistItems().list(
+                    part="contentDetails",
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
+                )
+                response = request.execute()
+                self._track_api_call("playlistItems.list")
+
+                for item in response.get("items", []):
+                    vid = item.get("contentDetails", {}).get("videoId")
+                    if vid:
+                        video_ids.append(vid)
+
+                page_token = response.get("nextPageToken")
+                if not page_token:
+                    break
+
+            logger.info(
+                f"Fetched {len(video_ids)} video ID(s) from playlist {playlist_id} "
+                f"via YouTube API ({page_num} page(s))"
+            )
+            return video_ids
+
+        except HttpError as e:
+            if e.resp.status == 403 and 'quotaExceeded' in str(e):
+                self.quota_manager.handle_quota_exceeded(str(e))
+                return self.get_playlist_video_ids(playlist_id)
+
+            if e.resp.status == 404:
+                logger.warning(f"Playlist not found via API: {playlist_id}")
+                return None
+
+            logger.error(
+                f"YouTube API HTTP error fetching playlist {playlist_id}: "
+                f"{e.resp.status} - {e.content.decode()}"
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                f"Failed to fetch playlist video IDs via YouTube API: {e}",
+                exc_info=True,
+            )
+            return None
+
 
 def create_api_client(api_key: str | None) -> YouTubeAPIMetadataClient | None:
     """Create YouTube API metadata client if API key is provided.

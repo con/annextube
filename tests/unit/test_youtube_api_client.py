@@ -149,6 +149,69 @@ def test_get_video_details_missing_videos() -> None:
 
 
 @pytest.mark.ai_generated
+def test_get_playlist_video_ids_single_page() -> None:
+    """Fetch a playlist that fits in one API page (<= 50 items)."""
+    mock_youtube = MagicMock()
+    mock_youtube.playlistItems().list().execute.return_value = {
+        "items": [
+            {"contentDetails": {"videoId": "AAA"}},
+            {"contentDetails": {"videoId": "BBB"}},
+            {"contentDetails": {"videoId": "CCC"}},
+        ],
+    }
+
+    with patch("annextube.services.youtube_api.build") as mock_build:
+        mock_build.return_value = mock_youtube
+        client = YouTubeAPIMetadataClient(api_key="test-key")
+        result = client.get_playlist_video_ids("PL_test")
+
+    assert result == ["AAA", "BBB", "CCC"]
+
+
+@pytest.mark.ai_generated
+def test_get_playlist_video_ids_paginates() -> None:
+    """Fetch a playlist across multiple pages via nextPageToken."""
+    mock_youtube = MagicMock()
+    mock_youtube.playlistItems().list().execute.side_effect = [
+        {
+            "items": [{"contentDetails": {"videoId": f"vid{i}"}} for i in range(50)],
+            "nextPageToken": "PAGE2",
+        },
+        {
+            "items": [{"contentDetails": {"videoId": f"vid{i}"}} for i in range(50, 90)],
+        },
+    ]
+
+    with patch("annextube.services.youtube_api.build") as mock_build:
+        mock_build.return_value = mock_youtube
+        client = YouTubeAPIMetadataClient(api_key="test-key")
+        result = client.get_playlist_video_ids("PL_test")
+
+    assert result is not None
+    assert len(result) == 90
+    assert result[0] == "vid0"
+    assert result[-1] == "vid89"
+    # 2 pages consumed → 2 quota units.
+    assert client._call_counts.get("playlistItems.list") == 2
+
+
+@pytest.mark.ai_generated
+def test_get_playlist_video_ids_404_returns_none() -> None:
+    """A missing/private playlist yields None (not empty list)."""
+    mock_youtube = MagicMock()
+    mock_youtube.playlistItems().list().execute.side_effect = HttpError(
+        resp=Mock(status=404), content=b"Playlist not found",
+    )
+
+    with patch("annextube.services.youtube_api.build") as mock_build:
+        mock_build.return_value = mock_youtube
+        client = YouTubeAPIMetadataClient(api_key="test-key")
+        result = client.get_playlist_video_ids("PL_missing")
+
+    assert result is None
+
+
+@pytest.mark.ai_generated
 def test_get_video_details_http_error() -> None:
     """Test handling of HTTP errors from API."""
     mock_youtube = MagicMock()

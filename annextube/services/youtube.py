@@ -744,6 +744,31 @@ class YouTubeService:
 
         Returns:
             Playlist model instance or None if failed
+
+        Notes:
+            yt-dlp (as of 2026.03.17) truncates large YouTube playlists at
+            ~100 entries under both ``extract_flat=True`` and
+            ``extract_flat="in_playlist"`` — one YouTube tab page, no
+            continuation pagination.  ``info["playlist_count"]`` stays
+            correct because it comes from a separate YouTube response
+            header; only the ``entries`` iterator is short.  See
+            ``.git-meta/repro/yt-dlp-playlist-truncation.sh`` for a
+            standalone reproducer.
+
+            We use ``"in_playlist"`` here for consistency with
+            :meth:`get_playlist_videos`'s first pass (line 542) — both
+            probes are equally affected, so the choice is stylistic.  The
+            real mitigations are:
+
+            1. When ``len(video_ids) < playlist_count`` (the truncation
+               signature), fall back to
+               :meth:`YouTubeAPIMetadataClient.get_playlist_video_ids`,
+               which paginates via ``playlistItems.list`` and is not
+               subject to the yt-dlp bug.  Requires a configured API key.
+            2. Downstream, :meth:`Archiver._save_playlist_metadata` refuses
+               to overwrite ``playlist.json`` when the new list is shorter
+               than ``playlist_count``, so even without an API key the
+               archive's view of the playlist doesn't regress.
         """
         logger.debug(f"Fetching playlist metadata: {playlist_url}")
 
@@ -751,7 +776,7 @@ class YouTubeService:
             info = self._with_rate_limit_retry(
                 self._extract_info_checked,
                 playlist_url,
-                extra_opts={"extract_flat": True},
+                extra_opts={"extract_flat": "in_playlist"},
             )
         except YouTubeRateLimitError:
             logger.error(f"Rate limit fetching playlist metadata: {playlist_url}")
@@ -763,8 +788,10 @@ class YouTubeService:
         if not info:
             return None
 
+        # Parse yt-dlp payload into our model. Narrow ``try`` — only wrap
+        # the field extraction, not the API-fallback branch below (a bug
+        # there should surface, not be re-labelled as "failed to fetch").
         try:
-            # Parse last modified date if available
             last_modified = None
             if info.get("modified_date"):
                 try:
@@ -772,29 +799,88 @@ class YouTubeService:
                 except ValueError:
                     pass
 
-            # Get video IDs from entries
-            video_ids = []
-            for entry in info.get("entries", []):
-                if entry and entry.get("id"):
-                    video_ids.append(entry["id"])
+            video_ids = [
+                entry["id"] for entry in info.get("entries", [])
+                if entry and entry.get("id")
+            ]
 
-            return Playlist(
-                playlist_id=info["id"],
-                title=info.get("title", "Unknown"),
-                description=info.get("description", ""),
-                channel_id=info.get("channel_id", info.get("uploader_id", "")),
-                channel_name=info.get("channel", info.get("uploader", "")),
-                video_count=info.get("playlist_count", len(video_ids)),
-                privacy_status=info.get("availability", "public"),
-                last_modified=last_modified,
-                video_ids=video_ids,
-                thumbnail_url=info.get("thumbnail"),
-                fetched_at=datetime.now(),
-            )
+            # Coerce playlist_count defensively — yt-dlp is untyped internal
+            # API and has historically returned counts as strings. Silently
+            # falling back to ``len(video_ids)`` would defeat the downstream
+            # truncation guard, so warn loudly on unexpected types.
+            raw_count = info.get("playlist_count")
+            playlist_count: int
+            if raw_count is None:
+                playlist_count = len(video_ids)
+            else:
+                try:
+                    playlist_count = int(raw_count)
+                except (TypeError, ValueError):
+                    logger.warning(
+                        f"yt-dlp returned playlist_count of unexpected type "
+                        f"{type(raw_count).__name__}={raw_count!r}; "
+                        f"falling back to entry count (truncation guard disabled)"
+                    )
+                    playlist_count = len(video_ids)
+
+            playlist_id = info["id"]
+            title = info.get("title", "Unknown")
+            description = info.get("description", "")
+            channel_id = info.get("channel_id", info.get("uploader_id", ""))
+            channel_name = info.get("channel", info.get("uploader", ""))
+            privacy_status = info.get("availability", "public")
+            thumbnail_url = info.get("thumbnail")
 
         except Exception as e:
-            logger.error(f"Failed to fetch playlist metadata: {e}")
+            logger.error(f"Failed to parse playlist metadata: {e}", exc_info=True)
             return None
+
+        # Cross-check with YouTube Data API when yt-dlp under-delivered.
+        # ``get_playlist_video_ids`` swallows its own errors and returns
+        # ``None`` on failure, so no try/except here — programming bugs
+        # should propagate.
+        if self.api_client and len(video_ids) < playlist_count:
+            logger.warning(
+                f"yt-dlp returned {len(video_ids)} video ID(s) but playlist "
+                f"{playlist_id} reports {playlist_count} — cross-checking "
+                f"via YouTube Data API"
+            )
+            api_ids = self.api_client.get_playlist_video_ids(playlist_id)
+            if api_ids is None:
+                logger.warning(
+                    f"API cross-check failed for playlist {playlist_id}; "
+                    f"downstream save guard will refuse to persist."
+                )
+            elif len(api_ids) >= len(video_ids):
+                logger.info(
+                    f"YouTube API returned {len(api_ids)} ID(s) for playlist "
+                    f"{playlist_id}; using API list as authoritative"
+                )
+                video_ids = api_ids
+            else:
+                # API can legitimately return fewer IDs than yt-dlp when the
+                # playlist contains deleted/private videos — playlistItems.list
+                # omits those, yt-dlp's flat probe includes them as stubs.
+                # Order matters, so we don't merge — keep yt-dlp's superset.
+                logger.info(
+                    f"YouTube API returned {len(api_ids)} ID(s), fewer than "
+                    f"yt-dlp's {len(video_ids)} (likely deleted/private "
+                    f"videos omitted by API); keeping yt-dlp result."
+                )
+
+        return Playlist(
+            playlist_id=playlist_id,
+            title=title,
+            description=description,
+            channel_id=channel_id,
+            channel_name=channel_name,
+            video_count=playlist_count,
+            privacy_status=privacy_status,
+            last_modified=last_modified,
+            video_ids=video_ids,
+            thumbnail_url=thumbnail_url,
+            fetched_at=datetime.now(),
+        )
 
     def get_videos_metadata(self, video_ids: list[str]) -> list[dict[str, Any]]:
         """Fetch full metadata for specific video IDs.

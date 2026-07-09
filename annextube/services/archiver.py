@@ -596,18 +596,83 @@ class Archiver:
             playlist_dir: Path to playlist directory
 
         Returns:
-            True if saved (new or changed), False if unchanged
+            True if saved (new or changed), False if unchanged or skipped
+            by the truncation guard.
+
+        Notes:
+            Refuses to overwrite ``playlist.json`` when the new video-ID
+            list is shorter than what YouTube itself reports as the true
+            count (``playlist.video_count``, populated from yt-dlp's
+            ``playlist_count`` header field).  Two-value divergence is a
+            reliable "yt-dlp lost pages" signal because ``playlist_count``
+            comes from a separate YouTube response header and stays
+            correct even when the entries generator truncates.  A legit
+            owner-side removal reduces both numbers together and passes.
+
+            Also refuses to overwrite an existing ``playlist.json`` that
+            we cannot read (corrupt JSON, permissions) — silently rewriting
+            it would mask the underlying problem.  Operator must fix or
+            remove the file manually.
+
+            What this guard does NOT catch:
+
+            - Playlist fully deleted upstream: ``get_playlist_metadata``
+              returns ``None`` before we're called; the stale file remains
+              (deliberate — archival preserves history).
+            - Playlist genuinely emptied by the owner (``video_count=0``,
+              ``video_ids=[]``): passes the guard by design.
+            - ``playlist_count`` corrupted to a non-int by yt-dlp: caller
+              coerces to int upstream and warns; if coercion still yields
+              zero-or-missing, the guard becomes a no-op.
         """
         metadata_path = playlist_dir / "playlist.json"
-        if metadata_path.exists() and self.update_mode in ["videos-incremental", "all-incremental"]:
+        new_ids = playlist.video_ids
+        reported_count = playlist.video_count
+
+        # Read existing IDs if the file is present. Refuse to overwrite an
+        # unreadable existing file — silently rewriting it hides corruption
+        # or permissions problems.
+        old_ids: list[str] | None = None
+        if metadata_path.exists():
             try:
                 with open(metadata_path) as f:
                     old_data = json.load(f)
                 old_ids = old_data.get('video_ids', [])
-                if old_ids == playlist.video_ids:
-                    return False
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError):
+                logger.error(
+                    f"Refusing to overwrite {metadata_path}: existing file "
+                    f"is unreadable. Investigate and fix or remove manually.",
+                    exc_info=True,
+                )
+                return False
+
+        # Guard: refuse to write a truncated list (first-time save OR
+        # overwriting an existing file). Same invariant either way.
+        if isinstance(reported_count, int) and 0 <= len(new_ids) < reported_count:
+            existing = "" if old_ids is None else (
+                f" (existing file has {len(old_ids)})"
+            )
+            dropped_note = ""
+            if old_ids:
+                dropped = [vid for vid in old_ids if vid not in set(new_ids)]
+                dropped_note = f" Would drop {len(dropped)} previously-known ID(s)."
+            first_time = " Refusing first-time save." if old_ids is None else ""
+            logger.error(
+                f"Refusing to persist truncated {metadata_path.name}: fetched "
+                f"{len(new_ids)} video ID(s) but playlist reports "
+                f"{reported_count}{existing}.{dropped_note}"
+                f" Likely yt-dlp truncation.{first_time}"
+            )
+            return False
+
+        # Change detection for incremental modes: same IDs → no-op.
+        if (
+            old_ids is not None
+            and old_ids == new_ids
+            and self.update_mode in ["videos-incremental", "all-incremental"]
+        ):
+            return False
+
         with AtomicFileWriter(metadata_path) as f:
             json.dump(playlist.to_dict(), f, indent=2, ensure_ascii=False)
         return True

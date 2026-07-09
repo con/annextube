@@ -417,3 +417,203 @@ def test_save_playlist_metadata_skips_when_unchanged(tmp_path: Path) -> None:
     # Second save with same video_ids → should return False
     result = archiver._save_playlist_metadata(playlist, playlist_dir)
     assert result is False
+
+
+@pytest.mark.ai_generated
+def test_save_playlist_metadata_refuses_truncation_vs_reported_count(
+    tmp_path: Path,
+) -> None:
+    """Guard: refuse to overwrite when fewer video_ids than YouTube reports.
+
+    Reproduces the yt-dlp continuation-token truncation bug: yt-dlp returns
+    playlist_count=144 (correct) but only 100 entries. Prior behavior would
+    persist the truncated list, dropping 44 IDs from the archive.
+    """
+    repo_path = tmp_path
+    playlist_dir = repo_path / "playlists" / "test"
+    playlist_dir.mkdir(parents=True)
+
+    archiver = _make_archiver_stub(repo_path)
+
+    # Seed with a full playlist (144 IDs).
+    full = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=144, privacy_status="public", last_modified=None,
+        video_ids=[f"vid{i:03d}" for i in range(144)],
+    )
+    assert archiver._save_playlist_metadata(full, playlist_dir) is True
+
+    # yt-dlp truncates to 100 IDs but still reports 144.
+    truncated = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=144, privacy_status="public", last_modified=None,
+        video_ids=[f"vid{i:03d}" for i in range(100)],
+    )
+    result = archiver._save_playlist_metadata(truncated, playlist_dir)
+    assert result is False
+
+    # playlist.json on disk MUST still have all 144 IDs.
+    with open(playlist_dir / "playlist.json") as f:
+        on_disk = json.load(f)
+    assert len(on_disk["video_ids"]) == 144
+    assert on_disk["video_ids"][-1] == "vid143"
+
+
+@pytest.mark.ai_generated
+def test_save_playlist_metadata_allows_legit_owner_removal(tmp_path: Path) -> None:
+    """A legit owner-side removal MUST persist when reported_count matches.
+
+    When yt-dlp is internally consistent (len(video_ids) == playlist_count),
+    the truncation guard does not fire. This covers pure removals AND
+    add-and-remove curation.
+    """
+    repo_path = tmp_path
+    playlist_dir = repo_path / "playlists" / "test"
+    playlist_dir.mkdir(parents=True)
+
+    archiver = _make_archiver_stub(repo_path)
+
+    seed = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=3, privacy_status="public", last_modified=None,
+        video_ids=["A", "B", "C"],
+    )
+    assert archiver._save_playlist_metadata(seed, playlist_dir) is True
+
+    # Owner removed C (pure shrink, no additions).
+    pure_removal = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=2, privacy_status="public", last_modified=None,
+        video_ids=["A", "B"],
+    )
+    assert archiver._save_playlist_metadata(pure_removal, playlist_dir) is True
+
+    with open(playlist_dir / "playlist.json") as f:
+        on_disk = json.load(f)
+    assert on_disk["video_ids"] == ["A", "B"]
+
+    # Owner removed A but added D and E (add + remove curation).
+    curated = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=3, privacy_status="public", last_modified=None,
+        video_ids=["B", "D", "E"],
+    )
+    assert archiver._save_playlist_metadata(curated, playlist_dir) is True
+
+    with open(playlist_dir / "playlist.json") as f:
+        on_disk = json.load(f)
+    assert on_disk["video_ids"] == ["B", "D", "E"]
+
+
+@pytest.mark.ai_generated
+def test_save_playlist_metadata_refuses_truncation_on_first_save(
+    tmp_path: Path,
+) -> None:
+    """Guard fires on first-time saves too, not just overwrites.
+
+    Otherwise a new archive's very first fetch of a large playlist would
+    silently persist the truncated list before any protection kicks in.
+    """
+    repo_path = tmp_path
+    playlist_dir = repo_path / "playlists" / "test"
+    playlist_dir.mkdir(parents=True)
+
+    archiver = _make_archiver_stub(repo_path)
+    truncated = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=144, privacy_status="public", last_modified=None,
+        video_ids=[f"vid{i:03d}" for i in range(100)],
+    )
+    result = archiver._save_playlist_metadata(truncated, playlist_dir)
+
+    assert result is False
+    assert not (playlist_dir / "playlist.json").exists(), (
+        "No file should have been created — first-time truncated save must be refused"
+    )
+
+
+@pytest.mark.ai_generated
+def test_save_playlist_metadata_refuses_when_existing_file_unreadable(
+    tmp_path: Path,
+) -> None:
+    """Corrupt playlist.json must NOT be silently rewritten.
+
+    Rewriting would mask corruption / permissions problems and leave the
+    archive in a state where the operator has no signal that something went
+    wrong. Refuse the save and log an error instead.
+    """
+    repo_path = tmp_path
+    playlist_dir = repo_path / "playlists" / "test"
+    playlist_dir.mkdir(parents=True)
+
+    (playlist_dir / "playlist.json").write_text("{ this is not valid json")
+
+    archiver = _make_archiver_stub(repo_path)
+    playlist = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=1, privacy_status="public", last_modified=None,
+        video_ids=["A"],
+    )
+    assert archiver._save_playlist_metadata(playlist, playlist_dir) is False
+    # File must remain untouched — operator has to fix it manually.
+    assert (playlist_dir / "playlist.json").read_text() == "{ this is not valid json"
+
+
+@pytest.mark.ai_generated
+def test_save_playlist_metadata_allows_race_gained_video(tmp_path: Path) -> None:
+    """A video added mid-fetch (entries > reported_count) MUST persist.
+
+    yt-dlp probes playlist_count and entries in separate operations. If a
+    video is added between them, entries can legitimately exceed
+    playlist_count — the guard must not misfire on this race.
+    """
+    repo_path = tmp_path
+    playlist_dir = repo_path / "playlists" / "test"
+    playlist_dir.mkdir(parents=True)
+
+    archiver = _make_archiver_stub(repo_path)
+    raced = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=3, privacy_status="public", last_modified=None,
+        video_ids=["A", "B", "C", "D"],  # one more than reported
+    )
+    assert archiver._save_playlist_metadata(raced, playlist_dir) is True
+    with open(playlist_dir / "playlist.json") as f:
+        assert json.load(f)["video_ids"] == ["A", "B", "C", "D"]
+
+
+@pytest.mark.ai_generated
+def test_save_playlist_metadata_allows_legitimately_emptied_playlist(
+    tmp_path: Path,
+) -> None:
+    """An owner emptying the playlist (count 0, entries []) MUST persist."""
+    repo_path = tmp_path
+    playlist_dir = repo_path / "playlists" / "test"
+    playlist_dir.mkdir(parents=True)
+    archiver = _make_archiver_stub(repo_path)
+
+    seed = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=2, privacy_status="public", last_modified=None,
+        video_ids=["A", "B"],
+    )
+    assert archiver._save_playlist_metadata(seed, playlist_dir) is True
+
+    emptied = Playlist(
+        playlist_id="PL_test", title="Test", description="",
+        channel_id="UC_test", channel_name="Test Channel",
+        video_count=0, privacy_status="public", last_modified=None,
+        video_ids=[],
+    )
+    assert archiver._save_playlist_metadata(emptied, playlist_dir) is True
+    with open(playlist_dir / "playlist.json") as f:
+        assert json.load(f)["video_ids"] == []
