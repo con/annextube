@@ -245,9 +245,13 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-039**: Web interface MUST load metadata from TSV files on demand
 - **FR-040**: Web interface MUST support filtering videos by date range
 - **FR-041**: Web interface MUST support filtering videos by channel, playlist, tags
-- **FR-042**: Web interface MUST support text search across video titles and descriptions. Implementation: Pagefind-based full-text search index built from caption VTT files; index stored as a DataLad subdataset at `web/pagefind/`; `annextube backup --search-index` auto-builds after backup; `annextube build-search-index` for standalone rebuild
+- **FR-042**: Web interface MUST support text search across video titles and descriptions. Implementation: two search modes — "Metadata" (client-side fuse.js over `videos.tsv` summary fields plus full descriptions from `video_fulldescriptions.json`; works offline including file://) and "Full" (Pagefind full-text index over per-video metadata records and caption text; requires HTTP); Pagefind index stored as a DataLad subdataset at `web/pagefind/`; `annextube backup --search-index` auto-builds after backup; `annextube build-search-index` for standalone rebuild. Design: `.specify/specs/description-search.md`
 - **FR-042a**: Search index MUST support searching within caption text (not just titles/descriptions), chunked by configurable duration windows (default: 60 seconds)
 - **FR-042b**: Search index MUST distinguish between curated (human-edited) and original (auto-generated) captions, prioritizing curated versions
+- **FR-042c**: `videos.tsv` MUST include a `description` column containing the first non-empty line of each video's description; complete descriptions MUST be exported to `videos/video_fulldescriptions.json` (a `{video_id: full description}` lookup, per channel directory), kept in git (not annexed) so the web UI can always fetch it
+- **FR-042d**: Metadata search MUST match against full video descriptions (loaded in one additional request alongside `videos.tsv`) and MUST degrade gracefully on archives exported before `video_fulldescriptions.json` existed
+- **FR-042e**: The Pagefind index MUST contain one metadata record per video (title, description, tags), with all records tagged by `record_type` (`metadata`/`caption`), so videos without captions are findable in Full mode; metadata changes MUST trigger incremental index rebuild (not only caption changes)
+- **FR-042f**: Search UI MUST present the two modes as "Metadata" and "Full"; previously shared URLs using `mode=captions` MUST keep working (mapped to Full mode)
 - **FR-043**: Web interface MUST display video thumbnails, metadata, and allow playback
 - **FR-044**: Web interface MUST display video comments (threading is best-effort; yt-dlp currently returns all comments as top-level with parent="root", see FR-008 note)
 - **FR-045**: Web interface MUST allow caption selection and display during playback

@@ -345,20 +345,52 @@ interface FilterConfig {
 
 Tab-separated file with summary metadata for all videos (FR-033).
 
-**Columns**:
+**Columns** (as written by `annextube/services/export.py`; parsers are header-based, so new columns are always appended last):
 ```
-video_id	title	channel_id	channel_name	published_at	duration	view_count	like_count	comment_count	has_captions	license	file_path	download_status	fetched_at
+video_id	title	channel_id	channel_name	published_at	duration	view_count	like_count	comment_count	thumbnail_url	download_status	source_url	path	description
 ```
 
 **Example**:
 ```
-dQw4w9WgXcQ	Never Gonna Give You Up	UCuAXFkgsw1L7xaCfnd5JJOw	Rick Astley	1987-11-12T00:00:00Z	213	1234567890	12345678	987654	en,es,fr	standard	videos/dQw4w9WgXcQ/video.mp4	downloaded	2026-01-24T12:00:00Z
+dQw4w9WgXcQ	Never Gonna Give You Up	UCuAXFkgsw1L7xaCfnd5JJOw	Rick Astley	1987-11-12T00:00:00Z	213	1234567890	12345678	987654	https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg	downloaded	https://www.youtube.com/watch?v=dQw4w9WgXcQ	1987/11/Never-Gonna-Give-You-Up_dQw4w9WgXcQ	The official video for "Never Gonna Give You Up"
 ```
+
+**Notes**:
+- `description` holds only the **first non-empty line** of the video description
+  (FR-042c); the complete text lives in `video_fulldescriptions.json` (below).
+  Tabs/newlines in fields are escaped per the shared TSV escaping rules.
 
 **Usage**:
 - Efficient querying without parsing individual JSON files
 - Loaded by web UI for fast filtering/search
 - Can be analyzed with DuckDB, Visidata, Excel
+
+---
+
+### video_fulldescriptions.json
+
+Complete video descriptions for search, exported next to `videos.tsv`
+(FR-042c/FR-042d; design: `.specify/specs/description-search.md`).
+
+**Location**: `videos/video_fulldescriptions.json` (single-channel) or
+`<channel_dir>/videos/video_fulldescriptions.json` (multi-channel, per channel).
+
+**Format**: flat JSON object, one entry per video with a non-empty description;
+sorted keys and small indent for deterministic, diffable re-exports:
+```json
+{
+  "dQw4w9WgXcQ": "The official video for \"Never Gonna Give You Up\"\n\nStock Aitken Waterman..."
+}
+```
+
+**Storage**: pinned to git via `.gitattributes`
+(`video_fulldescriptions.json annex.largefiles=nothing`) — an annexed symlink
+without content would silently break search on clones.
+
+**Usage**:
+- Fetched by the web UI in parallel with `videos.tsv` (one extra request) to
+  feed full descriptions into the client-side Metadata search index
+- Missing file (older archives) degrades to the TSV `description` first line
 
 ---
 

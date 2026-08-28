@@ -1,7 +1,18 @@
 # Design: Searchable Descriptions and Unified Full-Text Search
 
-**Status:** Draft
+**Status:** Accepted — transferred into spec-kit artifacts of feature `001-youtube-backup`
 **Date:** 2026-08-28
+**Feature:** `specs/001-youtube-backup/` — this design refines the FR-042 search
+requirement family:
+- Requirements: **FR-042c–FR-042f** in `specs/001-youtube-backup/spec.md`
+- Data model: `videos.tsv` `description` column + `video_fulldescriptions.json`
+  in `specs/001-youtube-backup/data-model.md`
+- Tasks: **Phase 16 (T142–T149)** in `specs/001-youtube-backup/tasks.md`
+
+This document remains the design rationale (the HOW and the trade-offs), like
+its companion PRD `.specify/specs/caption-search-pagefind.md` did for caption
+search.
+
 **Related:** `.specify/specs/caption-search-pagefind.md` (Pagefind caption search),
 issue observed on ReproTube: searching `Halchenko` in
 `#/channel/ABCD-ReproNim_Course?search=Halchenko` returns nothing although the
@@ -285,14 +296,17 @@ on failure the loader degrades as above. Pagefind still requires HTTP
 
 ## Implementation order (one logical change per commit)
 
-1. Backend: `first_description_line()` + `description` TSV column + tests.
-2. Backend: `video_fulldescriptions.json` export + `.gitattributes` rule and
-   migration + tests.
-3. Frontend: DataLoader parallel load/merge + `VideoTSVRow.description` +
-   tests — *this commit fixes the motivating bug*.
-4. Backend: Pagefind metadata records + `record_type` + incremental detection
-   over `metadata.json` + tests.
-5. Frontend: `searchFull()` grouping with `record_type` + tests.
-6. Frontend: Metadata/Full rename (modes, URL state with legacy mapping,
-   `FullSearchResults.svelte`) + tests.
-7. E2E tests + docs (`docs/content/reference/` search behavior, how-to).
+Tracked as **Phase 16, T142–T149** in `specs/001-youtube-backup/tasks.md`:
+
+1. **T142** — Backend: `first_description_line()` + `description` TSV column + tests.
+2. **T143** — Backend: `video_fulldescriptions.json` export + `.gitattributes`
+   rule and migration + tests.
+3. **T144** — Frontend: DataLoader parallel load/merge +
+   `VideoTSVRow.description` + tests — *this commit fixes the motivating bug*.
+4. **T145** — Backend: Pagefind metadata records + `record_type` + incremental
+   detection over `metadata.json` + tests.
+5. **T146** — Frontend: `searchFull()` grouping with `record_type` + tests.
+6. **T147** — Frontend: Metadata/Full rename (modes, URL state with legacy
+   mapping, `FullSearchResults.svelte`) + tests.
+7. **T148/T149** — E2E tests + docs (`docs/content/reference/` search
+   behavior, how-to).

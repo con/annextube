@@ -460,6 +460,31 @@ annextube backup
 
 ---
 
+## Phase 16: Searchable Descriptions — Metadata + Full Search Modes
+
+**Goal**: Make video descriptions actually searchable (FR-042 today only matches titles: `videos.tsv` carries no descriptions, so the fuse.js `description`/`tags` keys index empty fields), and unify metadata + captions under a "Full" Pagefind search mode.
+
+**Requirements**: FR-042c, FR-042d, FR-042e, FR-042f (spec.md § Web Interface)
+
+**Design**: `.specify/specs/description-search.md` (companion to `.specify/specs/caption-search-pagefind.md`)
+
+**Motivating bug**: searching an author name that appears only in a talk's description (e.g. `?search=Halchenko` on ReproTube's ABCD-ReproNim_Course channel) returns nothing.
+
+### Implementation for Searchable Descriptions
+
+- [ ] T142 [P] [US4] Add `description` column (first non-empty line, `first_description_line()` helper) as last column of videos.tsv in annextube/services/export.py + unit tests for LF/CRLF/CR, leading blank lines, empty, tab escaping (FR-042c)
+- [ ] T143 [US4] Export videos/video_fulldescriptions.json ({video_id: full description}, non-empty only, sorted keys, deterministic) in annextube/services/export.py; add `video_fulldescriptions.json annex.largefiles=nothing` to configure_gitattributes() in annextube/services/git_annex.py for new archives + idempotent append during export for existing archives + tests (FR-042c)
+- [ ] T144 [US4] Fetch video_fulldescriptions.json in parallel with videos.tsv (Promise.all, 404-tolerant) and merge into Video.description in frontend/src/services/data-loader.ts; add VideoTSVRow.description in frontend/src/types/models.ts + tests incl. regression test for description-only search term (FR-042d)
+- [ ] T145 [P] [US4] Add one metadata record per video (content: title + description + tags; url `#/video/{id}` without ?t=; `record_type` meta+filter on metadata AND caption records) in annextube/services/search_index.py; include caption-less videos; extend incremental change detection from `*.vtt` to also cover `metadata.json`; add metadata_records to IndexStats + tests (FR-042e)
+- [ ] T146 [US4] Classify results by record_type in frontend/src/services/pagefind.ts (rename searchCaptions → searchFull; group gains descriptionMatch alongside timestamped caption matches; missing record_type treated as caption for old indexes) + tests (FR-042e)
+- [ ] T147 [US4] Rename search modes Videos/Captions → Metadata/Full: SearchMode type + toggle labels + placeholders in frontend/src/components/FilterPanel.svelte; `mode=full` with legacy `mode=captions` mapping in frontend/src/services/url-state.ts; git mv CaptionSearchResults.svelte → FullSearchResults.svelte with description-match row (badge, no timestamp, links to `#/video/{id}`) + tests (FR-042f)
+- [ ] T148 [P] [US4] E2E tests in frontend/tests/e2e/: description-only term found in Metadata mode; Full mode shows description + caption matches; legacy mode=captions URL still works (FR-042d/e/f)
+- [ ] T149 [P] [US4] Update docs: search behavior in docs/content/reference/ and how-to (two modes, video_fulldescriptions.json, archive regeneration note for existing archives)
+
+**Checkpoint**: Searching a term that appears only in a video description returns that video in both Metadata and Full modes; old archives and old shared URLs keep working.
+
+---
+
 ## Future Work (Not Yet Scheduled)
 
 ### Archive Sharing via GitHub Pages (TD-001–TD-020)
@@ -484,6 +509,7 @@ These requirements will be tracked in a future phase once core features (Phases 
 - **CI/CD (Phase 11)**: Can start after US1 and US2 complete (core backup + update functionality)
 - **Documentation (Phase 12)**: Can proceed in parallel with user stories
 - **Polish (Phase 13)**: Depends on all desired user stories being complete
+- **Searchable Descriptions (Phase 16)**: Depends on US4 (web interface + export) and the Phase 6 search index tasks (T056-T064); within the phase: T142/T143 before T144; T145 before T146 before T147; T148/T149 last
 
 ### User Story Dependencies
 
@@ -515,6 +541,7 @@ These requirements will be tracked in a future phase once core features (Phases 
 - **Phase 11 (CI/CD)**: T091, T092, T093, T094, T095, T096 can all run in parallel
 - **Phase 12 (Docs)**: T099, T100, T101, T102 can all run in parallel after T098
 - **Phase 13 (Polish)**: T105, T106, T107, T108, T109, T110 can all run in parallel
+- **Phase 16 (Searchable Descriptions)**: T142 (backend export) and T145 (search index) can run in parallel; T148 and T149 can run in parallel at the end
 
 ### Parallel Example: User Story 1
 
@@ -572,7 +599,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 151 | **Completed**: 107 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
+**Total Tasks**: 159 | **Completed**: 107 | **Remaining**: 52 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
@@ -591,19 +618,20 @@ With multiple developers:
 - Phase 13 (Polish): 12/17
 - Phase 14 (API Enhancement): 7/8
 - Phase 15 (Test Infrastructure): 7/7
+- Phase 16 (Searchable Descriptions): 0/8
 
 **Task Count by User Story**:
 - US1 (Initial Channel Archive - P1): 19 tasks
 - US2 (Incremental Updates - P1): 12 tasks
 - US3 (Filtering - P2): 9 tasks
-- US4 (Web Interface - P2): 19 tasks
+- US4 (Web Interface - P2): 27 tasks (19 in Phase 6 + 8 in Phase 16)
 - US5 (Organization - P3): 6 tasks
 - US6 (Export Metadata - P3): 4 tasks
 - US7 (Caption Curation - P4): 5 tasks
 - US8 (Public Hosting - P4): 5 tasks
 - Cross-cutting (CI/CD, Docs, Polish): includes T138 (license CI), T139 (CONTRIBUTING.md), T140 (CODE_OF_CONDUCT.md)
 
-**Parallel Opportunities**: 47 tasks marked [P] can run in parallel with others in their phase
+**Parallel Opportunities**: 51 tasks marked [P] can run in parallel with others in their phase
 
 **Independent Test Criteria**:
 - US1: Can create archive and backup channel with all metadata accessible offline
