@@ -5,6 +5,30 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-07-13
+
+### Added
+
+- **Multi-channel collection management (feature 003)**: DataLad superdataset workflow for archives that aggregate multiple channels — `annextube collection add`, `annextube aggregate`, breadcrumb navigation in the web UI, and the corresponding contract / integration / E2E test suites. Ships alongside a spec artifact under `.specify/specs/003-multi-channel-collections/`
+- **Retroactive caption curation during backup** (FR-062a): backups can now run the caption curation pipeline over existing archived videos, not just newly-fetched ones
+- **`annextube completion` command** (FR-057i, T141): outputs shell completion scripts for bash, zsh, and fish via Click's `ShellComplete.source()`; auto-detects the current shell from `$SHELL`
+- **MKV video playback: browser-specific error messages**: the web player now explains which browsers can natively decode MKV and links users to workarounds. Feature spec `.specify/specs/002-mkv-video-playback/`
+- **GitHub Actions test workflow**: tox-based Python matrix (3.10 – 3.14) plus lint / type / coverage jobs, running on every push and PR
+- **JSON backup output (T030) + batch API optimization (T039)**: completes remaining MVP gaps identified in `speckit.analyze`
+
+### Fixed
+
+- **yt-dlp playlist pagination truncation**: older yt-dlp releases silently truncated large YouTube playlists at ~100 entries even though `playlist_count` reported the true size, causing videos to appear-and-disappear across runs. Fixed upstream in yt-dlp/yt-dlp#16948; minimum requirement bumped to `yt-dlp>=2026.07.04`. Layered defence in the archive too: `Archiver._save_playlist_metadata` refuses to persist truncated lists, and when a YouTube Data API key is configured `YouTubeService.get_playlist_metadata` cross-checks against `playlistItems.list` and prefers the API's authoritative list
+- **YouTube API robustness**: HTTP error bodies decoded with `errors='replace'`; mid-pagination quota-exceeded events resume from the current `pageToken` instead of restarting from page 1 (applies to `get_playlist_video_ids` and `fetch_comments`)
+- **`annextube init` on an existing git-annex repo**: skip repo init when the target is already a git-annex working tree, and configure `annex.security.allowed-*` policies so the reused repo doesn't drop content
+- **Single-channel archive detection requires `.annextube/config.toml`**: previously a bare git repo could be misdetected as a single-channel archive
+- **Thumbnail download failures downgraded to warnings**: no longer aborts a backup
+
+### Changed
+
+- **Zero-tolerance code duplication**: dedicated jscpd tox env with threshold 0 %; the entire codebase now reports 0 clones after helper extraction (batch prefetch, video-processing loop, symlink writer, unavailable-video recorder, playlist-tab-entry parser, atomic-write prep, shared `--output-dir` Click decorator)
+- **Constitution amended to v1.5.0**: adds Principle XIII "DataLad-Native Operations"
+
 ## [0.12.0] - 2026-03-11
 
 ### Added
