@@ -130,7 +130,12 @@ export class DataLoader {
       return this.videosCache;
     }
 
-    const response = await fetch(`${this.baseUrl}/videos/videos.tsv`);
+    const [response, fulldescriptions] = await Promise.all([
+      fetch(`${this.baseUrl}/videos/videos.tsv`),
+      this.loadFullDescriptions(
+        `${this.baseUrl}/videos/video_fulldescriptions.json`
+      ),
+    ]);
     if (!response.ok) {
       throw new Error(`Failed to load videos.tsv: ${response.statusText}`);
     }
@@ -139,9 +144,27 @@ export class DataLoader {
     const rows = parseTSV(text) as unknown as VideoTSVRow[];
 
     // Convert TSV rows to Video objects (with type conversion)
-    this.videosCache = rows.map((row) => this.parseTSVVideo(row));
+    this.videosCache = rows.map((row) => this.parseTSVVideo(row, fulldescriptions));
 
     return this.videosCache;
+  }
+
+  /**
+   * Fetch the {video_id: full description} lookup exported next to
+   * videos.tsv (FR-042c/d). Missing file (older archives), network errors,
+   * and parse errors all degrade to an empty lookup -- descriptions then
+   * fall back to the TSV first-line column.
+   */
+  private async loadFullDescriptions(
+    url: string
+  ): Promise<Record<string, string>> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) return {};
+      return (await response.json()) as Record<string, string>;
+    } catch {
+      return {};
+    }
   }
 
   /**
@@ -422,9 +445,12 @@ export class DataLoader {
    * @param channelDir - Relative path to channel directory (from channels.tsv)
    */
   async loadChannelVideos(channelDir: string): Promise<Video[]> {
-    const response = await fetch(
-      `${this.baseUrl}/${channelDir}/videos/videos.tsv`
-    );
+    const [response, fulldescriptions] = await Promise.all([
+      fetch(`${this.baseUrl}/${channelDir}/videos/videos.tsv`),
+      this.loadFullDescriptions(
+        `${this.baseUrl}/${channelDir}/videos/video_fulldescriptions.json`
+      ),
+    ]);
     if (!response.ok) {
       throw new Error(
         `Failed to load videos for channel ${channelDir}: ${response.statusText}`
@@ -435,7 +461,7 @@ export class DataLoader {
     const rows = parseTSV(text) as unknown as VideoTSVRow[];
 
     // Convert TSV rows to Video objects
-    return rows.map((row) => this.parseTSVVideo(row));
+    return rows.map((row) => this.parseTSVVideo(row, fulldescriptions));
   }
 
   /**
@@ -524,11 +550,18 @@ export class DataLoader {
 
   /**
    * Convert TSV row to Video object (with type conversion)
+   *
+   * @param fulldescriptions - Optional {video_id: full description} lookup;
+   *   full text wins over the TSV first-line description column (FR-042d)
    */
-  private parseTSVVideo(row: VideoTSVRow): Video {
+  private parseTSVVideo(
+    row: VideoTSVRow,
+    fulldescriptions: Record<string, string> = {}
+  ): Video {
     return {
       video_id: row.video_id,
       title: row.title,
+      description: fulldescriptions[row.video_id] || row.description || undefined,
       channel_id: row.channel_id,
       channel_name: row.channel_name,
       published_at: row.published_at,

@@ -284,3 +284,70 @@ describe('SearchService cross-channel', () => {
     expect(results[0].channelDir).toBeUndefined();
   });
 });
+
+describe('SearchService description search (FR-042d)', () => {
+  let searchService: SearchService;
+
+  function makeVideo(overrides: Partial<Video>): Video {
+    return {
+      video_id: 'x',
+      title: 'Title',
+      channel_id: 'UC0',
+      channel_name: 'Channel',
+      published_at: '2024-01-01T00:00:00Z',
+      duration: 60,
+      view_count: 0,
+      like_count: 0,
+      comment_count: 0,
+      thumbnail_url: '',
+      license: 'standard',
+      privacy_status: 'public',
+      availability: 'public',
+      tags: [],
+      categories: [],
+      captions_available: [],
+      has_auto_captions: false,
+      download_status: 'tracked',
+      source_url: '',
+      fetched_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    searchService = new SearchService();
+  });
+
+  test('finds video by term appearing only in full description', () => {
+    // Regression: ?search=Halchenko returned nothing although the name
+    // appears in the talk description (never in the title)
+    searchService.initialize([
+      makeVideo({
+        video_id: 'talk1',
+        title: 'ABCD-ReproNim Week 1',
+        description:
+          'Introduction lecture.\n\nPresented by Yaroslav Halchenko ' +
+          '(Dartmouth College) covering DataLad basics.',
+      }),
+      makeVideo({ video_id: 'other', title: 'Unrelated Video' }),
+    ]);
+
+    const results = searchService.search('Halchenko');
+
+    expect(results.length).toBe(1);
+    expect(results[0].video.video_id).toBe('talk1');
+    expect(results[0].matches).toContain('description');
+  });
+
+  test('videos without description are still searchable by title', () => {
+    searchService.initialize([
+      makeVideo({ video_id: 'v1', title: 'DataLad Tutorial' }),
+    ]);
+
+    const results = searchService.search('DataLad');
+
+    expect(results.length).toBe(1);
+    expect(results[0].video.video_id).toBe('v1');
+  });
+});

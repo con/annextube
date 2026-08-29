@@ -173,6 +173,7 @@ export interface VideoTSVRow {
   download_status: string;
   source_url: string;
   path?: string; // Optional: folder name for video files (older archives)
+  description?: string; // First non-empty line only (FR-042c); full text in video_fulldescriptions.json
 }
 
 export interface PlaylistTSVRow {
