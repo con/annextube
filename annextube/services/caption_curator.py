@@ -182,13 +182,38 @@ class CaptionCurator:
     # ── Stage 1: Glossary Regex ───────────────────────────────────────────
 
     @staticmethod
+    def _derive_spoken_pattern(canonical: str) -> str | None:
+        """Derive a spoken-form regex from a compound canonical term.
+
+        ASR splits or merges compound names, so "ReproStim" is heard as
+        "repro stim", "repro-stim", or "reprostim".  Split the canonical
+        on case/punctuation boundaries and allow an optional space or
+        hyphen between the parts: "ReproStim" -> "repro[ -]?stim".
+        Returns None for canonicals that do not split into >= 2 parts
+        (e.g. "docker", "BIDS"), which keep only their explicit patterns.
+        """
+        parts = re.findall(r'[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|\d+', canonical)
+        if len(parts) < 2:
+            return None
+        return r'[ -]?'.join(part.lower() for part in parts)
+
+    @staticmethod
     def _compile_glossary_patterns(
         glossary: Glossary,
     ) -> list[tuple[re.Pattern[str], str]]:
-        """Build compiled regex patterns from glossary terms."""
+        """Build compiled regex patterns from glossary terms.
+
+        In addition to each term's explicit ``patterns``, a pattern is
+        derived from compound canonicals (see ``_derive_spoken_pattern``)
+        so an entry like ``ReproStim`` works without hand-listed variants.
+        """
         replacements: list[tuple[re.Pattern[str], str]] = []
         for term in glossary.terms:
-            for pat in term.patterns:
+            patterns = list(term.patterns)
+            derived = CaptionCurator._derive_spoken_pattern(term.canonical)
+            if derived is not None and derived not in patterns:
+                patterns.append(derived)
+            for pat in patterns:
                 if pat.lower() in SKIP_PATTERNS:
                     continue
                 # Skip single-word patterns that are just lowercase of the term

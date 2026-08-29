@@ -11,6 +11,14 @@ export interface PagefindResult {
   data: () => Promise<PagefindResultData>;
 }
 
+/** Per-word match score entry from Pagefind's weighted_locations */
+export interface PagefindWordLocation {
+  weight: number;
+  balanced_score: number;
+  /** Word index into the whitespace-split content */
+  location: number;
+}
+
 /** Full data for a single Pagefind result (loaded via result.data()) */
 export interface PagefindResultData {
   url: string;
@@ -18,6 +26,8 @@ export interface PagefindResultData {
   excerpt: string;
   meta: Record<string, string>;
   filters: Record<string, string[]>;
+  /** Per-word match scores (present in pagefind 1.x) */
+  weighted_locations?: PagefindWordLocation[];
 }
 
 /** A single caption match within a grouped result */
@@ -41,6 +51,12 @@ export interface GroupedCaptionResult {
   primaryUrl: string;
   /** All matches for expansion, sorted by timestamp ascending */
   allMatches: CaptionMatch[];
+  /**
+   * True when none of this video's matched chunks actually contain the
+   * query -- Pagefind only matched a shorter indexed word (e.g. query
+   * "reprostim" matching just "repro"). Absent/false means genuine.
+   */
+  approximate?: boolean;
 }
 
 /** The Pagefind JS API shape (subset we use) */
@@ -104,6 +120,33 @@ function parseTimestamp(url: string): number {
 }
 
 /**
+ * Minimum per-word balanced_score for a match to count as genuine.
+ *
+ * Pagefind never returns zero results for a query it half-knows: for
+ * "reprostim" it returns every chunk containing "repro", because the
+ * indexed word is a truncation of the query. Observed balanced_score
+ * tiers (pagefind 1.x, default word weight as our index uses):
+ *   ~512  whole-word or stemmed match       ("pizzas" -> "pizza")
+ *   ~389  query is a prefix of the word     ("datala" -> "datalad")
+ *   ~221  word is a truncation of the query ("reprostim" -> "repro")
+ * The first two are genuine matches; the last is the misleading
+ * fallback we flag as approximate. 300 separates the tiers with
+ * comfortable margin on both sides.
+ */
+const GENUINE_MATCH_MIN_SCORE = 300;
+
+/**
+ * True when a result chunk contains no genuine match for the query,
+ * i.e. Pagefind only matched via its truncated-word fallback.
+ * Chunks without score data (older index) are treated as genuine.
+ */
+function isApproximateMatch(data: PagefindResultData): boolean {
+  const locations = data.weighted_locations;
+  if (!locations || locations.length === 0) return false;
+  return locations.every((loc) => loc.balanced_score < GENUINE_MATCH_MIN_SCORE);
+}
+
+/**
  * Search captions via Pagefind, group results by video, and return
  * sorted GroupedCaptionResult[].
  *
@@ -146,11 +189,14 @@ export async function searchCaptions(
       timestamp,
       url: data.url,
     };
+    const approximate = isApproximateMatch(data);
 
     const existing = groupMap.get(videoId);
     if (existing) {
       existing.matchCount += 1;
       existing.allMatches.push(match);
+      // A single genuine chunk makes the whole video genuine
+      existing.approximate = existing.approximate && approximate;
     } else {
       groupOrder.push(videoId);
       groupMap.set(videoId, {
@@ -160,6 +206,7 @@ export async function searchCaptions(
         uploadDate: data.meta?.upload_date || '',
         thumbnailUrl: data.meta?.thumbnail_url || '',
         matchCount: 1,
+        approximate,
         // Placeholders -- will be finalized after sorting matches
         primaryExcerpt: match.excerpt,
         primaryTimestamp: match.timestamp,

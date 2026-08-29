@@ -24,6 +24,11 @@
   $: visibleResults = results.slice(0, visibleCount);
   $: hasMore = results.length > visibleCount;
 
+  // True when every result is only an approximate match (Pagefind matched
+  // a shorter indexed word, e.g. "repro" for query "reprostim") -- i.e.
+  // no caption actually contains the query.
+  $: approximateOnly = results.length > 0 && results.every((r) => r.approximate);
+
   // Reset visible count and expanded state when results change
   $: if (results) {
     visibleCount = PAGE_SIZE;
@@ -88,9 +93,15 @@
   {:else}
     {#if results.length > 0}
       <div class="result-header">
-        <p class="result-count">
-          {results.length} video{results.length !== 1 ? 's' : ''} with caption matches
-        </p>
+        {#if approximateOnly}
+          <p class="approximate-notice">
+            No captions contain '{query}' &#8212; showing approximate matches only
+          </p>
+        {:else}
+          <p class="result-count">
+            {results.length} video{results.length !== 1 ? 's' : ''} with caption matches
+          </p>
+        {/if}
       </div>
     {/if}
 
@@ -223,6 +234,13 @@
     margin: 0;
     font-size: 14px;
     color: #606060;
+    font-weight: 500;
+  }
+
+  .approximate-notice {
+    margin: 0;
+    font-size: 14px;
+    color: #9a6700;
     font-weight: 500;
   }
 
