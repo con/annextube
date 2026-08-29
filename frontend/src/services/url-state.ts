@@ -9,7 +9,8 @@ import type { SortField, SortDirection } from './sort';
 
 export interface URLState {
   search?: string;
-  searchMode?: 'captions';
+  /** 'full' = Pagefind metadata+captions search; absent = Metadata (fuse.js) */
+  searchMode?: 'full';
   dateFrom?: string;
   dateTo?: string;
   channels?: string[];
@@ -32,6 +33,10 @@ export class URLStateManager {
     const cleanHash = hash.replace(/^#\/?(\?)?/, '');
     const params = new URLSearchParams(cleanHash);
 
+    // 'captions' is the legacy value from pre-Metadata/Full URLs (FR-042f)
+    const mode = params.get('mode');
+    const searchMode = mode === 'full' || mode === 'captions' ? ('full' as const) : undefined;
+
     // Helper to parse array parameters and return undefined for empty arrays
     const parseArray = (value: string | null): string[] | undefined => {
       const arr = value?.split(',').filter(Boolean);
@@ -40,7 +45,7 @@ export class URLStateManager {
 
     return {
       search: params.get('search') || undefined,
-      searchMode: params.get('mode') === 'captions' ? 'captions' : undefined,
+      searchMode,
       dateFrom: params.get('from') || undefined,
       dateTo: params.get('to') || undefined,
       channels: parseArray(params.get('channels')),

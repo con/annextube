@@ -144,3 +144,33 @@ describe('URLStateManager', () => {
     expect(state.channels).toBeUndefined();
   });
 });
+
+describe('URLStateManager searchMode (FR-042f)', () => {
+  const urlStateManager = new URLStateManager();
+
+  test('parses mode=full', () => {
+    const state = urlStateManager.parseHash('#/?search=test&mode=full');
+    expect(state.searchMode).toBe('full');
+  });
+
+  test('maps legacy mode=captions to full', () => {
+    // Pre-rename shared URLs must keep working
+    const state = urlStateManager.parseHash('#/?search=test&mode=captions');
+    expect(state.searchMode).toBe('full');
+  });
+
+  test('absent mode leaves searchMode undefined (Metadata default)', () => {
+    const state = urlStateManager.parseHash('#/?search=test');
+    expect(state.searchMode).toBeUndefined();
+  });
+
+  test('encodes full mode as mode=full', () => {
+    const hash = urlStateManager.encodeHash({ search: 'x', searchMode: 'full' });
+    expect(hash).toContain('mode=full');
+  });
+
+  test('searchMode round-trips through encode/parse', () => {
+    const hash = urlStateManager.encodeHash({ search: 'x', searchMode: 'full' });
+    expect(urlStateManager.parseHash(hash).searchMode).toBe('full');
+  });
+});

@@ -1,5 +1,5 @@
 /**
- * CaptionSearchResults Component Unit Tests
+ * FullSearchResults Component Unit Tests
  *
  * @ai_generated
  */
@@ -7,7 +7,7 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import CaptionSearchResults from '../../src/components/CaptionSearchResults.svelte';
+import FullSearchResults from '../../src/components/FullSearchResults.svelte';
 import type { GroupedSearchResult } from '../../src/services/pagefind';
 
 /** Build a minimal GroupedSearchResult for testing */
@@ -33,14 +33,14 @@ function makeResult(overrides: Partial<GroupedSearchResult> = {}): GroupedSearch
   };
 }
 
-describe('CaptionSearchResults', () => {
+describe('FullSearchResults', () => {
   beforeEach(() => {
     // Reset location hash
     window.location.hash = '';
   });
 
   test('renders loading state when loading is true', () => {
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: {
         results: [],
         query: 'test',
@@ -50,11 +50,11 @@ describe('CaptionSearchResults', () => {
 
     const loadingEl = container.querySelector('.loading-state');
     expect(loadingEl).not.toBeNull();
-    expect(loadingEl?.textContent).toContain('Searching captions');
+    expect(loadingEl?.textContent).toContain('Searching');
   });
 
   test('renders empty state when query is set but no results', () => {
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: {
         results: [],
         query: 'nonexistent phrase',
@@ -64,11 +64,11 @@ describe('CaptionSearchResults', () => {
 
     const emptyEl = container.querySelector('.empty-state');
     expect(emptyEl).not.toBeNull();
-    expect(emptyEl?.textContent).toContain("No caption matches found for 'nonexistent phrase'");
+    expect(emptyEl?.textContent).toContain("No matches found for 'nonexistent phrase'");
   });
 
   test('does not render empty state when query is empty', () => {
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: {
         results: [],
         query: '',
@@ -92,7 +92,7 @@ describe('CaptionSearchResults', () => {
       }),
     ];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'matching', loading: false },
     });
 
@@ -127,7 +127,7 @@ describe('CaptionSearchResults', () => {
       }),
     ];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
@@ -139,7 +139,7 @@ describe('CaptionSearchResults', () => {
   test('does not show match count badge for single-match videos', () => {
     const results = [makeResult({ matchCount: 1 })];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
@@ -155,7 +155,7 @@ describe('CaptionSearchResults', () => {
       }),
     ];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'hello world', loading: false },
     });
 
@@ -174,23 +174,23 @@ describe('CaptionSearchResults', () => {
       makeResult({ videoId: 'vid2', title: 'Another Video' }),
     ];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
     const header = container.querySelector('.result-count');
-    expect(header?.textContent).toContain('2 videos with caption matches');
+    expect(header?.textContent).toContain('2 videos with matches');
   });
 
   test('singular form for single video result', () => {
     const results = [makeResult()];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
     const header = container.querySelector('.result-count');
-    expect(header?.textContent).toContain('1 video with caption matches');
+    expect(header?.textContent).toContain('1 video with matches');
   });
 
   test('expands match list when badge is clicked', async () => {
@@ -205,7 +205,7 @@ describe('CaptionSearchResults', () => {
       }),
     ];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
@@ -231,7 +231,7 @@ describe('CaptionSearchResults', () => {
       makeResult({ videoId: `vid${i}`, title: `Video ${i}` })
     );
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
@@ -250,7 +250,7 @@ describe('CaptionSearchResults', () => {
       makeResult({ videoId: `vid${i}`, title: `Video ${i}` })
     );
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
@@ -273,7 +273,7 @@ describe('CaptionSearchResults', () => {
       }),
     ];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
@@ -288,11 +288,87 @@ describe('CaptionSearchResults', () => {
       }),
     ];
 
-    const { container } = render(CaptionSearchResults, {
+    const { container } = render(FullSearchResults, {
       props: { results, query: 'test', loading: false },
     });
 
     const dateEl = container.querySelector('.upload-date');
     expect(dateEl?.textContent).toBe('Mar 15, 2024');
+  });
+});
+
+describe('FullSearchResults description matches (FR-042f)', () => {
+  beforeEach(() => {
+    window.location.hash = '';
+  });
+
+  test('description-only result shows badge and opens plain video URL', async () => {
+    const results = [
+      makeResult({
+        videoId: 'descVid',
+        matchCount: 1,
+        primaryTimestamp: -1,
+        primaryExcerpt: 'by <mark>Halchenko</mark>',
+        primaryUrl: '#/video/descVid',
+        allMatches: [],
+        descriptionMatch: { excerpt: 'by <mark>Halchenko</mark>' },
+      }),
+    ];
+
+    const { container } = render(FullSearchResults, {
+      props: { results, query: 'Halchenko', loading: false },
+    });
+
+    expect(container.querySelector('.timestamp-badge')).toBeNull();
+    const badge = container.querySelector('.description-badge');
+    expect(badge?.textContent).toBe('description');
+
+    await fireEvent.click(container.querySelector('.result-main')!);
+    expect(window.location.hash).toBe('#/video/descVid');
+  });
+
+  test('expanded list shows description row above caption matches', async () => {
+    const results = [
+      makeResult({
+        matchCount: 3,
+        descriptionMatch: { excerpt: 'desc <mark>hit</mark>' },
+        allMatches: [
+          { excerpt: 'match at 10s', timestamp: 10, url: '#t=10' },
+          { excerpt: 'match at 30s', timestamp: 30, url: '#t=30' },
+        ],
+      }),
+    ];
+
+    const { container } = render(FullSearchResults, {
+      props: { results, query: 'hit', loading: false },
+    });
+
+    await fireEvent.click(container.querySelector('.match-count-badge')!);
+    await tick();
+
+    const items = container
+      .querySelector('.expanded-matches')!
+      .querySelectorAll('.match-item');
+    expect(items).toHaveLength(3);
+    expect(items[0].querySelector('.description-badge')).not.toBeNull();
+    expect(items[1].querySelector('.timestamp-badge')).not.toBeNull();
+  });
+
+  test('caption-primary result keeps timestamp badge when description also matched', () => {
+    const results = [
+      makeResult({
+        matchCount: 2,
+        primaryTimestamp: 42,
+        descriptionMatch: { excerpt: 'desc <mark>hit</mark>' },
+      }),
+    ];
+
+    const { container } = render(FullSearchResults, {
+      props: { results, query: 'hit', loading: false },
+    });
+
+    const collapsed = container.querySelector('.result-excerpt-row')!;
+    expect(collapsed.querySelector('.timestamp-badge')).not.toBeNull();
+    expect(collapsed.querySelector('.description-badge')).toBeNull();
   });
 });

@@ -1,10 +1,11 @@
 <!--
-  CaptionSearchResults Component
+  FullSearchResults Component
 
-  Displays Pagefind caption search results grouped by video.
-  Each card shows the video title, channel, timestamp, excerpt with
-  highlights, and an expandable list of all matches when there are
-  multiple hits in the same video.
+  Displays Pagefind "Full" search results (metadata + captions) grouped by
+  video. Each card shows the video title, channel, timestamp (or a
+  "description" badge for metadata matches), excerpt with highlights, and
+  an expandable list of all matches when there are multiple hits in the
+  same video.
 -->
 <script lang="ts">
   import type { GroupedSearchResult } from '@/services/pagefind';
@@ -50,6 +51,19 @@
     window.location.hash = `#/video/${videoId}?t=${Math.floor(timestamp)}&q=${encodedQuery}&filter=1&autoplay=1`;
   }
 
+  /** A description match has no timestamp -- open the video page plainly */
+  function navigateToDescriptionMatch(videoId: string) {
+    window.location.hash = `#/video/${videoId}`;
+  }
+
+  function openPrimary(result: GroupedSearchResult) {
+    if (result.primaryTimestamp >= 0) {
+      navigateToVideo(result.videoId, result.primaryTimestamp);
+    } else {
+      navigateToDescriptionMatch(result.videoId);
+    }
+  }
+
   function formatDate(dateStr: string): string {
     if (!dateStr) return '';
     // Normalize YYYYMMDD to YYYY-MM-DD
@@ -79,17 +93,17 @@
   {#if loading}
     <div class="loading-state">
       <div class="spinner"></div>
-      <p>Searching captions...</p>
+      <p>Searching...</p>
     </div>
   {:else if query && results.length === 0}
     <div class="empty-state">
-      <p>No caption matches found for '{query}'</p>
+      <p>No matches found for '{query}'</p>
     </div>
   {:else}
     {#if results.length > 0}
       <div class="result-header">
         <p class="result-count">
-          {results.length} video{results.length !== 1 ? 's' : ''} with caption matches
+          {results.length} video{results.length !== 1 ? 's' : ''} with matches
         </p>
       </div>
     {/if}
@@ -101,8 +115,8 @@
             class="result-main"
             role="button"
             tabindex="0"
-            on:click={() => navigateToVideo(result.videoId, result.primaryTimestamp)}
-            on:keydown={(e) => { if (e.key === 'Enter') navigateToVideo(result.videoId, result.primaryTimestamp); }}
+            on:click={() => openPrimary(result)}
+            on:keydown={(e) => { if (e.key === 'Enter') openPrimary(result); }}
           >
             <div class="result-info">
               <h3 class="result-title">{result.title}</h3>
@@ -118,7 +132,11 @@
                 {/if}
               </div>
               <div class="result-excerpt-row">
-                <span class="timestamp-badge">{formatTimestamp(result.primaryTimestamp)}</span>
+                {#if result.primaryTimestamp >= 0}
+                  <span class="timestamp-badge">{formatTimestamp(result.primaryTimestamp)}</span>
+                {:else}
+                  <span class="description-badge">description</span>
+                {/if}
                 <span class="result-excerpt">{@html result.primaryExcerpt}</span>
               </div>
             </div>
@@ -135,6 +153,15 @@
 
           {#if result.matchCount > 1 && expandedIds.has(result.videoId)}
             <div class="expanded-matches">
+              {#if result.descriptionMatch}
+                <button
+                  class="match-item"
+                  on:click={() => navigateToDescriptionMatch(result.videoId)}
+                >
+                  <span class="description-badge">description</span>
+                  <span class="match-excerpt">{@html result.descriptionMatch.excerpt}</span>
+                </button>
+              {/if}
               {#each result.allMatches as match, idx}
                 <button
                   class="match-item"
@@ -311,6 +338,19 @@
     padding: 2px 6px;
     border-radius: 4px;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    margin-top: 1px;
+  }
+
+  .description-badge {
+    flex-shrink: 0;
+    display: inline-block;
+    background: #e6f4ea;
+    color: #137333;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
     white-space: nowrap;
     margin-top: 1px;
   }
