@@ -1,7 +1,10 @@
 /**
  * Pagefind Service
  *
- * Provides full-text search across closed captions using Pagefind.
+ * Provides full-text search across video metadata (title, description, tags)
+ * and closed captions using Pagefind ("Full" search mode). Records carry a
+ * record_type of 'metadata' or 'caption' (FR-042e); records without one come
+ * from pre-FR-042e indexes and are treated as captions.
  * Lazily loads the Pagefind library and groups results by video.
  */
 
@@ -27,20 +30,26 @@ export interface CaptionMatch {
   url: string;
 }
 
-/** Results grouped by video -- one entry per video regardless of how many chunks matched */
-export interface GroupedCaptionResult {
+/** Results grouped by video -- one entry per video regardless of how many records matched */
+export interface GroupedSearchResult {
   videoId: string;
   title: string;
   channelName: string;
   uploadDate: string;
   thumbnailUrl: string;
+  /** Caption matches + 1 if the metadata record (description) matched */
   matchCount: number;
-  /** First (earliest timestamp) match */
+  /**
+   * Earliest-timestamp caption match; falls back to the description match
+   * when no captions matched (then primaryTimestamp is -1)
+   */
   primaryExcerpt: string;
   primaryTimestamp: number;
   primaryUrl: string;
-  /** All matches for expansion, sorted by timestamp ascending */
+  /** Caption matches for expansion, sorted by timestamp ascending */
   allMatches: CaptionMatch[];
+  /** Match on the video's metadata record (title/description/tags), if any */
+  descriptionMatch?: { excerpt: string };
 }
 
 /** The Pagefind JS API shape (subset we use) */
@@ -104,18 +113,19 @@ function parseTimestamp(url: string): number {
 }
 
 /**
- * Search captions via Pagefind, group results by video, and return
- * sorted GroupedCaptionResult[].
+ * Search metadata + captions via Pagefind ("Full" mode), group results by
+ * video, and return sorted GroupedSearchResult[].
  *
  * Groups are ordered by best match relevance (Pagefind's native ordering
- * determines which video appears first).  Within each group, matches are
- * sorted by timestamp ascending so the earliest match is the "primary"
- * one shown in the collapsed view.
+ * determines which video appears first).  Within each group, caption matches
+ * are sorted by timestamp ascending so the earliest match is the "primary"
+ * one shown in the collapsed view; a match on the video's metadata record
+ * (description) is kept separately in descriptionMatch.
  */
-export async function searchCaptions(
+export async function searchFull(
   query: string,
   filters?: Record<string, string[]>,
-): Promise<GroupedCaptionResult[]> {
+): Promise<GroupedSearchResult[]> {
   if (!pagefindInstance) {
     const ready = await initPagefind();
     if (!ready) return [];
@@ -133,50 +143,62 @@ export async function searchCaptions(
   // Group by video_id (from meta)
   // We preserve Pagefind's result ordering to determine group relevance:
   // the first occurrence of a video_id sets that group's position.
-  const groupMap = new Map<string, GroupedCaptionResult>();
+  const groupMap = new Map<string, GroupedSearchResult>();
   const groupOrder: string[] = [];
 
   for (const data of allData) {
     const videoId = data.meta?.video_id;
     if (!videoId) continue;
 
-    const timestamp = parseTimestamp(data.url);
-    const match: CaptionMatch = {
-      excerpt: data.excerpt,
-      timestamp,
-      url: data.url,
-    };
-
-    const existing = groupMap.get(videoId);
-    if (existing) {
-      existing.matchCount += 1;
-      existing.allMatches.push(match);
-    } else {
+    let group = groupMap.get(videoId);
+    if (!group) {
       groupOrder.push(videoId);
-      groupMap.set(videoId, {
+      group = {
         videoId,
         title: data.meta?.title || videoId,
         channelName: data.meta?.channel_name || '',
         uploadDate: data.meta?.upload_date || '',
         thumbnailUrl: data.meta?.thumbnail_url || '',
-        matchCount: 1,
-        // Placeholders -- will be finalized after sorting matches
-        primaryExcerpt: match.excerpt,
-        primaryTimestamp: match.timestamp,
-        primaryUrl: match.url,
-        allMatches: [match],
+        matchCount: 0,
+        // Placeholders -- finalized below once all matches are collected
+        primaryExcerpt: '',
+        primaryTimestamp: -1,
+        primaryUrl: `#/video/${videoId}`,
+        allMatches: [],
+      };
+      groupMap.set(videoId, group);
+    }
+
+    if (data.meta?.record_type === 'metadata') {
+      // At most one metadata record per video
+      if (!group.descriptionMatch) {
+        group.descriptionMatch = { excerpt: data.excerpt };
+        group.matchCount += 1;
+      }
+    } else {
+      // 'caption' or absent (pre-FR-042e index)
+      group.allMatches.push({
+        excerpt: data.excerpt,
+        timestamp: parseTimestamp(data.url),
+        url: data.url,
       });
+      group.matchCount += 1;
     }
   }
 
-  // Sort matches within each group by timestamp and set primary to earliest
-  const grouped: GroupedCaptionResult[] = [];
+  // Sort caption matches by timestamp; primary is the earliest caption
+  // match, or the description match (timestamp -1) when no captions matched
+  const grouped: GroupedSearchResult[] = [];
   for (const videoId of groupOrder) {
     const group = groupMap.get(videoId)!;
     group.allMatches.sort((a, b) => a.timestamp - b.timestamp);
-    group.primaryExcerpt = group.allMatches[0].excerpt;
-    group.primaryTimestamp = group.allMatches[0].timestamp;
-    group.primaryUrl = group.allMatches[0].url;
+    if (group.allMatches.length > 0) {
+      group.primaryExcerpt = group.allMatches[0].excerpt;
+      group.primaryTimestamp = group.allMatches[0].timestamp;
+      group.primaryUrl = group.allMatches[0].url;
+    } else if (group.descriptionMatch) {
+      group.primaryExcerpt = group.descriptionMatch.excerpt;
+    }
     grouped.push(group);
   }
 

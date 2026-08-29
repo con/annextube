@@ -12,7 +12,7 @@
   import { filterService } from '@/services/filter';
   import { sortService, type SortField, type SortDirection } from '@/services/sort';
   import { urlStateManager } from '@/services/url-state';
-  import { initPagefind, searchCaptions, type GroupedCaptionResult } from '@/services/pagefind';
+  import { initPagefind, searchFull, type GroupedSearchResult } from '@/services/pagefind';
   import CaptionSearchResults from './CaptionSearchResults.svelte';
 
   export let videos: Video[];
@@ -24,7 +24,7 @@
   type SearchMode = 'videos' | 'captions';
   let searchMode: SearchMode = 'videos';
   let pagefindAvailable = false;
-  let captionResults: GroupedCaptionResult[] = [];
+  let captionResults: GroupedSearchResult[] = [];
   let captionSearchLoading = false;
   let captionDebounceTimer: number;
 
@@ -156,8 +156,8 @@
   // Post-filter caption results by date range and playlists (Pagefind
   // only supports exact-match filters, not ranges or membership checks)
   function postFilterCaptionResults(
-    results: GroupedCaptionResult[],
-  ): GroupedCaptionResult[] {
+    results: GroupedSearchResult[],
+  ): GroupedSearchResult[] {
     let filtered = results;
 
     // Date range filter
@@ -202,7 +202,7 @@
         captionSearchLoading = true;
         captionDebounceTimer = setTimeout(async () => {
           try {
-            const raw = await searchCaptions(searchQuery, buildPagefindFilters());
+            const raw = await searchFull(searchQuery, buildPagefindFilters());
             captionResults = postFilterCaptionResults(raw);
           } catch (err) {
             console.warn('Caption search failed:', err);

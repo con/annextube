@@ -7,10 +7,10 @@
   multiple hits in the same video.
 -->
 <script lang="ts">
-  import type { GroupedCaptionResult } from '@/services/pagefind';
+  import type { GroupedSearchResult } from '@/services/pagefind';
   import { formatTimestamp } from '@/services/pagefind';
 
-  export let results: GroupedCaptionResult[] = [];
+  export let results: GroupedSearchResult[] = [];
   export let query: string = '';
   export let loading: boolean = false;
 

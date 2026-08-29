@@ -7,7 +7,7 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import {
   initPagefind,
-  searchCaptions,
+  searchFull,
   formatTimestamp,
   _resetForTesting,
   type PagefindResult,
@@ -107,9 +107,9 @@ describe('initPagefind', () => {
   });
 });
 
-// ---------- searchCaptions ----------
+// ---------- searchFull ----------
 
-describe('searchCaptions', () => {
+describe('searchFull', () => {
   beforeEach(() => {
     _resetForTesting();
   });
@@ -118,7 +118,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('');
+    const results = await searchFull('');
     expect(results).toEqual([]);
   });
 
@@ -126,13 +126,13 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('   ');
+    const results = await searchFull('   ');
     expect(results).toEqual([]);
   });
 
   test('returns empty array when pagefind is not available', async () => {
     // _resetForTesting() was called without a mock, so pagefind is unavailable
-    const results = await searchCaptions('test query');
+    const results = await searchFull('test query');
     expect(results).toEqual([]);
   });
 
@@ -156,7 +156,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2), makeResult(d3)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('match');
+    const results = await searchFull('match');
 
     // Should produce 2 groups: vid1 (first seen) and vid2
     expect(results).toHaveLength(2);
@@ -194,7 +194,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2), makeResult(d3)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('match');
+    const results = await searchFull('match');
     expect(results).toHaveLength(1);
 
     const group = results[0];
@@ -224,7 +224,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results[0].videoId).toBe('vid2');
     expect(results[1].videoId).toBe('vid1');
   });
@@ -244,7 +244,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results).toHaveLength(1);
     expect(results[0].videoId).toBe('vid1');
   });
@@ -259,7 +259,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results[0].primaryTimestamp).toBe(123);
   });
 
@@ -273,7 +273,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results[0].primaryTimestamp).toBe(0);
   });
 
@@ -283,8 +283,102 @@ describe('searchCaptions', () => {
     _resetForTesting(mock);
 
     const filters = { language: ['en'] };
-    await searchCaptions('test', filters);
+    await searchFull('test', filters);
 
     expect(searchFn).toHaveBeenCalledWith('test', { filters });
+  });
+});
+
+// ---------- metadata records (FR-042e) ----------
+
+describe('searchFull with metadata records', () => {
+  beforeEach(() => {
+    _resetForTesting();
+  });
+
+  function makeMetadataData(videoId: string, excerpt: string): PagefindResultData {
+    return makeData({
+      url: `#/video/${videoId}`,
+      excerpt,
+      meta: {
+        video_id: videoId,
+        title: `Title ${videoId}`,
+        channel_name: 'Ch',
+        upload_date: '2024-01-01',
+        record_type: 'metadata',
+      },
+    });
+  }
+
+  function makeCaptionData(
+    videoId: string, t: number, excerpt: string
+  ): PagefindResultData {
+    return makeData({
+      url: `#/video/${videoId}?t=${t}`,
+      excerpt,
+      meta: {
+        video_id: videoId,
+        title: `Title ${videoId}`,
+        channel_name: 'Ch',
+        upload_date: '2024-01-01',
+        record_type: 'caption',
+      },
+    });
+  }
+
+  test('description-only match produces a group without caption matches', async () => {
+    const mock = makeMockPagefind([
+      makeResult(makeMetadataData('vid1', 'by <mark>Halchenko</mark>')),
+    ]);
+    _resetForTesting(mock);
+
+    const results = await searchFull('Halchenko');
+
+    expect(results).toHaveLength(1);
+    const group = results[0];
+    expect(group.videoId).toBe('vid1');
+    expect(group.descriptionMatch?.excerpt).toBe('by <mark>Halchenko</mark>');
+    expect(group.allMatches).toHaveLength(0);
+    expect(group.matchCount).toBe(1);
+    // No timestamp for a description match
+    expect(group.primaryTimestamp).toBe(-1);
+    expect(group.primaryExcerpt).toBe('by <mark>Halchenko</mark>');
+  });
+
+  test('metadata and caption matches merge into one group', async () => {
+    const mock = makeMockPagefind([
+      makeResult(makeMetadataData('vid1', 'description <mark>hit</mark>')),
+      makeResult(makeCaptionData('vid1', 42, 'caption <mark>hit</mark>')),
+    ]);
+    _resetForTesting(mock);
+
+    const results = await searchFull('hit');
+
+    expect(results).toHaveLength(1);
+    const group = results[0];
+    expect(group.descriptionMatch?.excerpt).toBe('description <mark>hit</mark>');
+    expect(group.allMatches).toHaveLength(1);
+    expect(group.matchCount).toBe(2);
+    // Primary stays the earliest caption match when captions matched
+    expect(group.primaryTimestamp).toBe(42);
+    expect(group.primaryExcerpt).toBe('caption <mark>hit</mark>');
+  });
+
+  test('records without record_type are treated as captions (old indexes)', async () => {
+    const mock = makeMockPagefind([
+      makeResult(makeData({
+        url: '/videos/vid1/video.en.vtt#t=10',
+        excerpt: 'legacy record',
+        meta: { video_id: 'vid1', title: 'V', channel_name: 'C', upload_date: '' },
+      })),
+    ]);
+    _resetForTesting(mock);
+
+    const results = await searchFull('legacy');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].descriptionMatch).toBeUndefined();
+    expect(results[0].allMatches).toHaveLength(1);
+    expect(results[0].matchCount).toBe(1);
   });
 });

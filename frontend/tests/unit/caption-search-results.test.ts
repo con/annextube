@@ -8,10 +8,10 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import CaptionSearchResults from '../../src/components/CaptionSearchResults.svelte';
-import type { GroupedCaptionResult } from '../../src/services/pagefind';
+import type { GroupedSearchResult } from '../../src/services/pagefind';
 
-/** Build a minimal GroupedCaptionResult for testing */
-function makeResult(overrides: Partial<GroupedCaptionResult> = {}): GroupedCaptionResult {
+/** Build a minimal GroupedSearchResult for testing */
+function makeResult(overrides: Partial<GroupedSearchResult> = {}): GroupedSearchResult {
   return {
     videoId: 'vid1',
     title: 'Test Video Title',
