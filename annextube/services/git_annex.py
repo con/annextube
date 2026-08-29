@@ -221,6 +221,7 @@ class GitAnnexService:
                 "",
                 "# Small metadata files -> git (override default)",
                 "*.tsv annex.largefiles=nothing",
+                "video_fulldescriptions.json annex.largefiles=nothing",
                 "*.md annex.largefiles=nothing",
                 "README* annex.largefiles=nothing",
                 "LICENSE* annex.largefiles=nothing",

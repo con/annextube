@@ -14,6 +14,12 @@ from .authors import AuthorsService
 
 logger = get_logger(__name__)
 
+# Full-description lookup exported next to videos.tsv (FR-042c). Kept in git
+# (not annexed): an annexed symlink without content would silently break
+# search in the web UI.
+FULLDESCRIPTIONS_FILENAME = "video_fulldescriptions.json"
+_FULLDESC_GITATTRIBUTES_RULE = f"{FULLDESCRIPTIONS_FILENAME} annex.largefiles=nothing"
+
 
 def first_description_line(text: str | None) -> str:
     """Return the first non-empty line of a video description, stripped.
@@ -37,7 +43,8 @@ class ExportService:
         self.repo_path = repo_path
 
     def generate_videos_tsv(self, output_path: Path | None = None,
-                            base_dir: Path | None = None) -> Path:
+                            base_dir: Path | None = None,
+                            write_fulldescriptions: bool = True) -> Path:
         """Generate videos.tsv with summary metadata for all videos in a directory.
 
         Scans base_dir for metadata.json files (follows symlinks) and extracts
@@ -48,6 +55,9 @@ class ExportService:
             output_path: Optional custom output path (default: base_dir/videos.tsv)
             base_dir: Directory to scan for metadata.json files
                       (default: repo_path/videos/)
+            write_fulldescriptions: Also write video_fulldescriptions.json next
+                      to the TSV (FR-042c). Disabled for per-playlist exports,
+                      which would duplicate the channel-level lookup.
 
         Returns:
             Path to generated TSV file
@@ -63,6 +73,11 @@ class ExportService:
         if not base_dir.exists():
             logger.warning(f"Directory {base_dir} does not exist, creating empty TSV")
             self._write_empty_videos_tsv(output_path)
+            if write_fulldescriptions:
+                self._ensure_fulldescriptions_gitattributes()
+                self._write_fulldescriptions_json(
+                    output_path.parent / FULLDESCRIPTIONS_FILENAME, {}
+                )
             return output_path
 
         # Collect video metadata
@@ -71,6 +86,7 @@ class ExportService:
         # Use os.walk with followlinks=True because Path.rglob does NOT
         # follow directory symlinks (playlist dirs contain symlinks to video dirs)
         videos = []
+        fulldescriptions: dict[str, str] = {}
         metadata_paths: list[Path] = []
         for root, _dirs, files in os.walk(base_dir, followlinks=True):
             if "metadata.json" in files:
@@ -170,12 +186,24 @@ class ExportService:
                 }
                 videos.append(video_entry)
 
+                description = metadata.get("description") or ""
+                if description.strip():
+                    fulldescriptions[video_id] = description
+
             except Exception as e:
                 logger.error(f"Failed to read metadata from {video_dir.relative_to(base_dir)}: {e}")
 
         # Write TSV file
         self._write_videos_tsv(output_path, videos)
         logger.info(f"Generated videos.tsv with {len(videos)} entries")
+
+        if write_fulldescriptions:
+            # Rule must exist before the file is first saved, or git-annex
+            # would annex it (>10k text) and break web UI fetches (FR-042c)
+            self._ensure_fulldescriptions_gitattributes()
+            self._write_fulldescriptions_json(
+                output_path.parent / FULLDESCRIPTIONS_FILENAME, fulldescriptions
+            )
 
         return output_path
 
@@ -244,7 +272,9 @@ class ExportService:
                 playlists.append(playlist_entry)
 
                 # Generate per-playlist videos.tsv
-                self.generate_videos_tsv(base_dir=playlist_dir)
+                self.generate_videos_tsv(
+                    base_dir=playlist_dir, write_fulldescriptions=False
+                )
 
             except Exception as e:
                 logger.error(f"Failed to read metadata from {playlist_dir.name}: {e}")
@@ -464,6 +494,44 @@ class ExportService:
                     f"{escape_tsv_field(video['path'])}\t"
                     f"{escape_tsv_field(video.get('description', ''))}\n"
                 )
+
+    def _write_fulldescriptions_json(
+        self, output_path: Path, fulldescriptions: dict[str, str]
+    ) -> None:
+        """Write the {video_id: full description} lookup (FR-042c).
+
+        Sorted keys and fixed formatting keep re-exports byte-identical for
+        unchanged content (diffable in git).
+        """
+        # Replace a stale annexed symlink (read-only object) if present
+        if output_path.is_symlink() or output_path.exists():
+            output_path.unlink()
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(fulldescriptions, f, indent=1, ensure_ascii=False,
+                      sort_keys=True)
+            f.write("\n")
+        logger.info(
+            f"Generated {output_path.name} with {len(fulldescriptions)} entries"
+        )
+
+    def _ensure_fulldescriptions_gitattributes(self) -> None:
+        """Ensure .gitattributes keeps video_fulldescriptions.json in git.
+
+        Archives created before FR-042c annex text files >10k by default;
+        append the override rule once (idempotent, mirrors `annextube
+        unannex --update-gitattributes`).
+        """
+        gitattributes = self.repo_path / ".gitattributes"
+        existing = gitattributes.read_text() if gitattributes.exists() else ""
+        for line in existing.splitlines():
+            fields = line.split()
+            if fields and fields[0] == FULLDESCRIPTIONS_FILENAME:
+                return
+        with open(gitattributes, "a", encoding="utf-8") as f:
+            if existing and not existing.endswith("\n"):
+                f.write("\n")
+            f.write(_FULLDESC_GITATTRIBUTES_RULE + "\n")
+        logger.info(f"Added .gitattributes rule: {_FULLDESC_GITATTRIBUTES_RULE}")
 
     def _write_playlists_tsv(self, output_path: Path, playlists: list[dict[str, str]]) -> None:
         """Write playlists to TSV file with proper escaping.
