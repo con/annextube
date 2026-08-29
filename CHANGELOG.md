@@ -5,6 +5,13 @@ All notable changes to annextube will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Caption search states plainly when only approximate matches exist** (#5): Pagefind never returns zero results for a word it half-knows — searching "reprostim" against an index that only contains "repro" returned every "repro" caption presented as ordinary matches. Results whose per-word match scores are all below the genuine-match tier are now flagged, and when every result is approximate the header reads "No captions contain '<query>' — showing approximate matches only". Stemmed matches ("pizzas" → "pizza") and prefix queries ("datala" → "datalad") are unaffected
+- **Glossary entries for compound names work without hand-listed patterns** (#5): a spoken-form pattern is now derived from compound canonicals — `ReproStim` → `repro[ -]?stim` — so a bare `- term: "ReproStim"` glossary entry corrects "repro stim", "repro-stim", and "reprostim" in captions
+
 ## [0.13.0] - 2026-07-13
 
 ### Added
