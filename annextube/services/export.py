@@ -15,6 +15,16 @@ from .authors import AuthorsService
 logger = get_logger(__name__)
 
 
+def first_description_line(text: str | None) -> str:
+    """Return the first non-empty line of a video description, stripped.
+
+    Handles LF, CRLF and CR line endings via str.splitlines().
+    """
+    if not text:
+        return ""
+    return next((line.strip() for line in text.splitlines() if line.strip()), "")
+
+
 class ExportService:
     """Service for exporting archive metadata to TSV format."""
 
@@ -154,6 +164,9 @@ class ExportService:
                     "download_status": download_status,
                     "source_url": f"https://www.youtube.com/watch?v={video_id}",
                     "path": str(relative_path),  # Relative to videos/ directory (e.g., "2026/01/video_dir" for hierarchical)
+                    # First non-empty line only; full text goes to
+                    # video_fulldescriptions.json (FR-042c)
+                    "description": first_description_line(metadata.get("description")),
                 }
                 videos.append(video_entry)
 
@@ -430,7 +443,8 @@ class ExportService:
             # Write header (frontend-compatible format)
             f.write("video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\t"
                     "duration\tview_count\tlike_count\tcomment_count\t"
-                    "thumbnail_url\tdownload_status\tsource_url\tpath\n")
+                    "thumbnail_url\tdownload_status\tsource_url\tpath\t"
+                    "description\n")
 
             # Write rows (escape special characters in string fields)
             for video in videos:
@@ -447,7 +461,8 @@ class ExportService:
                     f"{escape_tsv_field(video['thumbnail_url'])}\t"
                     f"{escape_tsv_field(video['download_status'])}\t"
                     f"{escape_tsv_field(video['source_url'])}\t"
-                    f"{escape_tsv_field(video['path'])}\n"
+                    f"{escape_tsv_field(video['path'])}\t"
+                    f"{escape_tsv_field(video.get('description', ''))}\n"
                 )
 
     def _write_playlists_tsv(self, output_path: Path, playlists: list[dict[str, str]]) -> None:
@@ -488,7 +503,8 @@ class ExportService:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\t"
                     "duration\tview_count\tlike_count\tcomment_count\t"
-                    "thumbnail_url\tdownload_status\tsource_url\tpath\n")
+                    "thumbnail_url\tdownload_status\tsource_url\tpath\t"
+                    "description\n")
 
     def _write_empty_playlists_tsv(self, output_path: Path) -> None:
         """Write empty playlists.tsv with header only.

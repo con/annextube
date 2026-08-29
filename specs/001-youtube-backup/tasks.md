@@ -472,7 +472,7 @@ annextube backup
 
 ### Implementation for Searchable Descriptions
 
-- [ ] T142 [P] [US4] Add `description` column (first non-empty line, `first_description_line()` helper) as last column of videos.tsv in annextube/services/export.py + unit tests for LF/CRLF/CR, leading blank lines, empty, tab escaping (FR-042c)
+- [X] T142 [P] [US4] Add `description` column (first non-empty line, `first_description_line()` helper) as last column of videos.tsv in annextube/services/export.py + unit tests for LF/CRLF/CR, leading blank lines, empty, tab escaping (FR-042c)
 - [ ] T143 [US4] Export videos/video_fulldescriptions.json ({video_id: full description}, non-empty only, sorted keys, deterministic) in annextube/services/export.py; add `video_fulldescriptions.json annex.largefiles=nothing` to configure_gitattributes() in annextube/services/git_annex.py for new archives + idempotent append during export for existing archives + tests (FR-042c)
 - [ ] T144 [US4] Fetch video_fulldescriptions.json in parallel with videos.tsv (Promise.all, 404-tolerant) and merge into Video.description in frontend/src/services/data-loader.ts; add VideoTSVRow.description in frontend/src/types/models.ts + tests incl. regression test for description-only search term (FR-042d)
 - [ ] T145 [P] [US4] Add one metadata record per video (content: title + description + tags; url `#/video/{id}` without ?t=; `record_type` meta+filter on metadata AND caption records) in annextube/services/search_index.py; include caption-less videos; extend incremental change detection from `*.vtt` to also cover `metadata.json`; add metadata_records to IndexStats + tests (FR-042e)

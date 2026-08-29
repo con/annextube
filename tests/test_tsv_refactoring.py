@@ -81,7 +81,8 @@ def test_videos_tsv_structure(tmp_path: Path):
     expected_columns = [
         "video_id", "title", "channel_id", "channel_name", "published_at",
         "duration", "view_count", "like_count", "comment_count",
-        "thumbnail_url", "download_status", "source_url", "path"
+        "thumbnail_url", "download_status", "source_url", "path",
+        "description"
     ]
     actual_columns = header.split("\t")
     assert actual_columns == expected_columns, \
