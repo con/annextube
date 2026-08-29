@@ -30,20 +30,22 @@ def require_pagefind_and_build(archive_path: Path, *, force: bool = False) -> No
 
     from annextube.services.search_index import build_caption_index
 
-    click.echo("Building caption search index...")
+    click.echo("Building search index (metadata + captions)...")
     stats = asyncio.run(build_caption_index(archive_path, force=force))
 
-    if stats.videos_indexed == 0 and stats.chunks_created == 0:
+    if (stats.videos_indexed == 0 and stats.chunks_created == 0
+            and stats.metadata_records == 0):
         click.echo("  [ok] Search index up to date (no changes)")
     else:
         size_mb = stats.index_size_bytes / (1024 * 1024)
         click.echo(
-            f"  [ok] {stats.videos_indexed} videos "
+            f"  [ok] {stats.videos_indexed} captioned videos "
             f"({stats.videos_curated} curated, {stats.videos_original} original), "
-            f"{stats.chunks_created:,} chunks, {size_mb:.1f} MB"
+            f"{stats.chunks_created:,} chunks, "
+            f"{stats.metadata_records:,} metadata records, {size_mb:.1f} MB"
         )
     if stats.videos_skipped:
-        click.echo(f"  (skipped {stats.videos_skipped} videos without captions)")
+        click.echo(f"  (skipped {stats.videos_skipped} videos with unreadable metadata)")
 
 
 @click.command("build-search-index")
@@ -55,11 +57,13 @@ def require_pagefind_and_build(archive_path: Path, *, force: bool = False) -> No
 )
 @click.pass_context
 def build_search_index(ctx: click.Context, output_dir: Path, force: bool):
-    """Build Pagefind caption search index.
+    """Build Pagefind full-text search index.
 
-    Indexes VTT caption files to enable full-text search across
-    video captions in the web browser.  Curated captions are
-    preferred; original YouTube captions serve as a fallback.
+    Indexes video metadata (title, description, tags) and VTT caption
+    files to enable full-text search in the web browser.  Curated
+    captions are preferred; original YouTube captions serve as a
+    fallback; videos without captions are still findable via their
+    metadata record.
 
     Requires the 'search' extras: pip install 'annextube[search]'
 
