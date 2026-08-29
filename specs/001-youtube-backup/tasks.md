@@ -479,7 +479,7 @@ annextube backup
 - [X] T146 [US4] Classify results by record_type in frontend/src/services/pagefind.ts (rename searchCaptions → searchFull; group gains descriptionMatch alongside timestamped caption matches; missing record_type treated as caption for old indexes) + tests (FR-042e)
 - [X] T147 [US4] Rename search modes Videos/Captions → Metadata/Full: SearchMode type + toggle labels + placeholders in frontend/src/components/FilterPanel.svelte; `mode=full` with legacy `mode=captions` mapping in frontend/src/services/url-state.ts; git mv CaptionSearchResults.svelte → FullSearchResults.svelte with description-match row (badge, no timestamp, links to `#/video/{id}`) + tests (FR-042f)
 - [X] T148 [P] [US4] E2E tests in frontend/tests/e2e/: description-only term found in Metadata mode; Full mode shows description + caption matches; legacy mode=captions URL still works (FR-042d/e/f)
-- [ ] T149 [P] [US4] Update docs: search behavior in docs/content/reference/ and how-to (two modes, video_fulldescriptions.json, archive regeneration note for existing archives)
+- [X] T149 [P] [US4] Update docs: search behavior in docs/content/how-to/search.md (two modes, video_fulldescriptions.json, archive regeneration note for existing archives)
 
 **Checkpoint**: Searching a term that appears only in a video description returns that video in both Metadata and Full modes; old archives and old shared URLs keep working.
 
