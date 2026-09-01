@@ -248,6 +248,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-042**: Web interface MUST support text search across video titles and descriptions. Implementation: Pagefind-based full-text search index built from caption VTT files; index stored as a DataLad subdataset at `web/pagefind/`; `annextube backup --search-index` auto-builds after backup; `annextube build-search-index` for standalone rebuild
 - **FR-042a**: Search index MUST support searching within caption text (not just titles/descriptions), chunked by configurable duration windows (default: 60 seconds)
 - **FR-042b**: Search index MUST distinguish between curated (human-edited) and original (auto-generated) captions, prioritizing curated versions
+- **FR-042c**: Caption search MUST distinguish genuine matches from Pagefind's approximate fallback (when a query word is absent, Pagefind matches a shorter indexed word — e.g. "reprostim" matching only "repro") and MUST state when results are approximate rather than presenting them as matches: genuine results listed first, approximate ones badged, and an explicit "no captions contain <query>" statement when no result matches genuinely. Stemmed matches ("pizzas" → "pizza") and prefix queries ("datala" → "datalad") count as genuine
 - **FR-043**: Web interface MUST display video thumbnails, metadata, and allow playback
 - **FR-044**: Web interface MUST display video comments (threading is best-effort; yt-dlp currently returns all comments as top-level with parent="root", see FR-008 note)
 - **FR-045**: Web interface MUST allow caption selection and display during playback
@@ -288,6 +289,7 @@ An educator wants to publish their YouTube archive as a public website (via GitH
 - **FR-061**: System MUST provide interface to send captions to external editing services
 - **FR-062**: System MUST support batch caption export for multiple videos
 - **FR-062a**: During backup, system MUST retroactively curate existing auto-generated captions that lack a curated variant when curation is enabled and a glossary is configured. This ensures that enabling curation or adding a glossary after initial backup causes all existing captions to be curated on the next backup run, not only newly-downloaded ones.
+- **FR-062b**: Caption curation MUST derive spoken-form glossary patterns from compound canonical terms (e.g. `ReproStim` → `repro[ -]?stim`), so a glossary entry corrects the spaced, hyphenated, and joined forms ASR produces without hand-listed `patterns:` variants
 
 #### Publishing and Sharing
 
