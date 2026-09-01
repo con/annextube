@@ -29,9 +29,14 @@ export class URLStateManager {
    * @returns Parsed state object
    */
   parseHash(hash: string): URLState {
-    // Remove leading # and /? variations
-    const cleanHash = hash.replace(/^#\/?(\?)?/, '');
-    const params = new URLSearchParams(cleanHash);
+    // Query params start at the first '?'; everything before it is the route
+    // (e.g. "#/channel/ch-foo"). Stripping only a leading "#/" would fold the
+    // route into the first parameter's name on any non-root route, silently
+    // dropping every filter param.
+    const queryStart = hash.indexOf('?');
+    const params = new URLSearchParams(
+      queryStart === -1 ? '' : hash.slice(queryStart + 1)
+    );
 
     // 'captions' is the legacy value from pre-Metadata/Full URLs (FR-042f)
     const mode = params.get('mode');
