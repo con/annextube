@@ -14,11 +14,10 @@ from .authors import AuthorsService
 
 logger = get_logger(__name__)
 
-# Full-description lookup exported next to videos.tsv (FR-042c). Kept in git
-# (not annexed): an annexed symlink without content would silently break
-# search in the web UI.
+# Full-description lookup exported next to videos.tsv (FR-042c). Stored under
+# the archive's normal .gitattributes rules -- large ones are annexed, and
+# their content simply needs to be deposited for the web UI to read them.
 FULLDESCRIPTIONS_FILENAME = "video_fulldescriptions.json"
-_FULLDESC_GITATTRIBUTES_RULE = f"{FULLDESCRIPTIONS_FILENAME} annex.largefiles=nothing"
 
 
 def first_description_line(text: str | None) -> str:
@@ -74,7 +73,6 @@ class ExportService:
             logger.warning(f"Directory {base_dir} does not exist, creating empty TSV")
             self._write_empty_videos_tsv(output_path)
             if write_fulldescriptions:
-                self._ensure_fulldescriptions_gitattributes()
                 self._write_fulldescriptions_json(
                     output_path.parent / FULLDESCRIPTIONS_FILENAME, {}
                 )
@@ -186,8 +184,13 @@ class ExportService:
                 }
                 videos.append(video_entry)
 
+                # Only videos whose description does NOT fit on the single
+                # TSV line need an entry here -- for the rest the TSV column
+                # already carries the whole text (FR-042c)
                 description = metadata.get("description") or ""
-                if description.strip():
+                if description.strip() and description.strip() != first_description_line(
+                    description
+                ):
                     fulldescriptions[video_id] = description
 
             except Exception as e:
@@ -198,9 +201,6 @@ class ExportService:
         logger.info(f"Generated videos.tsv with {len(videos)} entries")
 
         if write_fulldescriptions:
-            # Rule must exist before the file is first saved, or git-annex
-            # would annex it (>10k text) and break web UI fetches (FR-042c)
-            self._ensure_fulldescriptions_gitattributes()
             self._write_fulldescriptions_json(
                 output_path.parent / FULLDESCRIPTIONS_FILENAME, fulldescriptions
             )
@@ -500,12 +500,21 @@ class ExportService:
     ) -> None:
         """Write the {video_id: full description} lookup (FR-042c).
 
-        Sorted keys and fixed formatting keep re-exports byte-identical for
-        unchanged content (diffable in git).
+        Only videos whose description does not fit on the single ``videos.tsv``
+        line get an entry; with no entries the file is not written at all (and
+        a stale one is removed).  Sorted keys and fixed formatting keep
+        re-exports byte-identical for unchanged content (diffable in git).
         """
-        # Replace a stale annexed symlink (read-only object) if present
+        # Replace a stale file/annexed symlink (read-only object) if present
         if output_path.is_symlink() or output_path.exists():
             output_path.unlink()
+
+        if not fulldescriptions:
+            logger.debug(
+                f"No multi-line descriptions; skipping {output_path.name}"
+            )
+            return
+
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(fulldescriptions, f, indent=1, ensure_ascii=False,
                       sort_keys=True)
@@ -513,25 +522,6 @@ class ExportService:
         logger.info(
             f"Generated {output_path.name} with {len(fulldescriptions)} entries"
         )
-
-    def _ensure_fulldescriptions_gitattributes(self) -> None:
-        """Ensure .gitattributes keeps video_fulldescriptions.json in git.
-
-        Archives created before FR-042c annex text files >10k by default;
-        append the override rule once (idempotent, mirrors `annextube
-        unannex --update-gitattributes`).
-        """
-        gitattributes = self.repo_path / ".gitattributes"
-        existing = gitattributes.read_text() if gitattributes.exists() else ""
-        for line in existing.splitlines():
-            fields = line.split()
-            if fields and fields[0] == FULLDESCRIPTIONS_FILENAME:
-                return
-        with open(gitattributes, "a", encoding="utf-8") as f:
-            if existing and not existing.endswith("\n"):
-                f.write("\n")
-            f.write(_FULLDESC_GITATTRIBUTES_RULE + "\n")
-        logger.info(f"Added .gitattributes rule: {_FULLDESC_GITATTRIBUTES_RULE}")
 
     def _write_playlists_tsv(self, output_path: Path, playlists: list[dict[str, str]]) -> None:
         """Write playlists to TSV file with proper escaping.

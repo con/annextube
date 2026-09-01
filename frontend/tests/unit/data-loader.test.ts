@@ -283,7 +283,9 @@ abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10
         }
         if (url.endsWith('/video_fulldescriptions.json')) {
           if (fulldescriptions === null) return { ok: false, status: 404 };
-          return { ok: true, json: async () => fulldescriptions };
+          // Real Response exposes text(); the loader reads it so it can
+          // detect an annex pointer served in place of the JSON
+          return { ok: true, text: async () => JSON.stringify(fulldescriptions) };
         }
         return { ok: false, status: 404 };
       });
@@ -328,6 +330,44 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
       const videos = await dataLoader.loadVideos();
 
       expect(videos[0].description).toBeUndefined();
+    });
+
+    test('warns when the file is absent (annexed content not deposited)', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockArchive(null);
+
+      await dataLoader.loadVideos();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('video_fulldescriptions.json unavailable')
+      );
+      warn.mockRestore();
+    });
+
+    test('warns and degrades when an annex pointer is served instead of JSON', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.endsWith('/videos.tsv')) {
+          return { ok: true, text: async () => TSV_WITH_DESCRIPTION };
+        }
+        if (url.endsWith('/video_fulldescriptions.json')) {
+          return {
+            ok: true,
+            text: async () =>
+              '../../.git/annex/objects/Xk/9F/SHA256E-s37064--abc.json',
+          };
+        }
+        return { ok: false, status: 404 };
+      });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('content is not available')
+      );
+      // Falls back to the TSV first line rather than breaking
+      expect(videos[0].description).toBe('First line only');
+      warn.mockRestore();
     });
 
     test('loadChannelVideos merges channel-scoped full descriptions', async () => {

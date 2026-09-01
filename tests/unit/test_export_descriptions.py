@@ -134,7 +134,7 @@ class TestFullDescriptionsJson:
         json_path = tsv_path.parent / "video_fulldescriptions.json"
         assert json_path.exists()
 
-    def test_contains_full_text_for_nonempty_only(self, archive: Path):
+    def test_only_descriptions_not_fitting_one_line(self, archive: Path):
         service = ExportService(archive)
         tsv_path = service.generate_videos_tsv()
         data = json.loads(
@@ -144,10 +144,11 @@ class TestFullDescriptionsJson:
         )
         # Full original text, including newlines beyond the first line
         assert data["aaaaaaaaaaa"] == MULTILINE_DESCRIPTION
-        # Single-line descriptions are included too (self-contained lookup)
-        assert data["bbbbbbbbbbb"] == "Only one line"
-        # Empty/missing descriptions get no entry
-        assert set(data) == {"aaaaaaaaaaa", "bbbbbbbbbbb"}
+        # Single-line descriptions need no entry -- videos.tsv already
+        # carries the whole text
+        assert "bbbbbbbbbbb" not in data
+        # Empty/missing descriptions get no entry either
+        assert set(data) == {"aaaaaaaaaaa"}
 
     def test_deterministic_output(self, archive: Path):
         service = ExportService(archive)
@@ -158,11 +159,37 @@ class TestFullDescriptionsJson:
         service.generate_videos_tsv()
         assert json_path.read_bytes() == first
 
-    def test_empty_archive_writes_empty_dict(self, tmp_path: Path):
+    def test_empty_archive_writes_no_file(self, tmp_path: Path):
         service = ExportService(tmp_path)
         tsv_path = service.generate_videos_tsv()
-        json_path = tsv_path.parent / "video_fulldescriptions.json"
-        assert json.loads(json_path.read_text(encoding="utf-8")) == {}
+        assert not (tsv_path.parent / "video_fulldescriptions.json").exists()
+
+    def test_no_file_when_all_descriptions_single_line(self, tmp_path: Path):
+        videos_dir = tmp_path / "videos"
+        _make_video(
+            videos_dir, "2026/01/One_eeeeeeeeeee", "eeeeeeeeeee", "One",
+            "Single line only",
+        )
+        tsv_path = ExportService(tmp_path).generate_videos_tsv()
+        assert not (tsv_path.parent / "video_fulldescriptions.json").exists()
+
+    def test_stale_file_removed_when_no_entries_remain(self, tmp_path: Path):
+        videos_dir = tmp_path / "videos"
+        _make_video(
+            videos_dir, "2026/01/Multi_fffffffffff", "fffffffffff", "Multi",
+            "First line\n\nSecond paragraph.",
+        )
+        service = ExportService(tmp_path)
+        json_path = service.generate_videos_tsv().parent / "video_fulldescriptions.json"
+        assert json_path.exists()
+
+        # Description shrinks to a single line -> file must go away
+        meta_path = videos_dir / "2026/01/Multi_fffffffffff" / "metadata.json"
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        meta["description"] = "Now single line"
+        meta_path.write_text(json.dumps(meta), encoding="utf-8")
+        service.generate_videos_tsv()
+        assert not json_path.exists()
 
     def test_not_written_when_disabled(self, archive: Path, tmp_path: Path):
         # Per-playlist videos.tsv exports pass write_fulldescriptions=False
@@ -186,39 +213,3 @@ class TestFullDescriptionsJson:
         service.generate_videos_tsv()
         assert not json_path.is_symlink()
         assert "aaaaaaaaaaa" in json.loads(json_path.read_text(encoding="utf-8"))
-
-
-class TestGitattributesRule:
-    RULE = "video_fulldescriptions.json annex.largefiles=nothing"
-
-    def test_rule_appended_to_existing_gitattributes(self, archive: Path):
-        gitattributes = archive / ".gitattributes"
-        gitattributes.write_text("*.tsv annex.largefiles=nothing\n")
-        ExportService(archive).generate_videos_tsv()
-        content = gitattributes.read_text()
-        assert "*.tsv annex.largefiles=nothing" in content
-        assert self.RULE in content
-
-    def test_rule_created_when_gitattributes_missing(self, archive: Path):
-        ExportService(archive).generate_videos_tsv()
-        assert self.RULE in (archive / ".gitattributes").read_text()
-
-    def test_rule_appended_idempotently(self, archive: Path):
-        service = ExportService(archive)
-        service.generate_videos_tsv()
-        service.generate_videos_tsv()
-        content = (archive / ".gitattributes").read_text()
-        assert content.count("video_fulldescriptions.json") == 1
-
-    def test_existing_rule_left_untouched(self, archive: Path):
-        gitattributes = archive / ".gitattributes"
-        existing = "video_fulldescriptions.json annex.largefiles=nothing\n"
-        gitattributes.write_text(existing)
-        ExportService(archive).generate_videos_tsv()
-        assert gitattributes.read_text() == existing
-
-    def test_configure_gitattributes_includes_rule(self, tmp_path: Path):
-        from annextube.services.git_annex import GitAnnexService
-
-        GitAnnexService(tmp_path).configure_gitattributes()
-        assert self.RULE in (tmp_path / ".gitattributes").read_text()

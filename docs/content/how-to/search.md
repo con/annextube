@@ -24,7 +24,9 @@ files next to each other:
 - `videos/videos.tsv` — the summary table, including a `description` column
   with the **first non-empty line** of each description
 - `videos/video_fulldescriptions.json` — a `{video_id: full description}`
-  lookup with the complete text
+  lookup, holding only the descriptions that do **not** fit on that single
+  line. If every description is a single line, this file is not written at
+  all (and a stale one is removed)
 
 The web interface loads both (one extra request) and feeds the full
 descriptions into the Metadata search index, so a search for a speaker's
@@ -43,9 +45,11 @@ the export:
 annextube export --output-dir ~/my-archive
 ```
 
-The export also adds a `.gitattributes` rule keeping
-`video_fulldescriptions.json` in git (not git-annex), so the file is always
-readable by the web interface on clones.
+The file follows the archive's normal `.gitattributes` rules — a large one is
+annexed like any other archive file, so make sure its content is deposited
+(published) wherever the web interface is served from. When the content is not
+available, the interface logs a console warning and falls back to searching the
+first description line.
 
 ## Enabling Full search
 

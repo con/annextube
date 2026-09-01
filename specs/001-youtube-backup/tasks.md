@@ -483,6 +483,8 @@ annextube backup
 
 - [X] T150 [US4] Fix URLStateManager.parseHash dropping every filter param on non-root routes in frontend/src/services/url-state.ts (it stripped only a leading `#/`, so `#/channel/<dir>?search=X` parsed the whole `route?search` as one key; shared channel links restored nothing). Parse from the first `?` like router.ts already does + regression tests (FR-042f; found by verifying against a real served archive)
 
+- [X] T151 [US4] Address review of PR #6 (yarikoptic): drop the dedicated `video_fulldescriptions.json annex.largefiles=nothing` rule and the `.gitattributes` migration (stay with the archive's global rules; annexed copies just get their content deposited); write entries only for descriptions that do not fit the single `videos.tsv` line; skip the file entirely when there are no such entries (removing a stale one); warn in the frontend when the file is unavailable or an annex pointer is served instead of its content (FR-042c/d)
+
 **Checkpoint**: Searching a term that appears only in a video description returns that video in both Metadata and Full modes, including from a shared `#/channel/<dir>?search=...` link; old archives and old shared URLs keep working.
 
 ---
@@ -601,7 +603,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 160 | **Completed**: 116 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
+**Total Tasks**: 161 | **Completed**: 117 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
@@ -620,13 +622,13 @@ With multiple developers:
 - Phase 13 (Polish): 12/17
 - Phase 14 (API Enhancement): 7/8
 - Phase 15 (Test Infrastructure): 7/7
-- Phase 16 (Searchable Descriptions): 9/9
+- Phase 16 (Searchable Descriptions): 10/10
 
 **Task Count by User Story**:
 - US1 (Initial Channel Archive - P1): 19 tasks
 - US2 (Incremental Updates - P1): 12 tasks
 - US3 (Filtering - P2): 9 tasks
-- US4 (Web Interface - P2): 28 tasks (19 in Phase 6 + 9 in Phase 16)
+- US4 (Web Interface - P2): 29 tasks (19 in Phase 6 + 10 in Phase 16)
 - US5 (Organization - P3): 6 tasks
 - US6 (Export Metadata - P3): 4 tasks
 - US7 (Caption Curation - P4): 5 tasks

@@ -82,11 +82,12 @@ would dominate it while being useful only to the search index.
   - multi-channel: `<channel_dir>/videos/video_fulldescriptions.json`
     (per channel, mirroring `videos.tsv`; the collection root has neither).
 - **Format:** flat JSON object `{"<video_id>": "<full description>", ...}`.
-  - Every video with a **non-empty** description gets an entry with the
-    **complete** description (not a delta against the TSV first line). A
-    self-contained dict is independently interpretable by external consumers —
-    the archival principle wins over the small size saving of storing only
-    multi-line descriptions.
+  - Only videos whose description does **not fit on the single TSV line** get
+    an entry (i.e. the stripped description differs from its first non-empty
+    line); for the rest `videos.tsv` already carries the whole text. The entry
+    holds the **complete** description, not a delta.
+  - With no such videos the file is **not written at all**, and a stale one
+    from an earlier export is removed.
   - Written with `sort_keys=True`, `ensure_ascii=False`, and a small indent
     (one entry per line) so re-exports produce deterministic, diffable output.
 - **Size:** ~1–2 KB average per description → well under 1 MB for a
@@ -95,20 +96,18 @@ would dominate it while being useful only to the search index.
 - Written by a new `_write_fulldescriptions_json()` alongside
   `_write_videos_tsv()` in the same export pass.
 
-### A3: git (not annex) storage
+### A3: storage — global rules, no special-casing
 
-`.gitattributes` currently annexes text files >10k
-(`* annex.largefiles=(((mimeencoding=binary)and(largerthan=0))or(largerthan=10k))`);
-only `*.tsv`, `*.md`, etc. are pinned to git. The new JSON will typically
-exceed 10k and must **stay in git** like `videos.tsv` — an annexed
-symlink without content would silently break search on clones.
+The file follows the archive's **existing** `.gitattributes` rules: small ones
+land in git, larger ones are annexed by the default
+`* annex.largefiles=(...largerthan=10k)` rule. No dedicated rule is added and
+no `.gitattributes` migration is performed — annexed copies simply have their
+content deposited alongside the rest of the archive.
 
-- Add `video_fulldescriptions.json annex.largefiles=nothing` to the rules in
-  `GitAnnexService.configure_gitattributes()` (new archives).
-- **Migration for existing archives:** before writing the file, the export
-  step ensures the rule exists in `.gitattributes` (idempotent append, same
-  pattern as `annextube unannex --update-gitattributes`). This must happen
-  before the file is first saved, or git-annex will annex it.
+Because an annexed file's content may be absent on a given remote, the
+frontend logs a warning when the file cannot be read (HTTP error, or an annex
+symlink/pointer served in place of the JSON) and falls back to the TSV
+first-line column. See B1.
 
 ---
 
@@ -124,8 +123,10 @@ symlink without content would silently break search on clones.
   video.description = fulldescriptions[video_id] ?? row.description  // ?? undefined
   ```
 
-  A 404 or parse failure on the JSON degrades to the TSV first line (new
-  archives) or no description at all (old archives) — never an error.
+  A 404, an annex pointer served instead of JSON, or a parse failure degrades
+  to the TSV first line (new archives) or no description at all (old
+  archives) — never an error, but a console warning names the cause so an
+  archive whose annexed content was never deposited is diagnosable.
 - Full-descriptions dicts are cached per channel (mirroring `videosCache`).
 - `loadAllChannelVideos()` (cross-channel search) inherits this per channel —
   N parallel JSON fetches alongside the N TSV fetches it already does.
@@ -299,8 +300,8 @@ on failure the loader degrades as above. Pagefind still requires HTTP
 Tracked as **Phase 16, T142–T149** in `specs/001-youtube-backup/tasks.md`:
 
 1. **T142** — Backend: `first_description_line()` + `description` TSV column + tests.
-2. **T143** — Backend: `video_fulldescriptions.json` export + `.gitattributes`
-   rule and migration + tests.
+2. **T143** — Backend: `video_fulldescriptions.json` export (entries only for
+   descriptions that do not fit the TSV line; no file when empty) + tests.
 3. **T144** — Frontend: DataLoader parallel load/merge +
    `VideoTSVRow.description` + tests — *this commit fixes the motivating bug*.
 4. **T145** — Backend: Pagefind metadata records + `record_type` + incremental

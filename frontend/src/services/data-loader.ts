@@ -151,18 +151,41 @@ export class DataLoader {
 
   /**
    * Fetch the {video_id: full description} lookup exported next to
-   * videos.tsv (FR-042c/d). Missing file (older archives), network errors,
-   * and parse errors all degrade to an empty lookup -- descriptions then
-   * fall back to the TSV first-line column.
+   * videos.tsv (FR-042c/d).
+   *
+   * The file only exists when some description does not fit on the single
+   * TSV line, and it may be annexed -- so a miss is not an error: callers
+   * fall back to the TSV first-line column. A warning is logged so an
+   * archive whose annexed content was never deposited is diagnosable.
    */
   private async loadFullDescriptions(
     url: string
   ): Promise<Record<string, string>> {
     try {
       const response = await fetch(url);
-      if (!response.ok) return {};
-      return (await response.json()) as Record<string, string>;
-    } catch {
+      if (!response.ok) {
+        console.warn(
+          `[DataLoader] ${url} unavailable (HTTP ${response.status}); ` +
+          'search falls back to the first description line. This is expected ' +
+          'when no description spans multiple lines.'
+        );
+        return {};
+      }
+
+      const text = await response.text();
+      // git-annex symlink/pointer served verbatim: the file is annexed but
+      // its content was never deposited on this remote
+      if (text.includes('/annex/objects/')) {
+        console.warn(
+          `[DataLoader] ${url} is annexed but its content is not available ` +
+          'here; deposit the file content to enable full description search.'
+        );
+        return {};
+      }
+
+      return JSON.parse(text) as Record<string, string>;
+    } catch (err) {
+      console.warn(`[DataLoader] Could not load ${url}:`, err);
       return {};
     }
   }

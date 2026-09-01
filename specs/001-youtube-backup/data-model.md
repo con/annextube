@@ -375,22 +375,25 @@ Complete video descriptions for search, exported next to `videos.tsv`
 **Location**: `videos/video_fulldescriptions.json` (single-channel) or
 `<channel_dir>/videos/video_fulldescriptions.json` (multi-channel, per channel).
 
-**Format**: flat JSON object, one entry per video with a non-empty description;
-sorted keys and small indent for deterministic, diffable re-exports:
+**Format**: flat JSON object with an entry only for videos whose description
+does not fit on the single `videos.tsv` line; sorted keys and small indent for
+deterministic, diffable re-exports. Not written at all when no video qualifies:
 ```json
 {
   "dQw4w9WgXcQ": "The official video for \"Never Gonna Give You Up\"\n\nStock Aitken Waterman..."
 }
 ```
 
-**Storage**: pinned to git via `.gitattributes`
-(`video_fulldescriptions.json annex.largefiles=nothing`) — an annexed symlink
-without content would silently break search on clones.
+**Storage**: the archive's normal `.gitattributes` rules apply — small files
+stay in git, larger ones are annexed and their content is deposited like any
+other archive file. The web UI degrades to the TSV first-line column (with a
+console warning) when the content is not available.
 
 **Usage**:
 - Fetched by the web UI in parallel with `videos.tsv` (one extra request) to
   feed full descriptions into the client-side Metadata search index
-- Missing file (older archives) degrades to the TSV `description` first line
+- Missing file (older archives, or no multi-line descriptions) degrades to the
+  TSV `description` first line
 
 ---
 
