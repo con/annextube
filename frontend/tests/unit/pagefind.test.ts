@@ -381,4 +381,22 @@ describe('searchCaptions approximate detection', () => {
     expect(results[1].videoId).toBe('vid2');
     expect(results[1].approximate).toBe(true);
   });
+
+  test('orders genuine videos before approximate ones regardless of Pagefind order', async () => {
+    const approx = makeData({
+      url: '/videos/loose/video.en.vtt#t=10',
+      meta: { ...meta, video_id: 'loose' },
+      weighted_locations: locations(221.42),
+    });
+    const genuine = makeData({
+      url: '/videos/tight/video.en.vtt#t=20',
+      meta: { ...meta, video_id: 'tight' },
+      weighted_locations: locations(512.14),
+    });
+    // Pagefind ranks the approximate video first (e.g. more fallback hits)
+    _resetForTesting(makeMockPagefind([makeResult(approx), makeResult(genuine)]));
+
+    const results = await searchCaptions('reprostim');
+    expect(results.map((r) => r.videoId)).toEqual(['tight', 'loose']);
+  });
 });

@@ -346,3 +346,34 @@ describe('CaptionSearchResults approximate-only notice', () => {
     expect(container.querySelector('.result-count')).not.toBeNull();
   });
 });
+
+describe('CaptionSearchResults mixed exact/approximate results', () => {
+  test('badges approximate cards and counts them in the header', () => {
+    const results = [
+      makeResult({ videoId: 'vid1', title: 'Genuine Video' }),
+      makeResult({ videoId: 'vid2', title: 'Fallback Video', approximate: true }),
+    ];
+    const { container } = render(CaptionSearchResults, {
+      props: { results, query: 'reprostim', loading: false },
+    });
+
+    // Mixed set: normal header with the approximate remainder noted
+    expect(container.querySelector('.approximate-notice')).toBeNull();
+    expect(container.querySelector('.result-count')?.textContent).toContain('2 videos with caption matches');
+    expect(container.querySelector('.approximate-count')?.textContent).toContain('1 approximate');
+
+    // Only the approximate card carries the badge
+    const badges = container.querySelectorAll('.approximate-badge');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].closest('.result-card')?.textContent).toContain('Fallback Video');
+  });
+
+  test('no badges or count when every result is genuine', () => {
+    const { container } = render(CaptionSearchResults, {
+      props: { results: [makeResult()], query: 'datalad', loading: false },
+    });
+    expect(container.querySelector('.approximate-badge')).toBeNull();
+    expect(container.querySelector('.approximate-count')).toBeNull();
+  });
+});
+

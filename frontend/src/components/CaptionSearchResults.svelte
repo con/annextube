@@ -28,6 +28,7 @@
   // a shorter indexed word, e.g. "repro" for query "reprostim") -- i.e.
   // no caption actually contains the query.
   $: approximateOnly = results.length > 0 && results.every((r) => r.approximate);
+  $: approximateCount = results.filter((r) => r.approximate).length;
 
   // Reset visible count and expanded state when results change
   $: if (results) {
@@ -99,7 +100,8 @@
           </p>
         {:else}
           <p class="result-count">
-            {results.length} video{results.length !== 1 ? 's' : ''} with caption matches
+            {results.length} video{results.length !== 1 ? 's' : ''} with caption matches{#if approximateCount > 0}
+              <span class="approximate-count">({approximateCount} approximate)</span>{/if}
           </p>
         {/if}
       </div>
@@ -116,7 +118,15 @@
             on:keydown={(e) => { if (e.key === 'Enter') navigateToVideo(result.videoId, result.primaryTimestamp); }}
           >
             <div class="result-info">
-              <h3 class="result-title">{result.title}</h3>
+              <div class="result-title-row">
+                <h3 class="result-title">{result.title}</h3>
+                {#if result.approximate}
+                  <span
+                    class="approximate-badge"
+                    title="Captions do not contain '{query}'; a shorter similar word matched"
+                  >approximate</span>
+                {/if}
+              </div>
               <div class="result-meta">
                 {#if result.channelName}
                   <span class="channel-name">{result.channelName}</span>
@@ -235,6 +245,27 @@
     font-size: 14px;
     color: #606060;
     font-weight: 500;
+  }
+
+  .result-title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .approximate-count {
+    color: #9a6700;
+    font-weight: 400;
+  }
+
+  .approximate-badge {
+    flex-shrink: 0;
+    padding: 1px 7px;
+    border: 1px solid #d4a72c;
+    border-radius: 10px;
+    color: #9a6700;
+    font-size: 11px;
+    white-space: nowrap;
   }
 
   .approximate-notice {

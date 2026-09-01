@@ -227,7 +227,11 @@ export async function searchCaptions(
     grouped.push(group);
   }
 
-  return grouped;
+  // Genuine matches first; approximate fallbacks keep their relative order after
+  return [
+    ...grouped.filter((g) => !g.approximate),
+    ...grouped.filter((g) => g.approximate),
+  ];
 }
 
 /**
