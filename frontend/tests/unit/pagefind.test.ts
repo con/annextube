@@ -288,3 +288,115 @@ describe('searchCaptions', () => {
     expect(searchFn).toHaveBeenCalledWith('test', { filters });
   });
 });
+
+// ---------- approximate match detection ----------
+//
+// Pagefind never returns zero results for a query it half-knows: for
+// "reprostim" it returns every chunk containing "repro" (the indexed
+// word is a truncation of the query). balanced_score tiers observed
+// with pagefind 1.x: ~512 whole-word/stemmed, ~389 query-is-prefix,
+// ~221 truncated-word fallback. Only the last is approximate.
+
+describe('searchCaptions approximate detection', () => {
+  beforeEach(() => {
+    _resetForTesting();
+  });
+
+  const meta = { video_id: 'vid1', title: 'V', channel_name: 'C', upload_date: '', thumbnail_url: '' };
+
+  function locations(...scores: number[]) {
+    return scores.map((balanced_score, i) => ({ weight: 1, balanced_score, location: i }));
+  }
+
+  test('flags truncated-word fallback as approximate (query "reprostim" matching only "repro")', async () => {
+    const d = makeData({
+      content: 'the repro nim project',
+      excerpt: 'the <mark>repro</mark> nim project',
+      meta,
+      weighted_locations: locations(221.42),
+    });
+    _resetForTesting(makeMockPagefind([makeResult(d)]));
+
+    const results = await searchCaptions('reprostim');
+    expect(results).toHaveLength(1);
+    expect(results[0].approximate).toBe(true);
+  });
+
+  test('whole-word and stemmed matches are genuine ("pizzas" finding "pizza")', async () => {
+    const d = makeData({
+      content: 'we ate pizza today',
+      excerpt: 'we ate <mark>pizza</mark> today',
+      meta,
+      weighted_locations: locations(512.14),
+    });
+    _resetForTesting(makeMockPagefind([makeResult(d)]));
+
+    const results = await searchCaptions('pizzas');
+    expect(results[0].approximate).toBe(false);
+  });
+
+  test('prefix queries are genuine ("datala" finding "datalad")', async () => {
+    const d = makeData({
+      content: 'install datalad first',
+      excerpt: 'install <mark>datalad</mark> first',
+      meta,
+      weighted_locations: locations(388.63),
+    });
+    _resetForTesting(makeMockPagefind([makeResult(d)]));
+
+    const results = await searchCaptions('datala');
+    expect(results[0].approximate).toBe(false);
+  });
+
+  test('results without weighted_locations are treated as genuine', async () => {
+    const d = makeData({ meta });
+    _resetForTesting(makeMockPagefind([makeResult(d)]));
+
+    const results = await searchCaptions('caption');
+    expect(results[0].approximate).toBe(false);
+  });
+
+  test('one genuine chunk makes the whole video genuine; approximate-only videos stay flagged', async () => {
+    const approx1 = makeData({
+      url: '/videos/vid1/video.en.vtt#t=10',
+      meta,
+      weighted_locations: locations(221.42),
+    });
+    const genuine = makeData({
+      url: '/videos/vid1/video.en.vtt#t=50',
+      meta,
+      weighted_locations: locations(221.42, 512.14),
+    });
+    const approx2 = makeData({
+      url: '/videos/vid2/video.en.vtt#t=20',
+      meta: { ...meta, video_id: 'vid2' },
+      weighted_locations: locations(221.42),
+    });
+    _resetForTesting(makeMockPagefind([makeResult(approx1), makeResult(genuine), makeResult(approx2)]));
+
+    const results = await searchCaptions('reprostim');
+    expect(results).toHaveLength(2);
+    expect(results[0].videoId).toBe('vid1');
+    expect(results[0].approximate).toBe(false);
+    expect(results[1].videoId).toBe('vid2');
+    expect(results[1].approximate).toBe(true);
+  });
+
+  test('orders genuine videos before approximate ones regardless of Pagefind order', async () => {
+    const approx = makeData({
+      url: '/videos/loose/video.en.vtt#t=10',
+      meta: { ...meta, video_id: 'loose' },
+      weighted_locations: locations(221.42),
+    });
+    const genuine = makeData({
+      url: '/videos/tight/video.en.vtt#t=20',
+      meta: { ...meta, video_id: 'tight' },
+      weighted_locations: locations(512.14),
+    });
+    // Pagefind ranks the approximate video first (e.g. more fallback hits)
+    _resetForTesting(makeMockPagefind([makeResult(approx), makeResult(genuine)]));
+
+    const results = await searchCaptions('reprostim');
+    expect(results.map((r) => r.videoId)).toEqual(['tight', 'loose']);
+  });
+});
