@@ -7,7 +7,7 @@ requirement family:
 - Requirements: **FR-042d–FR-042g** in `specs/001-youtube-backup/spec.md`
 - Data model: `videos.tsv` `description` column + `video_fulldescriptions.json`
   in `specs/001-youtube-backup/data-model.md`
-- Tasks: **Phase 16 (T142–T149)** in `specs/001-youtube-backup/tasks.md`
+- Tasks: **Phase 16 (T142–T153)** in `specs/001-youtube-backup/tasks.md`
 
 This document remains the design rationale (the HOW and the trade-offs), like
 its companion PRD `.specify/specs/caption-search-pagefind.md` did for caption
@@ -297,7 +297,7 @@ on failure the loader degrades as above. Pagefind still requires HTTP
 
 ## Implementation order (one logical change per commit)
 
-Tracked as **Phase 16, T142–T149** in `specs/001-youtube-backup/tasks.md`:
+Tracked as **Phase 16, T142–T153** in `specs/001-youtube-backup/tasks.md`:
 
 1. **T142** — Backend: `first_description_line()` + `description` TSV column + tests.
 2. **T143** — Backend: `video_fulldescriptions.json` export (entries only for
@@ -309,5 +309,8 @@ Tracked as **Phase 16, T142–T149** in `specs/001-youtube-backup/tasks.md`:
 5. **T146** — Frontend: `searchFull()` grouping with `record_type` + tests.
 6. **T147** — Frontend: Metadata/Full rename (modes, URL state with legacy
    mapping, `FullSearchResults.svelte`) + tests.
-7. **T148/T149** — E2E tests + docs (`docs/content/reference/` search
-   behavior, how-to).
+7. **T148/T149** — E2E tests + docs (`docs/content/how-to/search.md`).
+8. **T150–T153** — follow-ups found after the first pass: the `parseHash`
+   route fix, the review changes to how the JSON is stored and scoped, the
+   reconciliation with PR #7 (approximate matches) and its renumbering, and
+   the empty-score classification fix.

@@ -473,7 +473,7 @@ annextube backup
 ### Implementation for Searchable Descriptions
 
 - [X] T142 [P] [US4] Add `description` column (first non-empty line, `first_description_line()` helper) as last column of videos.tsv in annextube/services/export.py + unit tests for LF/CRLF/CR, leading blank lines, empty, tab escaping (FR-042d)
-- [X] T143 [US4] Export videos/video_fulldescriptions.json ({video_id: full description}, non-empty only, sorted keys, deterministic) in annextube/services/export.py; add `video_fulldescriptions.json annex.largefiles=nothing` to configure_gitattributes() in annextube/services/git_annex.py for new archives + idempotent append during export for existing archives + tests (FR-042d)
+- [X] T143 [US4] Export videos/video_fulldescriptions.json ({video_id: full description}, sorted keys, deterministic) in annextube/services/export.py, with an entry only where a description does not fit the single videos.tsv line and no file at all when none qualifies (a stale one is removed); the file follows the archive's global .gitattributes rules -- no dedicated rule, no migration -- so a large one is annexed and its content deposited + tests (FR-042d; scope set by the T151 review, which reversed the dedicated-rule/migration approach originally planned here)
 - [X] T144 [US4] Fetch video_fulldescriptions.json in parallel with videos.tsv (Promise.all, 404-tolerant) and merge into Video.description in frontend/src/services/data-loader.ts; add VideoTSVRow.description in frontend/src/types/models.ts + tests incl. regression test for description-only search term (FR-042e)
 - [X] T145 [P] [US4] Add one metadata record per video (content: title + description + tags; url `#/video/{id}` without ?t=; `record_type` meta+filter on metadata AND caption records) in annextube/services/search_index.py; include caption-less videos; extend incremental change detection from `*.vtt` to also cover `metadata.json`; add metadata_records to IndexStats + tests (FR-042f)
 - [X] T146 [US4] Classify results by record_type in frontend/src/services/pagefind.ts (rename searchCaptions → searchFull; group gains descriptionMatch alongside timestamped caption matches; missing record_type treated as caption for old indexes) + tests (FR-042f)
@@ -484,6 +484,9 @@ annextube backup
 - [X] T150 [US4] Fix URLStateManager.parseHash dropping every filter param on non-root routes in frontend/src/services/url-state.ts (it stripped only a leading `#/`, so `#/channel/<dir>?search=X` parsed the whole `route?search` as one key; shared channel links restored nothing). Parse from the first `?` like router.ts already does + regression tests (FR-042g; found by verifying against a real served archive)
 
 - [X] T151 [US4] Address review of PR #6 (yarikoptic): drop the dedicated `video_fulldescriptions.json annex.largefiles=nothing` rule and the `.gitattributes` migration (stay with the archive's global rules; annexed copies just get their content deposited); write entries only for descriptions that do not fit the single `videos.tsv` line; skip the file entirely when there are no such entries (removing a stale one); warn in the frontend when the file is unavailable or an annex pointer is served instead of its content (FR-042d/e)
+
+- [X] T152 [US4] Reconcile with PR #7 (approximate caption matches) merged into master: keep both features in frontend/src/services/pagefind.ts (record_type split for descriptions AND per-record approximate scoring, a video approximate only when every matched record is, genuine videos listed first); carry #7's badge/count/notice onto FullSearchResults.svelte with wording generalized to descriptions ("No captions or descriptions contain '<query>'", "N videos with matches"); keep both test suites; renumber this branch's requirements FR-042c-f -> FR-042d-g since #7's FR-042c is authoritative, updating references across code, tests, docs and tasks (FR-042c-g)
+- [X] T153 [US4] Fix approximate classification for records that match with no word-level evidence in frontend/src/services/pagefind.ts: an absent weighted_locations field means the index predates per-word scores (genuine), but an empty array means no matching words at all and MUST count as approximate -- otherwise a video matched only through a tag outranks the near misses + test (FR-042c). Also forward PLAYWRIGHT_BROWSERS_PATH / PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD in the tox e2e and full envs so a pre-provisioned browser cache is used instead of re-downloading, and add the CHANGELOG entry
 
 **Checkpoint**: Searching a term that appears only in a video description returns that video in both Metadata and Full modes, including from a shared `#/channel/<dir>?search=...` link; old archives and old shared URLs keep working.
 
@@ -603,7 +606,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 161 | **Completed**: 117 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
+**Total Tasks**: 163 | **Completed**: 119 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6
@@ -622,13 +625,13 @@ With multiple developers:
 - Phase 13 (Polish): 12/17
 - Phase 14 (API Enhancement): 7/8
 - Phase 15 (Test Infrastructure): 7/7
-- Phase 16 (Searchable Descriptions): 10/10
+- Phase 16 (Searchable Descriptions): 12/12
 
 **Task Count by User Story**:
 - US1 (Initial Channel Archive - P1): 19 tasks
 - US2 (Incremental Updates - P1): 12 tasks
 - US3 (Filtering - P2): 9 tasks
-- US4 (Web Interface - P2): 29 tasks (19 in Phase 6 + 10 in Phase 16)
+- US4 (Web Interface - P2): 31 tasks (19 in Phase 6 + 12 in Phase 16)
 - US5 (Organization - P3): 6 tasks
 - US6 (Export Metadata - P3): 4 tasks
 - US7 (Caption Curation - P4): 5 tasks
