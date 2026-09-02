@@ -148,11 +148,18 @@ const GENUINE_MATCH_MIN_SCORE = 300;
 /**
  * True when a result record contains no genuine match for the query,
  * i.e. Pagefind only matched via its truncated-word fallback.
- * Records without score data (older index) are treated as genuine.
+ *
+ * The two "no scores" cases differ and must not be conflated:
+ *   - field absent  -> index predates per-word scores; assume genuine
+ *   - empty array   -> the record matched with no word-level evidence at
+ *     all (e.g. a metadata record hit only through a tag). That is never
+ *     a genuine content match, and treating it as one would rank an
+ *     unrelated video above the near-misses.
  */
 function isApproximateMatch(data: PagefindResultData): boolean {
   const locations = data.weighted_locations;
-  if (!locations || locations.length === 0) return false;
+  if (!locations) return false;
+  if (locations.length === 0) return true;
   return locations.every((loc) => loc.balanced_score < GENUINE_MATCH_MIN_SCORE);
 }
 

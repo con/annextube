@@ -450,6 +450,16 @@ describe('searchFull approximate detection', () => {
     expect(results[0].approximate).toBe(false);
   });
 
+  test('results with an empty weighted_locations array are approximate', async () => {
+    // A record can match with no word-level evidence -- e.g. a metadata
+    // record hit only via a tag. Distinct from the field being absent.
+    const d = makeData({ meta, weighted_locations: [] });
+    _resetForTesting(makeMockPagefind([makeResult(d)]));
+
+    const results = await searchFull('reprostim');
+    expect(results[0].approximate).toBe(true);
+  });
+
   test('one genuine chunk makes the whole video genuine; approximate-only videos stay flagged', async () => {
     const approx1 = makeData({
       url: '/videos/vid1/video.en.vtt#t=10',
