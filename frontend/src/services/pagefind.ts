@@ -3,15 +3,24 @@
  *
  * Provides full-text search across video metadata (title, description, tags)
  * and closed captions using Pagefind ("Full" search mode). Records carry a
- * record_type of 'metadata' or 'caption' (FR-042e); records without one come
- * from pre-FR-042e indexes and are treated as captions.
- * Lazily loads the Pagefind library and groups results by video.
+ * record_type of 'metadata' or 'caption' (FR-042f); records without one come
+ * from pre-FR-042f indexes and are treated as captions.
+ * Lazily loads the Pagefind library, groups results by video, and flags
+ * videos whose only matches are Pagefind's truncated-word fallback.
  */
 
 /** Shape of a single result returned by the Pagefind JS API */
 export interface PagefindResult {
   id: string;
   data: () => Promise<PagefindResultData>;
+}
+
+/** Per-word match score entry from Pagefind's weighted_locations */
+export interface PagefindWordLocation {
+  weight: number;
+  balanced_score: number;
+  /** Word index into the whitespace-split content */
+  location: number;
 }
 
 /** Full data for a single Pagefind result (loaded via result.data()) */
@@ -21,6 +30,8 @@ export interface PagefindResultData {
   excerpt: string;
   meta: Record<string, string>;
   filters: Record<string, string[]>;
+  /** Per-word match scores (present in pagefind 1.x) */
+  weighted_locations?: PagefindWordLocation[];
 }
 
 /** A single caption match within a grouped result */
@@ -50,6 +61,12 @@ export interface GroupedSearchResult {
   allMatches: CaptionMatch[];
   /** Match on the video's metadata record (title/description/tags), if any */
   descriptionMatch?: { excerpt: string };
+  /**
+   * True when none of this video's matched records actually contain the
+   * query -- Pagefind only matched a shorter indexed word (e.g. query
+   * "reprostim" matching just "repro"). Absent/false means genuine.
+   */
+  approximate?: boolean;
 }
 
 /** The Pagefind JS API shape (subset we use) */
@@ -113,6 +130,33 @@ function parseTimestamp(url: string): number {
 }
 
 /**
+ * Minimum per-word balanced_score for a match to count as genuine.
+ *
+ * Pagefind never returns zero results for a query it half-knows: for
+ * "reprostim" it returns every chunk containing "repro", because the
+ * indexed word is a truncation of the query. Observed balanced_score
+ * tiers (pagefind 1.x, default word weight as our index uses):
+ *   ~512  whole-word or stemmed match       ("pizzas" -> "pizza")
+ *   ~389  query is a prefix of the word     ("datala" -> "datalad")
+ *   ~221  word is a truncation of the query ("reprostim" -> "repro")
+ * The first two are genuine matches; the last is the misleading
+ * fallback we flag as approximate. 300 separates the tiers with
+ * comfortable margin on both sides.
+ */
+const GENUINE_MATCH_MIN_SCORE = 300;
+
+/**
+ * True when a result record contains no genuine match for the query,
+ * i.e. Pagefind only matched via its truncated-word fallback.
+ * Records without score data (older index) are treated as genuine.
+ */
+function isApproximateMatch(data: PagefindResultData): boolean {
+  const locations = data.weighted_locations;
+  if (!locations || locations.length === 0) return false;
+  return locations.every((loc) => loc.balanced_score < GENUINE_MATCH_MIN_SCORE);
+}
+
+/**
  * Search metadata + captions via Pagefind ("Full" mode), group results by
  * video, and return sorted GroupedSearchResult[].
  *
@@ -160,6 +204,9 @@ export async function searchFull(
         uploadDate: data.meta?.upload_date || '',
         thumbnailUrl: data.meta?.thumbnail_url || '',
         matchCount: 0,
+        // AND-ed over every matched record below: one genuine record
+        // makes the whole video genuine
+        approximate: true,
         // Placeholders -- finalized below once all matches are collected
         primaryExcerpt: '',
         primaryTimestamp: -1,
@@ -169,6 +216,8 @@ export async function searchFull(
       groupMap.set(videoId, group);
     }
 
+    group.approximate = group.approximate && isApproximateMatch(data);
+
     if (data.meta?.record_type === 'metadata') {
       // At most one metadata record per video
       if (!group.descriptionMatch) {
@@ -176,7 +225,7 @@ export async function searchFull(
         group.matchCount += 1;
       }
     } else {
-      // 'caption' or absent (pre-FR-042e index)
+      // 'caption' or absent (pre-FR-042f index)
       group.allMatches.push({
         excerpt: data.excerpt,
         timestamp: parseTimestamp(data.url),
@@ -202,7 +251,11 @@ export async function searchFull(
     grouped.push(group);
   }
 
-  return grouped;
+  // Genuine matches first; approximate fallbacks keep their relative order after
+  return [
+    ...grouped.filter((g) => !g.approximate),
+    ...grouped.filter((g) => g.approximate),
+  ];
 }
 
 /**

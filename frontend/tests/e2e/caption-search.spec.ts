@@ -118,7 +118,7 @@ test.describe('Caption Search (Pagefind)', () => {
       );
     });
 
-    test('legacy mode=captions URL activates Full mode (FR-042f)', async ({
+    test('legacy mode=captions URL activates Full mode (FR-042g)', async ({
       page,
     }) => {
       // Pre-rename shared URLs used mode=captions; they must land in Full

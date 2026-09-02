@@ -297,7 +297,7 @@ describe('FullSearchResults', () => {
   });
 });
 
-describe('FullSearchResults description matches (FR-042f)', () => {
+describe('FullSearchResults description matches (FR-042g)', () => {
   beforeEach(() => {
     window.location.hash = '';
   });
@@ -372,3 +372,86 @@ describe('FullSearchResults description matches (FR-042f)', () => {
     expect(collapsed.querySelector('.description-badge')).toBeNull();
   });
 });
+
+describe('FullSearchResults approximate-only notice', () => {
+  test('states no genuine matches when every result is approximate', () => {
+    const results = [
+      makeResult({ videoId: 'vid1', approximate: true }),
+      makeResult({ videoId: 'vid2', approximate: true }),
+    ];
+
+    const { container } = render(FullSearchResults, {
+      props: { results, query: 'reprostim', loading: false },
+    });
+
+    const notice = container.querySelector('.approximate-notice');
+    expect(notice).not.toBeNull();
+    expect(notice?.textContent).toContain(
+      "No captions or descriptions contain 'reprostim'",
+    );
+    expect(notice?.textContent).toContain('showing approximate matches only');
+
+    // The misleading "N videos with caption matches" line must be gone
+    expect(container.querySelector('.result-count')).toBeNull();
+
+    // Approximate results are still listed below the notice
+    expect(container.querySelectorAll('.result-card')).toHaveLength(2);
+  });
+
+  test('keeps the normal count header when at least one genuine match exists', () => {
+    const results = [
+      makeResult({ videoId: 'vid1', approximate: false }),
+      makeResult({ videoId: 'vid2', approximate: true }),
+    ];
+
+    const { container } = render(FullSearchResults, {
+      props: { results, query: 'repro', loading: false },
+    });
+
+    expect(container.querySelector('.approximate-notice')).toBeNull();
+    const header = container.querySelector('.result-count');
+    expect(header?.textContent).toContain('2 videos with matches');
+  });
+
+  test('legacy results without the approximate field keep the normal header', () => {
+    const results = [makeResult({ videoId: 'vid1' })];
+
+    const { container } = render(FullSearchResults, {
+      props: { results, query: 'test', loading: false },
+    });
+
+    expect(container.querySelector('.approximate-notice')).toBeNull();
+    expect(container.querySelector('.result-count')).not.toBeNull();
+  });
+});
+
+describe('FullSearchResults mixed exact/approximate results', () => {
+  test('badges approximate cards and counts them in the header', () => {
+    const results = [
+      makeResult({ videoId: 'vid1', title: 'Genuine Video' }),
+      makeResult({ videoId: 'vid2', title: 'Fallback Video', approximate: true }),
+    ];
+    const { container } = render(FullSearchResults, {
+      props: { results, query: 'reprostim', loading: false },
+    });
+
+    // Mixed set: normal header with the approximate remainder noted
+    expect(container.querySelector('.approximate-notice')).toBeNull();
+    expect(container.querySelector('.result-count')?.textContent).toContain('2 videos with matches');
+    expect(container.querySelector('.approximate-count')?.textContent).toContain('1 approximate');
+
+    // Only the approximate card carries the badge
+    const badges = container.querySelectorAll('.approximate-badge');
+    expect(badges).toHaveLength(1);
+    expect(badges[0].closest('.result-card')?.textContent).toContain('Fallback Video');
+  });
+
+  test('no badges or count when every result is genuine', () => {
+    const { container } = render(FullSearchResults, {
+      props: { results: [makeResult()], query: 'datalad', loading: false },
+    });
+    expect(container.querySelector('.approximate-badge')).toBeNull();
+    expect(container.querySelector('.approximate-count')).toBeNull();
+  });
+});
+

@@ -381,7 +381,7 @@ class TestBuildCaptionIndex:
 
     @pytest.mark.asyncio
     async def test_no_vtt_still_gets_metadata_record(self, tmp_path: Path) -> None:
-        """Videos with no VTT get a metadata record but no caption chunks (FR-042e)."""
+        """Videos with no VTT get a metadata record but no caption chunks (FR-042f)."""
         archive = _make_archive(tmp_path, has_vtt=False)
 
         with patch(
@@ -506,12 +506,12 @@ class TestBuildCaptionIndex:
         # No datalad module should have been imported
 
 
-# ── metadata record tests (FR-042e) ────────────────────────────────────────
+# ── metadata record tests (FR-042f) ────────────────────────────────────────
 
 
 @pytest.mark.ai_generated
 class TestMetadataRecords:
-    """Per-video metadata records in the Pagefind index (FR-042e)."""
+    """Per-video metadata records in the Pagefind index (FR-042f)."""
 
     @pytest.fixture(autouse=True)
     def _mock_pagefind_imports(self):
@@ -625,7 +625,7 @@ class TestMetadataRecords:
         assert record["language"] == "es"
 
 
-# ── incremental change detection (FR-042e) ─────────────────────────────────
+# ── incremental change detection (FR-042f) ─────────────────────────────────
 
 
 @pytest.mark.ai_generated

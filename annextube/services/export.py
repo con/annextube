@@ -14,7 +14,7 @@ from .authors import AuthorsService
 
 logger = get_logger(__name__)
 
-# Full-description lookup exported next to videos.tsv (FR-042c). Stored under
+# Full-description lookup exported next to videos.tsv (FR-042d). Stored under
 # the archive's normal .gitattributes rules -- large ones are annexed, and
 # their content simply needs to be deposited for the web UI to read them.
 FULLDESCRIPTIONS_FILENAME = "video_fulldescriptions.json"
@@ -55,7 +55,7 @@ class ExportService:
             base_dir: Directory to scan for metadata.json files
                       (default: repo_path/videos/)
             write_fulldescriptions: Also write video_fulldescriptions.json next
-                      to the TSV (FR-042c). Disabled for per-playlist exports,
+                      to the TSV (FR-042d). Disabled for per-playlist exports,
                       which would duplicate the channel-level lookup.
 
         Returns:
@@ -179,14 +179,14 @@ class ExportService:
                     "source_url": f"https://www.youtube.com/watch?v={video_id}",
                     "path": str(relative_path),  # Relative to videos/ directory (e.g., "2026/01/video_dir" for hierarchical)
                     # First non-empty line only; full text goes to
-                    # video_fulldescriptions.json (FR-042c)
+                    # video_fulldescriptions.json (FR-042d)
                     "description": first_description_line(metadata.get("description")),
                 }
                 videos.append(video_entry)
 
                 # Only videos whose description does NOT fit on the single
                 # TSV line need an entry here -- for the rest the TSV column
-                # already carries the whole text (FR-042c)
+                # already carries the whole text (FR-042d)
                 description = metadata.get("description") or ""
                 if description.strip() and description.strip() != first_description_line(
                     description
@@ -498,7 +498,7 @@ class ExportService:
     def _write_fulldescriptions_json(
         self, output_path: Path, fulldescriptions: dict[str, str]
     ) -> None:
-        """Write the {video_id: full description} lookup (FR-042c).
+        """Write the {video_id: full description} lookup (FR-042d).
 
         Only videos whose description does not fit on the single ``videos.tsv``
         line get an entry; with no entries the file is not written at all (and

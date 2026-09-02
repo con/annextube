@@ -1,4 +1,4 @@
-"""Tests for description export (FR-042c, Phase 16).
+"""Tests for description export (FR-042d, Phase 16).
 
 Covers the videos.tsv ``description`` column (first non-empty line) and the
 ``video_fulldescriptions.json`` lookup exported next to it.

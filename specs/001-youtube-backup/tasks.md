@@ -464,7 +464,7 @@ annextube backup
 
 **Goal**: Make video descriptions actually searchable (FR-042 today only matches titles: `videos.tsv` carries no descriptions, so the fuse.js `description`/`tags` keys index empty fields), and unify metadata + captions under a "Full" Pagefind search mode.
 
-**Requirements**: FR-042c, FR-042d, FR-042e, FR-042f (spec.md § Web Interface)
+**Requirements**: FR-042d, FR-042e, FR-042f, FR-042g (spec.md § Web Interface)
 
 **Design**: `.specify/specs/description-search.md` (companion to `.specify/specs/caption-search-pagefind.md`)
 
@@ -472,18 +472,18 @@ annextube backup
 
 ### Implementation for Searchable Descriptions
 
-- [X] T142 [P] [US4] Add `description` column (first non-empty line, `first_description_line()` helper) as last column of videos.tsv in annextube/services/export.py + unit tests for LF/CRLF/CR, leading blank lines, empty, tab escaping (FR-042c)
-- [X] T143 [US4] Export videos/video_fulldescriptions.json ({video_id: full description}, non-empty only, sorted keys, deterministic) in annextube/services/export.py; add `video_fulldescriptions.json annex.largefiles=nothing` to configure_gitattributes() in annextube/services/git_annex.py for new archives + idempotent append during export for existing archives + tests (FR-042c)
-- [X] T144 [US4] Fetch video_fulldescriptions.json in parallel with videos.tsv (Promise.all, 404-tolerant) and merge into Video.description in frontend/src/services/data-loader.ts; add VideoTSVRow.description in frontend/src/types/models.ts + tests incl. regression test for description-only search term (FR-042d)
-- [X] T145 [P] [US4] Add one metadata record per video (content: title + description + tags; url `#/video/{id}` without ?t=; `record_type` meta+filter on metadata AND caption records) in annextube/services/search_index.py; include caption-less videos; extend incremental change detection from `*.vtt` to also cover `metadata.json`; add metadata_records to IndexStats + tests (FR-042e)
-- [X] T146 [US4] Classify results by record_type in frontend/src/services/pagefind.ts (rename searchCaptions → searchFull; group gains descriptionMatch alongside timestamped caption matches; missing record_type treated as caption for old indexes) + tests (FR-042e)
-- [X] T147 [US4] Rename search modes Videos/Captions → Metadata/Full: SearchMode type + toggle labels + placeholders in frontend/src/components/FilterPanel.svelte; `mode=full` with legacy `mode=captions` mapping in frontend/src/services/url-state.ts; git mv CaptionSearchResults.svelte → FullSearchResults.svelte with description-match row (badge, no timestamp, links to `#/video/{id}`) + tests (FR-042f)
-- [X] T148 [P] [US4] E2E tests in frontend/tests/e2e/: description-only term found in Metadata mode; Full mode shows description + caption matches; legacy mode=captions URL still works (FR-042d/e/f)
+- [X] T142 [P] [US4] Add `description` column (first non-empty line, `first_description_line()` helper) as last column of videos.tsv in annextube/services/export.py + unit tests for LF/CRLF/CR, leading blank lines, empty, tab escaping (FR-042d)
+- [X] T143 [US4] Export videos/video_fulldescriptions.json ({video_id: full description}, non-empty only, sorted keys, deterministic) in annextube/services/export.py; add `video_fulldescriptions.json annex.largefiles=nothing` to configure_gitattributes() in annextube/services/git_annex.py for new archives + idempotent append during export for existing archives + tests (FR-042d)
+- [X] T144 [US4] Fetch video_fulldescriptions.json in parallel with videos.tsv (Promise.all, 404-tolerant) and merge into Video.description in frontend/src/services/data-loader.ts; add VideoTSVRow.description in frontend/src/types/models.ts + tests incl. regression test for description-only search term (FR-042e)
+- [X] T145 [P] [US4] Add one metadata record per video (content: title + description + tags; url `#/video/{id}` without ?t=; `record_type` meta+filter on metadata AND caption records) in annextube/services/search_index.py; include caption-less videos; extend incremental change detection from `*.vtt` to also cover `metadata.json`; add metadata_records to IndexStats + tests (FR-042f)
+- [X] T146 [US4] Classify results by record_type in frontend/src/services/pagefind.ts (rename searchCaptions → searchFull; group gains descriptionMatch alongside timestamped caption matches; missing record_type treated as caption for old indexes) + tests (FR-042f)
+- [X] T147 [US4] Rename search modes Videos/Captions → Metadata/Full: SearchMode type + toggle labels + placeholders in frontend/src/components/FilterPanel.svelte; `mode=full` with legacy `mode=captions` mapping in frontend/src/services/url-state.ts; git mv CaptionSearchResults.svelte → FullSearchResults.svelte with description-match row (badge, no timestamp, links to `#/video/{id}`) + tests (FR-042g)
+- [X] T148 [P] [US4] E2E tests in frontend/tests/e2e/: description-only term found in Metadata mode; Full mode shows description + caption matches; legacy mode=captions URL still works (FR-042e/f/g)
 - [X] T149 [P] [US4] Update docs: search behavior in docs/content/how-to/search.md (two modes, video_fulldescriptions.json, archive regeneration note for existing archives)
 
-- [X] T150 [US4] Fix URLStateManager.parseHash dropping every filter param on non-root routes in frontend/src/services/url-state.ts (it stripped only a leading `#/`, so `#/channel/<dir>?search=X` parsed the whole `route?search` as one key; shared channel links restored nothing). Parse from the first `?` like router.ts already does + regression tests (FR-042f; found by verifying against a real served archive)
+- [X] T150 [US4] Fix URLStateManager.parseHash dropping every filter param on non-root routes in frontend/src/services/url-state.ts (it stripped only a leading `#/`, so `#/channel/<dir>?search=X` parsed the whole `route?search` as one key; shared channel links restored nothing). Parse from the first `?` like router.ts already does + regression tests (FR-042g; found by verifying against a real served archive)
 
-- [X] T151 [US4] Address review of PR #6 (yarikoptic): drop the dedicated `video_fulldescriptions.json annex.largefiles=nothing` rule and the `.gitattributes` migration (stay with the archive's global rules; annexed copies just get their content deposited); write entries only for descriptions that do not fit the single `videos.tsv` line; skip the file entirely when there are no such entries (removing a stale one); warn in the frontend when the file is unavailable or an annex pointer is served instead of its content (FR-042c/d)
+- [X] T151 [US4] Address review of PR #6 (yarikoptic): drop the dedicated `video_fulldescriptions.json annex.largefiles=nothing` rule and the `.gitattributes` migration (stay with the archive's global rules; annexed copies just get their content deposited); write entries only for descriptions that do not fit the single `videos.tsv` line; skip the file entirely when there are no such entries (removing a stale one); warn in the frontend when the file is unavailable or an annex pointer is served instead of its content (FR-042d/e)
 
 **Checkpoint**: Searching a term that appears only in a video description returns that video in both Metadata and Full modes, including from a shared `#/channel/<dir>?search=...` link; old archives and old shared URLs keep working.
 

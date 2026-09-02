@@ -4,7 +4,7 @@
 **Date:** 2026-08-28
 **Feature:** `specs/001-youtube-backup/` — this design refines the FR-042 search
 requirement family:
-- Requirements: **FR-042c–FR-042f** in `specs/001-youtube-backup/spec.md`
+- Requirements: **FR-042d–FR-042g** in `specs/001-youtube-backup/spec.md`
 - Data model: `videos.tsv` `description` column + `video_fulldescriptions.json`
   in `specs/001-youtube-backup/data-model.md`
 - Tasks: **Phase 16 (T142–T149)** in `specs/001-youtube-backup/tasks.md`

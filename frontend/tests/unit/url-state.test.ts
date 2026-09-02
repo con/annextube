@@ -145,7 +145,7 @@ describe('URLStateManager', () => {
   });
 });
 
-describe('URLStateManager searchMode (FR-042f)', () => {
+describe('URLStateManager searchMode (FR-042g)', () => {
   const urlStateManager = new URLStateManager();
 
   test('parses mode=full', () => {

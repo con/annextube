@@ -1,5 +1,5 @@
 /**
- * E2E Test for Description Search (FR-042c/d)
+ * E2E Test for Description Search (FR-042d/e)
  *
  * Verifies that the Metadata search mode matches terms that appear only in
  * a video's full description, loaded from video_fulldescriptions.json
@@ -31,7 +31,7 @@ const FULLDESCRIPTIONS_JSON = JSON.stringify({
  * Intercept archive requests for a single-channel archive.
  *
  * @param fulldescriptions - JSON body for video_fulldescriptions.json,
- *   or null to 404 it (archives exported before FR-042c)
+ *   or null to 404 it (archives exported before FR-042d)
  */
 async function setupSingleChannelRoutes(
   page: import('@playwright/test').Page,
@@ -94,7 +94,7 @@ async function search(page: import('@playwright/test').Page, query: string) {
   await page.waitForTimeout(500);
 }
 
-test.describe('Description Search (FR-042d)', () => {
+test.describe('Description Search (FR-042e)', () => {
   test('term appearing only in the full description matches', async ({
     page,
   }) => {

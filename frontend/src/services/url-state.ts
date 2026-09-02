@@ -38,7 +38,7 @@ export class URLStateManager {
       queryStart === -1 ? '' : hash.slice(queryStart + 1)
     );
 
-    // 'captions' is the legacy value from pre-Metadata/Full URLs (FR-042f)
+    // 'captions' is the legacy value from pre-Metadata/Full URLs (FR-042g)
     const mode = params.get('mode');
     const searchMode = mode === 'full' || mode === 'captions' ? ('full' as const) : undefined;
 

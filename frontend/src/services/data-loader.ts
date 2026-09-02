@@ -151,7 +151,7 @@ export class DataLoader {
 
   /**
    * Fetch the {video_id: full description} lookup exported next to
-   * videos.tsv (FR-042c/d).
+   * videos.tsv (FR-042d/e).
    *
    * The file only exists when some description does not fit on the single
    * TSV line, and it may be annexed -- so a miss is not an error: callers
@@ -575,7 +575,7 @@ export class DataLoader {
    * Convert TSV row to Video object (with type conversion)
    *
    * @param fulldescriptions - Optional {video_id: full description} lookup;
-   *   full text wins over the TSV first-line description column (FR-042d)
+   *   full text wins over the TSV first-line description column (FR-042e)
    */
   private parseTSVVideo(
     row: VideoTSVRow,

@@ -1,7 +1,7 @@
 """Pagefind-based full-text search index builder.
 
 Builds a Pagefind search index during ``generate-web`` from two record kinds
-(distinguished by ``record_type`` in meta and filters, FR-042e):
+(distinguished by ``record_type`` in meta and filters, FR-042f):
 
 - **metadata**: one record per video (title + description + tags), so every
   video is findable even without captions;
@@ -73,7 +73,7 @@ class IndexStats:
     ``videos_indexed``/``videos_curated``/``videos_original`` count videos
     with indexed captions; ``videos_skipped`` counts videos whose
     metadata.json could not be read; ``metadata_records`` counts per-video
-    metadata records (FR-042e).
+    metadata records (FR-042f).
     """
 
     videos_indexed: int = 0
@@ -294,7 +294,7 @@ def _content_changed_since(repo: Path, since_commit: str) -> bool:
     """Return *True* if indexed content changed between *since_commit* and HEAD.
 
     Covers both caption files (``*.vtt``) and per-video ``metadata.json``
-    (titles/descriptions/tags feed the metadata records, FR-042e).
+    (titles/descriptions/tags feed the metadata records, FR-042f).
     """
     try:
         result = subprocess.run(
@@ -697,7 +697,7 @@ async def build_caption_index(
             year = upload_date[:4] if upload_date else ""
 
             # One metadata record per video (title + description + tags) so
-            # every video is findable even without captions (FR-042e)
+            # every video is findable even without captions (FR-042f)
             description = meta.get("description") or ""
             tags = meta.get("tags") or []
             metadata_content = "\n\n".join(

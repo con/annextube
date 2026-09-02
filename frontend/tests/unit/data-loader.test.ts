@@ -270,7 +270,7 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
     });
   });
 
-  describe('full descriptions (FR-042d)', () => {
+  describe('full descriptions (FR-042e)', () => {
     const TSV_WITH_DESCRIPTION = `video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\tduration\tview_count\tlike_count\tcomment_count\tthumbnail_url\tdownload_status\tsource_url\tpath\tdescription
 abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://example.com/thumb.jpg\ttracked\thttps://youtube.com/watch?v=abc123\tabc123\tFirst line only`;
 
@@ -316,7 +316,7 @@ abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10
       expect(videos[0].description).toBe('First line only');
     });
 
-    test('description is undefined for pre-FR-042c archives', async () => {
+    test('description is undefined for pre-FR-042d archives', async () => {
       // Old TSV without description column, no JSON file
       const oldTSV = `video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\tduration\tview_count\tlike_count\tcomment_count\tthumbnail_url\tdownload_status\tsource_url
 abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://example.com/thumb.jpg\ttracked\thttps://youtube.com/watch?v=abc123`;

@@ -357,7 +357,7 @@ dQw4w9WgXcQ	Never Gonna Give You Up	UCuAXFkgsw1L7xaCfnd5JJOw	Rick Astley	1987-11
 
 **Notes**:
 - `description` holds only the **first non-empty line** of the video description
-  (FR-042c); the complete text lives in `video_fulldescriptions.json` (below).
+  (FR-042d); the complete text lives in `video_fulldescriptions.json` (below).
   Tabs/newlines in fields are escaped per the shared TSV escaping rules.
 
 **Usage**:
@@ -370,7 +370,7 @@ dQw4w9WgXcQ	Never Gonna Give You Up	UCuAXFkgsw1L7xaCfnd5JJOw	Rick Astley	1987-11
 ### video_fulldescriptions.json
 
 Complete video descriptions for search, exported next to `videos.tsv`
-(FR-042c/FR-042d; design: `.specify/specs/description-search.md`).
+(FR-042d/FR-042e; design: `.specify/specs/description-search.md`).
 
 **Location**: `videos/video_fulldescriptions.json` (single-channel) or
 `<channel_dir>/videos/video_fulldescriptions.json` (multi-channel, per channel).

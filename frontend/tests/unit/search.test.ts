@@ -285,7 +285,7 @@ describe('SearchService cross-channel', () => {
   });
 });
 
-describe('SearchService description search (FR-042d)', () => {
+describe('SearchService description search (FR-042e)', () => {
   let searchService: SearchService;
 
   function makeVideo(overrides: Partial<Video>): Video {

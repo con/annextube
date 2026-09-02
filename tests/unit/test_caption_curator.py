@@ -269,6 +269,35 @@ class TestGlossaryRegex:
         text, _ = CaptionCurator.apply_glossary("the f mri data is in bids format", replacements)
         assert "fMRI" in text
 
+    def test_derived_pattern_from_compound_canonical(self) -> None:
+        """A CamelCase term with no explicit patterns matches spoken forms.
+
+        ASR renders "ReproStim" as "repro stim", "repro-stim", or
+        "reprostim"; the pattern derived from the canonical must catch
+        all three without hand-listed variants (gh-5).
+        """
+        glossary = Glossary(terms=[GlossaryTerm(canonical="ReproStim", patterns=[])])
+        replacements = CaptionCurator._compile_glossary_patterns(glossary)
+        for spoken in ("repro stim", "repro-stim", "reprostim"):
+            text, changes = CaptionCurator.apply_glossary(
+                f"the {spoken} device records video", replacements
+            )
+            assert text == "the ReproStim device records video"
+            assert changes == [f"'{spoken}' -> 'ReproStim'"]
+        # Word boundaries: unrelated longer words stay untouched
+        text, changes = CaptionCurator.apply_glossary(
+            "reprostimulus is unrelated", replacements
+        )
+        assert text == "reprostimulus is unrelated"
+        assert changes == []
+
+    def test_no_derived_pattern_for_single_part_canonical(self) -> None:
+        """Single-word canonicals like 'docker' or 'BIDS' derive nothing."""
+        assert CaptionCurator._derive_spoken_pattern("docker") is None
+        assert CaptionCurator._derive_spoken_pattern("BIDS") is None
+        glossary = Glossary(terms=[GlossaryTerm(canonical="BIDS", patterns=[])])
+        assert CaptionCurator._compile_glossary_patterns(glossary) == []
+
 
 # ── Stage 2: LLM Corrections ─────────────────────────────────────────────
 
