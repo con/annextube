@@ -22,13 +22,22 @@ create_label() {
 
 # Version-bump labels (prefixed with 'release-' to avoid conflicts with
 # Dependabot's own major/minor/patch labels)
-create_label "release-major"  "e11d48" "Increment the major version when merged"
-create_label "release-minor"  "7c3aed" "Increment the minor version when merged"
-create_label "release-patch"  "0284c7" "Increment the patch version when merged"
+create_label "release-major"  "C5000B" "Increment the major version when merged"
+create_label "release-minor"  "F1A60E" "Increment the minor version when merged"
+create_label "release-patch"  "870048" "Increment the patch version when merged"
 
 # Trigger/control labels
 create_label "release"        "16a34a" "Create a release when this PR is merged"
-create_label "skip-release"   "6b7280" "Do not create a release for this PR"
+create_label "skip-release"   "bf5416" "Preserve the current version when merged"
 create_label "released"       "84cc16" "This PR has been released"
+
+# Changelog-categorization labels (no release-bump, appear in CHANGELOG sections)
+# No prefix needed — Dependabot does not use these label names
+create_label "internal"       "696969" "Changes only affect the internal API"
+create_label "documentation"  "cfd3d7" "Changes only affect the documentation"
+create_label "tests"          "e4e669" "Add or improve existing tests"
+
+# Performance: triggers a patch bump + appears under '🏎 Performance' in CHANGELOG
+create_label "performance"    "f4b2d8" "Improve performance of an existing feature"
 
 echo "Done."

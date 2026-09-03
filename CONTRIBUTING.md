@@ -23,13 +23,22 @@ label (controlled by `onlyPublishWithReleaseLabel: true` in `.autorc`).
 
 ### Labels
 
-**Version-bump labels** (control *what kind* of release):
+**Version-bump labels** (control *what kind* of release — prefixed `release-` to avoid Dependabot conflicts):
 
-| Label           | Version bump | When to use                          |
-| --------------- | ------------ | ------------------------------------ |
-| `release-major` | X.0.0        | Breaking API or CLI changes          |
-| `release-minor` | 0.X.0        | New backward-compatible features     |
-| `release-patch` | 0.0.X        | Bug fixes, docs, minor improvements  |
+| Label           | Changelog section    | Version bump | When to use                         |
+| --------------- | -------------------- | ------------ | ----------------------------------- |
+| `release-major` | 💥 Breaking Change   | X.0.0        | Breaking API or CLI changes         |
+| `release-minor` | 🚀 Enhancement       | 0.X.0        | New backward-compatible features    |
+| `release-patch` | 🐛 Bug Fix           | 0.0.X        | Bug fixes, minor improvements       |
+| `performance`   | 🏎 Performance       | 0.0.X        | Performance improvements            |
+
+**Changelog-only labels** (appear in CHANGELOG but do not bump the version):
+
+| Label           | Changelog section    | When to use                                |
+| --------------- | -------------------- | ------------------------------------------ |
+| `internal`      | 🏠 Internal          | Internal refactoring, no user-facing change |
+| `documentation` | 📝 Documentation     | Docs-only changes                          |
+| `tests`         | 🧪 Tests             | Test additions or improvements             |
 
 **Trigger / control labels**:
 
