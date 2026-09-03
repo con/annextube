@@ -32,19 +32,19 @@ async function waitForPagefindToggle(page: import('@playwright/test').Page) {
 }
 
 /**
- * Switch to caption search mode by clicking the "Captions" tab.
+ * Switch to caption search mode by clicking the "Full" tab.
  */
-async function switchToCaptionMode(page: import('@playwright/test').Page) {
+async function switchToFullMode(page: import('@playwright/test').Page) {
   await waitForPagefindToggle(page);
-  const captionsTab = page.locator('.mode-tab').filter({ hasText: 'Captions' });
-  await captionsTab.click();
-  await expect(captionsTab).toHaveClass(/active/);
+  const fullTab = page.locator('.mode-tab').filter({ hasText: 'Full' });
+  await fullTab.click();
+  await expect(fullTab).toHaveClass(/active/);
 }
 
 /**
  * Type a query into the search input and wait for caption results to appear.
  */
-async function searchCaptions(
+async function searchFullMode(
   page: import('@playwright/test').Page,
   query: string,
 ) {
@@ -67,7 +67,7 @@ test.describe('Caption Search (Pagefind)', () => {
   });
 
   test.describe('Search mode toggle', () => {
-    test('Videos/Captions toggle appears when Pagefind index exists', async ({
+    test('Metadata/Full toggle appears when Pagefind index exists', async ({
       page,
     }) => {
       await waitForPagefindToggle(page);
@@ -78,38 +78,38 @@ test.describe('Caption Search (Pagefind)', () => {
       // Should have exactly two tabs
       const tabs = toggle.locator('.mode-tab');
       await expect(tabs).toHaveCount(2);
-      await expect(tabs.first()).toContainText('Videos');
-      await expect(tabs.last()).toContainText('Captions');
+      await expect(tabs.first()).toContainText('Metadata');
+      await expect(tabs.last()).toContainText('Full');
     });
 
-    test('Videos tab is active by default', async ({ page }) => {
+    test('Metadata tab is active by default', async ({ page }) => {
       await waitForPagefindToggle(page);
 
-      const videosTab = page.locator('.mode-tab').filter({ hasText: 'Videos' });
-      await expect(videosTab).toHaveClass(/active/);
+      const metadataTab = page.locator('.mode-tab').filter({ hasText: 'Metadata' });
+      await expect(metadataTab).toHaveClass(/active/);
 
-      const captionsTab = page
+      const fullTab = page
         .locator('.mode-tab')
-        .filter({ hasText: 'Captions' });
-      await expect(captionsTab).not.toHaveClass(/active/);
+        .filter({ hasText: 'Full' });
+      await expect(fullTab).not.toHaveClass(/active/);
     });
 
-    test('clicking Captions tab activates it', async ({ page }) => {
-      await switchToCaptionMode(page);
+    test('clicking Full tab activates it', async ({ page }) => {
+      await switchToFullMode(page);
 
-      const captionsTab = page
+      const fullTab = page
         .locator('.mode-tab')
-        .filter({ hasText: 'Captions' });
-      await expect(captionsTab).toHaveClass(/active/);
+        .filter({ hasText: 'Full' });
+      await expect(fullTab).toHaveClass(/active/);
 
-      const videosTab = page.locator('.mode-tab').filter({ hasText: 'Videos' });
-      await expect(videosTab).not.toHaveClass(/active/);
+      const metadataTab = page.locator('.mode-tab').filter({ hasText: 'Metadata' });
+      await expect(metadataTab).not.toHaveClass(/active/);
     });
 
     test('search input placeholder changes in caption mode', async ({
       page,
     }) => {
-      await switchToCaptionMode(page);
+      await switchToFullMode(page);
 
       const searchInput = page.locator('#search-input');
       await expect(searchInput).toHaveAttribute(
@@ -117,12 +117,26 @@ test.describe('Caption Search (Pagefind)', () => {
         /caption/i,
       );
     });
+
+    test('legacy mode=captions URL activates Full mode (FR-042g)', async ({
+      page,
+    }) => {
+      // Pre-rename shared URLs used mode=captions; they must land in Full
+      // mode. Reload so the app initializes from the hash state.
+      await page.goto(BASE_URL + '#/?mode=captions');
+      await page.reload();
+      await page.waitForSelector('.video-grid', { timeout: 15000 });
+      await waitForPagefindToggle(page);
+
+      const fullTab = page.locator('.mode-tab').filter({ hasText: 'Full' });
+      await expect(fullTab).toHaveClass(/active/);
+    });
   });
 
   test.describe('Caption search results', () => {
     test('searching for "DataLad" returns results', async ({ page }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       const resultCards = page.locator('.caption-search-results .result-card');
       const count = await resultCards.count();
@@ -132,8 +146,8 @@ test.describe('Caption Search (Pagefind)', () => {
     test('result cards show video title, timestamp, and excerpt', async ({
       page,
     }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       const firstCard = page
         .locator('.caption-search-results .result-card')
@@ -160,22 +174,22 @@ test.describe('Caption Search (Pagefind)', () => {
     });
 
     test('result header shows video count', async ({ page }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       const resultCount = page.locator(
         '.caption-search-results .result-count',
       );
       await expect(resultCount).toBeVisible();
       // Should say something like "5 videos with caption matches"
-      await expect(resultCount).toContainText(/\d+ videos? with caption matches/);
+      await expect(resultCount).toContainText(/\d+ videos? with matches/);
     });
 
     test('different queries return different results', async ({ page }) => {
-      await switchToCaptionMode(page);
+      await switchToFullMode(page);
 
       // Search for "containers"
-      await searchCaptions(page, 'containers');
+      await searchFullMode(page, 'containers');
       const containersCount = await page
         .locator('.caption-search-results .result-card')
         .count();
@@ -207,7 +221,7 @@ test.describe('Caption Search (Pagefind)', () => {
     });
 
     test('empty query shows no results', async ({ page }) => {
-      await switchToCaptionMode(page);
+      await switchToFullMode(page);
 
       // Make sure input is empty
       const searchInput = page.locator('#search-input');
@@ -227,8 +241,8 @@ test.describe('Caption Search (Pagefind)', () => {
     test('clicking a result navigates to video detail with timestamp', async ({
       page,
     }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       // Click the first result card's main area
       const firstCard = page
@@ -255,10 +269,10 @@ test.describe('Caption Search (Pagefind)', () => {
     test('result with multiple matches shows match count badge', async ({
       page,
     }) => {
-      await switchToCaptionMode(page);
+      await switchToFullMode(page);
       // "DataLad" is mentioned many times across captions --
       // at least some videos should have multiple matches
-      await searchCaptions(page, 'DataLad');
+      await searchFullMode(page, 'DataLad');
 
       // Find a card that has a match-count-badge
       const badges = page.locator(
@@ -278,8 +292,8 @@ test.describe('Caption Search (Pagefind)', () => {
     });
 
     test('clicking match count badge expands match list', async ({ page }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       // Find a card with a match-count-badge
       const badge = page
@@ -315,8 +329,8 @@ test.describe('Caption Search (Pagefind)', () => {
     });
 
     test('clicking badge again collapses the match list', async ({ page }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       const badge = page
         .locator('.caption-search-results .match-count-badge')
@@ -342,8 +356,8 @@ test.describe('Caption Search (Pagefind)', () => {
     test('clicking an expanded match navigates to correct timestamp', async ({
       page,
     }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       const badge = page
         .locator('.caption-search-results .match-count-badge')
@@ -380,9 +394,9 @@ test.describe('Caption Search (Pagefind)', () => {
     test('show more button appears when results exceed page size', async ({
       page,
     }) => {
-      await switchToCaptionMode(page);
+      await switchToFullMode(page);
       // Use a broad search term likely to match many videos
-      await searchCaptions(page, 'reproducibility');
+      await searchFullMode(page, 'reproducibility');
 
       const resultCards = page.locator(
         '.caption-search-results .result-card',
@@ -405,8 +419,8 @@ test.describe('Caption Search (Pagefind)', () => {
     });
 
     test('clicking show more loads additional results', async ({ page }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'reproducibility');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'reproducibility');
 
       const showMoreBtn = page.locator(
         '.caption-search-results .show-more-button',
@@ -432,21 +446,21 @@ test.describe('Caption Search (Pagefind)', () => {
   });
 
   test.describe('Mode switching', () => {
-    test('switching back to Videos mode hides caption results', async ({
+    test('switching back to Metadata mode hides caption results', async ({
       page,
     }) => {
-      await switchToCaptionMode(page);
-      await searchCaptions(page, 'DataLad');
+      await switchToFullMode(page);
+      await searchFullMode(page, 'DataLad');
 
       // Caption results should be visible
       await expect(
         page.locator('.caption-search-results .result-card').first(),
       ).toBeVisible();
 
-      // Switch back to Videos
-      const videosTab = page.locator('.mode-tab').filter({ hasText: 'Videos' });
-      await videosTab.click();
-      await expect(videosTab).toHaveClass(/active/);
+      // Switch back to Metadata
+      const metadataTab = page.locator('.mode-tab').filter({ hasText: 'Metadata' });
+      await metadataTab.click();
+      await expect(metadataTab).toHaveClass(/active/);
 
       // Caption results container should be gone
       await expect(page.locator('.caption-search-results')).toHaveCount(0);

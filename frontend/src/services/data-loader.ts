@@ -130,7 +130,12 @@ export class DataLoader {
       return this.videosCache;
     }
 
-    const response = await fetch(`${this.baseUrl}/videos/videos.tsv`);
+    const [response, fulldescriptions] = await Promise.all([
+      fetch(`${this.baseUrl}/videos/videos.tsv`),
+      this.loadFullDescriptions(
+        `${this.baseUrl}/videos/video_fulldescriptions.json`
+      ),
+    ]);
     if (!response.ok) {
       throw new Error(`Failed to load videos.tsv: ${response.statusText}`);
     }
@@ -139,9 +144,59 @@ export class DataLoader {
     const rows = parseTSV(text) as unknown as VideoTSVRow[];
 
     // Convert TSV rows to Video objects (with type conversion)
-    this.videosCache = rows.map((row) => this.parseTSVVideo(row));
+    this.videosCache = rows.map((row) => this.parseTSVVideo(row, fulldescriptions));
 
     return this.videosCache;
+  }
+
+  /**
+   * Fetch the {video_id: full description} lookup exported next to
+   * videos.tsv (FR-042d/e).
+   *
+   * The file only exists when some description does not fit on the single
+   * TSV line, and it may be annexed -- so a miss is not an error: callers
+   * fall back to the TSV first-line column. A warning is logged so an
+   * archive whose annexed content was never deposited is diagnosable.
+   */
+  private async loadFullDescriptions(
+    url: string
+  ): Promise<Record<string, string>> {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.warn(
+          `[DataLoader] ${url} unavailable (HTTP ${response.status}); ` +
+          'search falls back to the first description line. This is expected ' +
+          'when no description spans multiple lines.'
+        );
+        return {};
+      }
+
+      const text = await response.text();
+      try {
+        return JSON.parse(text) as Record<string, string>;
+      } catch {
+        // Anything that is not JSON is unusable; name the likely cause.
+        // A git-annex symlink/pointer served verbatim never parses, so the
+        // marker is only consulted here -- a genuine JSON file mentioning
+        // '/annex/objects/' inside a description still parses and is kept.
+        if (text.includes('/annex/objects/')) {
+          console.warn(
+            `[DataLoader] ${url} is annexed but its content is not available ` +
+            'here; deposit the file content to enable full description search.'
+          );
+        } else {
+          console.warn(
+            `[DataLoader] ${url} is not valid JSON; search falls back to the ` +
+            'first description line.'
+          );
+        }
+        return {};
+      }
+    } catch (err) {
+      console.warn(`[DataLoader] Could not load ${url}:`, err);
+      return {};
+    }
   }
 
   /**
@@ -422,9 +477,12 @@ export class DataLoader {
    * @param channelDir - Relative path to channel directory (from channels.tsv)
    */
   async loadChannelVideos(channelDir: string): Promise<Video[]> {
-    const response = await fetch(
-      `${this.baseUrl}/${channelDir}/videos/videos.tsv`
-    );
+    const [response, fulldescriptions] = await Promise.all([
+      fetch(`${this.baseUrl}/${channelDir}/videos/videos.tsv`),
+      this.loadFullDescriptions(
+        `${this.baseUrl}/${channelDir}/videos/video_fulldescriptions.json`
+      ),
+    ]);
     if (!response.ok) {
       throw new Error(
         `Failed to load videos for channel ${channelDir}: ${response.statusText}`
@@ -435,7 +493,7 @@ export class DataLoader {
     const rows = parseTSV(text) as unknown as VideoTSVRow[];
 
     // Convert TSV rows to Video objects
-    return rows.map((row) => this.parseTSVVideo(row));
+    return rows.map((row) => this.parseTSVVideo(row, fulldescriptions));
   }
 
   /**
@@ -524,11 +582,18 @@ export class DataLoader {
 
   /**
    * Convert TSV row to Video object (with type conversion)
+   *
+   * @param fulldescriptions - Optional {video_id: full description} lookup;
+   *   full text wins over the TSV first-line description column (FR-042e)
    */
-  private parseTSVVideo(row: VideoTSVRow): Video {
+  private parseTSVVideo(
+    row: VideoTSVRow,
+    fulldescriptions: Record<string, string> = {}
+  ): Video {
     return {
       video_id: row.video_id,
       title: row.title,
+      description: fulldescriptions[row.video_id] || row.description || undefined,
       channel_id: row.channel_id,
       channel_name: row.channel_name,
       published_at: row.published_at,

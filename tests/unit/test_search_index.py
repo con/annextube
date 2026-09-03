@@ -380,8 +380,8 @@ class TestBuildCaptionIndex:
         assert stats.chunks_created > 0
 
     @pytest.mark.asyncio
-    async def test_no_vtt_skipped(self, tmp_path: Path) -> None:
-        """Videos with no VTT files are skipped."""
+    async def test_no_vtt_still_gets_metadata_record(self, tmp_path: Path) -> None:
+        """Videos with no VTT get a metadata record but no caption chunks (FR-042f)."""
         archive = _make_archive(tmp_path, has_vtt=False)
 
         with patch(
@@ -393,12 +393,15 @@ class TestBuildCaptionIndex:
             stats = await build_caption_index(archive, force=True)
 
         assert stats.videos_indexed == 0
-        assert stats.videos_skipped == 1
+        assert stats.videos_skipped == 0
         assert stats.chunks_created == 0
+        assert stats.metadata_records == 1
+        assert len(self.fake_index.records) == 1
+        assert self.fake_index.records[0]["meta"]["record_type"] == "metadata"
 
     @pytest.mark.asyncio
     async def test_record_url_format(self, tmp_path: Path) -> None:
-        """Each record URL follows the #/video/{id}?t={seconds} format."""
+        """Caption records use #/video/{id}?t={seconds}; metadata #/video/{id}."""
         archive = _make_archive(tmp_path, has_curated=True, video_id="myVid42")
 
         with patch(
@@ -411,7 +414,10 @@ class TestBuildCaptionIndex:
 
         assert len(self.fake_index.records) > 0
         for rec in self.fake_index.records:
-            assert rec["url"].startswith("#/video/myVid42?t=")
+            if rec["meta"]["record_type"] == "caption":
+                assert rec["url"].startswith("#/video/myVid42?t=")
+            else:
+                assert rec["url"] == "#/video/myVid42"
             assert rec["language"] == "en"
             assert rec["meta"]["video_id"] == "myVid42"
             assert rec["meta"]["channel_name"] == "TestChannel"
@@ -431,7 +437,7 @@ class TestBuildCaptionIndex:
                 return_value="cafebabe",
             ),
             patch(
-                "annextube.services.search_index._vtt_changed_since",
+                "annextube.services.search_index._content_changed_since",
                 return_value=False,
             ),
         ):
@@ -498,6 +504,179 @@ class TestBuildCaptionIndex:
 
         assert stats.videos_indexed == 1
         # No datalad module should have been imported
+
+
+# ── metadata record tests (FR-042f) ────────────────────────────────────────
+
+
+@pytest.mark.ai_generated
+class TestMetadataRecords:
+    """Per-video metadata records in the Pagefind index (FR-042f)."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_pagefind_imports(self):
+        self.fake_index = _FakeIndex()
+        fake_service = _FakeService(self.fake_index)
+
+        async def _mock_write(service, index, output_path):
+            self.fake_index.written = True
+
+        with (
+            patch("annextube.services.search_index.IndexConfig", MagicMock()),
+            patch("annextube.services.search_index.PagefindIndex", _FakeIndex),
+            patch(
+                "annextube.services.search_index._create_pagefind_service",
+                AsyncMock(return_value=fake_service),
+            ),
+            patch(
+                "annextube.services.search_index._pagefind_write_files",
+                _mock_write,
+            ),
+            patch(
+                "annextube.services.search_index._current_head",
+                return_value="abc123def",
+            ),
+        ):
+            yield
+
+    async def _build(self, archive: Path):
+        from annextube.services.search_index import build_caption_index
+
+        return await build_caption_index(archive, force=True)
+
+    def _metadata_records(self) -> list[dict]:
+        return [
+            r for r in self.fake_index.records
+            if r["meta"].get("record_type") == "metadata"
+        ]
+
+    @pytest.mark.asyncio
+    async def test_one_metadata_record_per_video(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, has_curated=True)
+
+        stats = await self._build(archive)
+
+        records = self._metadata_records()
+        assert len(records) == 1
+        assert stats.metadata_records == 1
+        # Caption chunks were also created alongside
+        assert stats.chunks_created > 0
+
+    @pytest.mark.asyncio
+    async def test_content_includes_title_description_tags(
+        self, tmp_path: Path
+    ) -> None:
+        archive = tmp_path / "archive"
+        video_dir = archive / "videos" / "2025" / "06" / "Talk_vid1"
+        _write_metadata(
+            video_dir,
+            video_id="vid1",
+            title="ReproNim Week 1",
+            description="Intro lecture.\n\nPresented by Yaroslav Halchenko.",
+            tags=["reproducibility", "datalad"],
+        )
+
+        await self._build(archive)
+
+        (record,) = self._metadata_records()
+        assert "ReproNim Week 1" in record["content"]
+        assert "Halchenko" in record["content"]
+        assert "reproducibility" in record["content"]
+        assert record["url"] == "#/video/vid1"
+        assert "timestamp" not in record["meta"]
+        assert record["filters"]["record_type"] == ["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_missing_description_and_tags(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, has_vtt=False)  # metadata has neither
+
+        await self._build(archive)
+
+        (record,) = self._metadata_records()
+        assert "Test Video" in record["content"]
+
+    @pytest.mark.asyncio
+    async def test_caption_records_tagged(self, tmp_path: Path) -> None:
+        archive = _make_archive(tmp_path, has_curated=True)
+
+        await self._build(archive)
+
+        caption_records = [
+            r for r in self.fake_index.records
+            if r["meta"].get("record_type") == "caption"
+        ]
+        assert caption_records
+        for rec in caption_records:
+            assert rec["filters"]["record_type"] == ["caption"]
+
+    @pytest.mark.asyncio
+    async def test_metadata_record_language(self, tmp_path: Path) -> None:
+        archive = tmp_path / "archive"
+        _write_metadata(
+            archive / "videos" / "2025" / "06" / "Charla_vid2",
+            video_id="vid2",
+            title="Charla",
+            language="es",
+        )
+
+        await self._build(archive)
+
+        (record,) = self._metadata_records()
+        assert record["language"] == "es"
+
+
+# ── incremental change detection (FR-042f) ─────────────────────────────────
+
+
+@pytest.mark.ai_generated
+class TestContentChangedSince:
+    """_content_changed_since detects both VTT and metadata.json changes."""
+
+    def _git(self, repo: Path, *args: str) -> str:
+        result = subprocess.run(
+            ["git", *args], cwd=repo, capture_output=True, text=True, check=True,
+        )
+        return result.stdout.strip()
+
+    def _init_repo(self, repo: Path) -> str:
+        repo.mkdir(parents=True, exist_ok=True)
+        self._git(repo, "init", "-q")
+        self._git(repo, "config", "user.email", "test@example.com")
+        self._git(repo, "config", "user.name", "Test")
+        (repo / "README.md").write_text("hi\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-q", "-m", "init")
+        return self._git(repo, "rev-parse", "HEAD")
+
+    def _commit_file(self, repo: Path, rel: str, content: str) -> None:
+        path = repo / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-q", "-m", f"add {rel}")
+
+    def test_detects_metadata_json_change(self, tmp_path: Path) -> None:
+        from annextube.services.search_index import _content_changed_since
+
+        base = self._init_repo(tmp_path)
+        self._commit_file(
+            tmp_path, "videos/2025/06/Vid_a/metadata.json", '{"description": "new"}'
+        )
+        assert _content_changed_since(tmp_path, base) is True
+
+    def test_detects_vtt_change(self, tmp_path: Path) -> None:
+        from annextube.services.search_index import _content_changed_since
+
+        base = self._init_repo(tmp_path)
+        self._commit_file(tmp_path, "videos/2025/06/Vid_a/video.en.vtt", "WEBVTT\n")
+        assert _content_changed_since(tmp_path, base) is True
+
+    def test_ignores_unrelated_change(self, tmp_path: Path) -> None:
+        from annextube.services.search_index import _content_changed_since
+
+        base = self._init_repo(tmp_path)
+        self._commit_file(tmp_path, "videos/videos.tsv", "video_id\ttitle\n")
+        assert _content_changed_since(tmp_path, base) is False
 
 
 # ── DataLad subdataset helper tests ────────────────────────────────────────

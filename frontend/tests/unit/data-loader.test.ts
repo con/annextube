@@ -85,13 +85,13 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
         text: async () => mockTSV,
       });
 
-      // First call
+      // First call: videos.tsv + video_fulldescriptions.json (parallel)
       await dataLoader.loadVideos();
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
 
       // Second call (should use cache)
       await dataLoader.loadVideos();
-      expect(fetch).toHaveBeenCalledTimes(1); // Still 1, not 2
+      expect(fetch).toHaveBeenCalledTimes(2); // Still 2, no new requests
     });
 
     test('throws error if videos.tsv not found', async () => {
@@ -257,16 +257,165 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
         text: async () => mockTSV,
       });
 
-      // Load videos
+      // Load videos (videos.tsv + video_fulldescriptions.json)
       await dataLoader.loadVideos();
-      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(fetch).toHaveBeenCalledTimes(2);
 
       // Clear cache
       dataLoader.clearCache();
 
       // Load again (should fetch again, not use cache)
       await dataLoader.loadVideos();
-      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(fetch).toHaveBeenCalledTimes(4);
+    });
+  });
+
+  describe('full descriptions (FR-042e)', () => {
+    const TSV_WITH_DESCRIPTION = `video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\tduration\tview_count\tlike_count\tcomment_count\tthumbnail_url\tdownload_status\tsource_url\tpath\tdescription
+abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://example.com/thumb.jpg\ttracked\thttps://youtube.com/watch?v=abc123\tabc123\tFirst line only`;
+
+    const FULL_DESCRIPTION = 'First line only\n\nTalk by Halchenko with details.';
+
+    function mockArchive(fulldescriptions: unknown) {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.endsWith('/videos.tsv')) {
+          return { ok: true, text: async () => TSV_WITH_DESCRIPTION };
+        }
+        if (url.endsWith('/video_fulldescriptions.json')) {
+          if (fulldescriptions === null) return { ok: false, status: 404 };
+          // Real Response exposes text(); the loader reads it so it can
+          // detect an annex pointer served in place of the JSON
+          return { ok: true, text: async () => JSON.stringify(fulldescriptions) };
+        }
+        return { ok: false, status: 404 };
+      });
+    }
+
+    test('merges full description over TSV first line', async () => {
+      mockArchive({ abc123: FULL_DESCRIPTION });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(fetch).toHaveBeenCalledWith('..//videos/video_fulldescriptions.json');
+      expect(videos[0].description).toBe(FULL_DESCRIPTION);
+    });
+
+    test('falls back to TSV first line when JSON is missing (404)', async () => {
+      mockArchive(null);
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(videos[0].description).toBe('First line only');
+    });
+
+    test('falls back to TSV first line when video has no JSON entry', async () => {
+      mockArchive({ other456: 'Some other description' });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(videos[0].description).toBe('First line only');
+    });
+
+    test('description is undefined for pre-FR-042d archives', async () => {
+      // Old TSV without description column, no JSON file
+      const oldTSV = `video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\tduration\tview_count\tlike_count\tcomment_count\tthumbnail_url\tdownload_status\tsource_url
+abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://example.com/thumb.jpg\ttracked\thttps://youtube.com/watch?v=abc123`;
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.endsWith('/videos.tsv')) {
+          return { ok: true, text: async () => oldTSV };
+        }
+        return { ok: false, status: 404 };
+      });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(videos[0].description).toBeUndefined();
+    });
+
+    test('warns when the file is absent (annexed content not deposited)', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockArchive(null);
+
+      await dataLoader.loadVideos();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('video_fulldescriptions.json unavailable')
+      );
+      warn.mockRestore();
+    });
+
+    test('warns and degrades when an annex pointer is served instead of JSON', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.endsWith('/videos.tsv')) {
+          return { ok: true, text: async () => TSV_WITH_DESCRIPTION };
+        }
+        if (url.endsWith('/video_fulldescriptions.json')) {
+          return {
+            ok: true,
+            text: async () =>
+              '../../.git/annex/objects/Xk/9F/SHA256E-s37064--abc.json',
+          };
+        }
+        return { ok: false, status: 404 };
+      });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('content is not available')
+      );
+      // Falls back to the TSV first line rather than breaking
+      expect(videos[0].description).toBe('First line only');
+      warn.mockRestore();
+    });
+
+    test('keeps a genuine JSON whose description mentions /annex/objects/', async () => {
+      // The pointer check must not be a bare substring test: a real
+      // description may quote an annex path.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const description =
+        'Full text mentioning ../../.git/annex/objects/Xk/9F/SHA256E-s1--x\nand more';
+      mockArchive({ abc123: description });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(videos[0].description).toBe(description);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    test('warns distinctly when the file is served but is not JSON', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.endsWith('/videos.tsv')) {
+          return { ok: true, text: async () => TSV_WITH_DESCRIPTION };
+        }
+        if (url.endsWith('/video_fulldescriptions.json')) {
+          return { ok: true, text: async () => '<html>404 page</html>' };
+        }
+        return { ok: false, status: 404 };
+      });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('is not valid JSON')
+      );
+      expect(videos[0].description).toBe('First line only');
+      warn.mockRestore();
+    });
+
+    test('loadChannelVideos merges channel-scoped full descriptions', async () => {
+      mockArchive({ abc123: FULL_DESCRIPTION });
+
+      const videos = await dataLoader.loadChannelVideos('ch-test');
+
+      expect(fetch).toHaveBeenCalledWith('..//ch-test/videos/videos.tsv');
+      expect(fetch).toHaveBeenCalledWith(
+        '..//ch-test/videos/video_fulldescriptions.json'
+      );
+      expect(videos[0].description).toBe(FULL_DESCRIPTION);
     });
   });
 });

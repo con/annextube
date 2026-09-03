@@ -106,6 +106,18 @@ bot detection. To run the full test suite including network tests:
 Without cookies, network tests will fail with "Sign in to confirm you're
 not a bot" errors. Non-network tests always work without cookies.
 
+**git-annex for tests**: many backend tests exercise git-annex/DataLad and
+need the `git-annex` binary. If it is not installed system-wide (e.g. in
+Claude Code web containers), install it from PyPI into the project venv:
+
+```bash
+uv pip install git-annex
+```
+
+The binary lands in `.venv/bin/`, so it is found whenever tests run via
+`uv run` (e.g. `uv run pytest tests/`). Without it, dozens of
+git-annex/DataLad tests fail with "git: 'annex' is not a git command".
+
 **CLI Usage**:
 ```bash
 # Create archive

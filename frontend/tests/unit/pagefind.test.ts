@@ -7,7 +7,8 @@
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import {
   initPagefind,
-  searchCaptions,
+  searchFull,
+  sanitizeExcerpt,
   formatTimestamp,
   _resetForTesting,
   type PagefindResult,
@@ -40,6 +41,86 @@ function makeMockPagefind(results: PagefindResult[]): PagefindInstance {
     search: vi.fn().mockResolvedValue({ results }),
   };
 }
+
+// ---------- sanitizeExcerpt (XSS in YouTube-sourced excerpts) ----------
+
+describe('sanitizeExcerpt', () => {
+  test('keeps Pagefind <mark> highlights', () => {
+    expect(sanitizeExcerpt('some <mark>caption</mark> text')).toBe(
+      'some <mark>caption</mark> text'
+    );
+  });
+
+  test('leaves an already-escaped Pagefind excerpt untouched', () => {
+    // What Pagefind 1.x actually returns for a description containing
+    // `<img src=x onerror=...>` -- it must render as the text the author
+    // typed, not as doubly-escaped entities.
+    const pagefindExcerpt =
+      'Payload &lt;img src=x onerror="alert(1)"&gt; <mark>ambush</mark>';
+    expect(sanitizeExcerpt(pagefindExcerpt)).toBe(pagefindExcerpt);
+  });
+
+  test('escapes raw markup should an excerpt ever carry it', () => {
+    const safe = sanitizeExcerpt('see <img src=x onerror=alert(1)> now');
+    expect(safe).toBe('see &lt;img src=x onerror=alert(1)&gt; now');
+    expect(safe).not.toContain('<img');
+  });
+
+  test('escapes a raw script tag around a highlight', () => {
+    expect(sanitizeExcerpt('<script>alert(1)</script> <mark>hit</mark>')).toBe(
+      '&lt;script&gt;alert(1)&lt;/script&gt; <mark>hit</mark>'
+    );
+  });
+
+  test('does not touch ampersands (entities cannot form elements)', () => {
+    expect(sanitizeExcerpt('a & b "q" <mark>c</mark>')).toBe(
+      'a & b "q" <mark>c</mark>'
+    );
+  });
+
+  test('a mark tag carrying attributes is escaped, not rendered', () => {
+    expect(sanitizeExcerpt('<mark onmouseover=alert(1)>x</mark>')).toBe(
+      '&lt;mark onmouseover=alert(1)&gt;x</mark>'
+    );
+  });
+
+  test('literal <mark> text in a description is inert markup at worst', () => {
+    // Restoring it can only ever produce a bare <mark> element
+    expect(sanitizeExcerpt('I typed <mark> myself')).toBe('I typed <mark> myself');
+  });
+});
+
+describe('searchFull sanitizes excerpts at the boundary', () => {
+  beforeEach(() => {
+    _resetForTesting(null);
+  });
+
+  test('description and caption excerpts are sanitized', async () => {
+    const attack = '<img src=x onerror=alert(1)> <mark>hit</mark>';
+    const meta = { video_id: 'abc123', title: 'T' };
+    const metadataRecord = makeData({
+      url: '#/video/abc123',
+      excerpt: attack,
+      meta: { ...meta, record_type: 'metadata' },
+    });
+    const captionRecord = makeData({
+      url: '/videos/abc123/video.en.vtt#t=10',
+      excerpt: attack,
+      meta: { ...meta, record_type: 'caption' },
+    });
+    _resetForTesting(
+      makeMockPagefind([makeResult(metadataRecord), makeResult(captionRecord)])
+    );
+
+    const groups = await searchFull('hit');
+
+    const expected = '&lt;img src=x onerror=alert(1)&gt; <mark>hit</mark>';
+    expect(groups[0].descriptionMatch?.excerpt).toBe(expected);
+    expect(groups[0].allMatches[0].excerpt).toBe(expected);
+    // primaryExcerpt is taken from those, so it is sanitized too
+    expect(groups[0].primaryExcerpt).toBe(expected);
+  });
+});
 
 // ---------- formatTimestamp ----------
 
@@ -107,9 +188,9 @@ describe('initPagefind', () => {
   });
 });
 
-// ---------- searchCaptions ----------
+// ---------- searchFull ----------
 
-describe('searchCaptions', () => {
+describe('searchFull', () => {
   beforeEach(() => {
     _resetForTesting();
   });
@@ -118,7 +199,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('');
+    const results = await searchFull('');
     expect(results).toEqual([]);
   });
 
@@ -126,13 +207,13 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('   ');
+    const results = await searchFull('   ');
     expect(results).toEqual([]);
   });
 
   test('returns empty array when pagefind is not available', async () => {
     // _resetForTesting() was called without a mock, so pagefind is unavailable
-    const results = await searchCaptions('test query');
+    const results = await searchFull('test query');
     expect(results).toEqual([]);
   });
 
@@ -156,7 +237,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2), makeResult(d3)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('match');
+    const results = await searchFull('match');
 
     // Should produce 2 groups: vid1 (first seen) and vid2
     expect(results).toHaveLength(2);
@@ -194,7 +275,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2), makeResult(d3)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('match');
+    const results = await searchFull('match');
     expect(results).toHaveLength(1);
 
     const group = results[0];
@@ -224,7 +305,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results[0].videoId).toBe('vid2');
     expect(results[1].videoId).toBe('vid1');
   });
@@ -244,7 +325,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1), makeResult(d2)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results).toHaveLength(1);
     expect(results[0].videoId).toBe('vid1');
   });
@@ -259,7 +340,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results[0].primaryTimestamp).toBe(123);
   });
 
@@ -273,7 +354,7 @@ describe('searchCaptions', () => {
     const mock = makeMockPagefind([makeResult(d1)]);
     _resetForTesting(mock);
 
-    const results = await searchCaptions('test');
+    const results = await searchFull('test');
     expect(results[0].primaryTimestamp).toBe(0);
   });
 
@@ -283,9 +364,103 @@ describe('searchCaptions', () => {
     _resetForTesting(mock);
 
     const filters = { language: ['en'] };
-    await searchCaptions('test', filters);
+    await searchFull('test', filters);
 
     expect(searchFn).toHaveBeenCalledWith('test', { filters });
+  });
+});
+
+// ---------- metadata records (FR-042f) ----------
+
+describe('searchFull with metadata records', () => {
+  beforeEach(() => {
+    _resetForTesting();
+  });
+
+  function makeMetadataData(videoId: string, excerpt: string): PagefindResultData {
+    return makeData({
+      url: `#/video/${videoId}`,
+      excerpt,
+      meta: {
+        video_id: videoId,
+        title: `Title ${videoId}`,
+        channel_name: 'Ch',
+        upload_date: '2024-01-01',
+        record_type: 'metadata',
+      },
+    });
+  }
+
+  function makeCaptionData(
+    videoId: string, t: number, excerpt: string
+  ): PagefindResultData {
+    return makeData({
+      url: `#/video/${videoId}?t=${t}`,
+      excerpt,
+      meta: {
+        video_id: videoId,
+        title: `Title ${videoId}`,
+        channel_name: 'Ch',
+        upload_date: '2024-01-01',
+        record_type: 'caption',
+      },
+    });
+  }
+
+  test('description-only match produces a group without caption matches', async () => {
+    const mock = makeMockPagefind([
+      makeResult(makeMetadataData('vid1', 'by <mark>Halchenko</mark>')),
+    ]);
+    _resetForTesting(mock);
+
+    const results = await searchFull('Halchenko');
+
+    expect(results).toHaveLength(1);
+    const group = results[0];
+    expect(group.videoId).toBe('vid1');
+    expect(group.descriptionMatch?.excerpt).toBe('by <mark>Halchenko</mark>');
+    expect(group.allMatches).toHaveLength(0);
+    expect(group.matchCount).toBe(1);
+    // No timestamp for a description match
+    expect(group.primaryTimestamp).toBe(-1);
+    expect(group.primaryExcerpt).toBe('by <mark>Halchenko</mark>');
+  });
+
+  test('metadata and caption matches merge into one group', async () => {
+    const mock = makeMockPagefind([
+      makeResult(makeMetadataData('vid1', 'description <mark>hit</mark>')),
+      makeResult(makeCaptionData('vid1', 42, 'caption <mark>hit</mark>')),
+    ]);
+    _resetForTesting(mock);
+
+    const results = await searchFull('hit');
+
+    expect(results).toHaveLength(1);
+    const group = results[0];
+    expect(group.descriptionMatch?.excerpt).toBe('description <mark>hit</mark>');
+    expect(group.allMatches).toHaveLength(1);
+    expect(group.matchCount).toBe(2);
+    // Primary stays the earliest caption match when captions matched
+    expect(group.primaryTimestamp).toBe(42);
+    expect(group.primaryExcerpt).toBe('caption <mark>hit</mark>');
+  });
+
+  test('records without record_type are treated as captions (old indexes)', async () => {
+    const mock = makeMockPagefind([
+      makeResult(makeData({
+        url: '/videos/vid1/video.en.vtt#t=10',
+        excerpt: 'legacy record',
+        meta: { video_id: 'vid1', title: 'V', channel_name: 'C', upload_date: '' },
+      })),
+    ]);
+    _resetForTesting(mock);
+
+    const results = await searchFull('legacy');
+
+    expect(results).toHaveLength(1);
+    expect(results[0].descriptionMatch).toBeUndefined();
+    expect(results[0].allMatches).toHaveLength(1);
+    expect(results[0].matchCount).toBe(1);
   });
 });
 
@@ -297,7 +472,7 @@ describe('searchCaptions', () => {
 // with pagefind 1.x: ~512 whole-word/stemmed, ~389 query-is-prefix,
 // ~221 truncated-word fallback. Only the last is approximate.
 
-describe('searchCaptions approximate detection', () => {
+describe('searchFull approximate detection', () => {
   beforeEach(() => {
     _resetForTesting();
   });
@@ -317,7 +492,7 @@ describe('searchCaptions approximate detection', () => {
     });
     _resetForTesting(makeMockPagefind([makeResult(d)]));
 
-    const results = await searchCaptions('reprostim');
+    const results = await searchFull('reprostim');
     expect(results).toHaveLength(1);
     expect(results[0].approximate).toBe(true);
   });
@@ -331,7 +506,7 @@ describe('searchCaptions approximate detection', () => {
     });
     _resetForTesting(makeMockPagefind([makeResult(d)]));
 
-    const results = await searchCaptions('pizzas');
+    const results = await searchFull('pizzas');
     expect(results[0].approximate).toBe(false);
   });
 
@@ -344,7 +519,7 @@ describe('searchCaptions approximate detection', () => {
     });
     _resetForTesting(makeMockPagefind([makeResult(d)]));
 
-    const results = await searchCaptions('datala');
+    const results = await searchFull('datala');
     expect(results[0].approximate).toBe(false);
   });
 
@@ -352,8 +527,18 @@ describe('searchCaptions approximate detection', () => {
     const d = makeData({ meta });
     _resetForTesting(makeMockPagefind([makeResult(d)]));
 
-    const results = await searchCaptions('caption');
+    const results = await searchFull('caption');
     expect(results[0].approximate).toBe(false);
+  });
+
+  test('results with an empty weighted_locations array are approximate', async () => {
+    // A record can match with no word-level evidence -- e.g. a metadata
+    // record hit only via a tag. Distinct from the field being absent.
+    const d = makeData({ meta, weighted_locations: [] });
+    _resetForTesting(makeMockPagefind([makeResult(d)]));
+
+    const results = await searchFull('reprostim');
+    expect(results[0].approximate).toBe(true);
   });
 
   test('one genuine chunk makes the whole video genuine; approximate-only videos stay flagged', async () => {
@@ -374,7 +559,7 @@ describe('searchCaptions approximate detection', () => {
     });
     _resetForTesting(makeMockPagefind([makeResult(approx1), makeResult(genuine), makeResult(approx2)]));
 
-    const results = await searchCaptions('reprostim');
+    const results = await searchFull('reprostim');
     expect(results).toHaveLength(2);
     expect(results[0].videoId).toBe('vid1');
     expect(results[0].approximate).toBe(false);
@@ -396,7 +581,7 @@ describe('searchCaptions approximate detection', () => {
     // Pagefind ranks the approximate video first (e.g. more fallback hits)
     _resetForTesting(makeMockPagefind([makeResult(approx), makeResult(genuine)]));
 
-    const results = await searchCaptions('reprostim');
+    const results = await searchFull('reprostim');
     expect(results.map((r) => r.videoId)).toEqual(['tight', 'loose']);
   });
 });

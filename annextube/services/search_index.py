@@ -1,9 +1,14 @@
-"""Pagefind-based full-text caption search index builder.
+"""Pagefind-based full-text search index builder.
 
-Builds a Pagefind search index from VTT caption files during ``generate-web``.
-Curated VTTs are preferred; original VTTs serve as a fallback.  Each VTT is
-parsed into cues, grouped into paragraph-sized chunks, and added as custom
-records so that Pagefind can serve cross-caption search from static files.
+Builds a Pagefind search index during ``generate-web`` from two record kinds
+(distinguished by ``record_type`` in meta and filters, FR-042f):
+
+- **metadata**: one record per video (title + description + tags), so every
+  video is findable even without captions;
+- **caption**: VTT caption chunks.  Curated VTTs are preferred; original VTTs
+  serve as a fallback.  Each VTT is parsed into cues, grouped into
+  paragraph-sized chunks, and added as custom records so that Pagefind can
+  serve cross-caption search from static files.
 
 When the archive is a DataLad dataset, the index output at ``web/pagefind/``
 is managed as a DataLad subdataset (git submodule) with ``cfg_proc=text2git``
@@ -63,13 +68,20 @@ class CaptionChunk:
 
 @dataclass
 class IndexStats:
-    """Statistics from a search index build."""
+    """Statistics from a search index build.
+
+    ``videos_indexed``/``videos_curated``/``videos_original`` count videos
+    with indexed captions; ``videos_skipped`` counts videos whose
+    metadata.json could not be read; ``metadata_records`` counts per-video
+    metadata records (FR-042f).
+    """
 
     videos_indexed: int = 0
     videos_curated: int = 0
     videos_original: int = 0
     videos_skipped: int = 0
     chunks_created: int = 0
+    metadata_records: int = 0
     index_size_bytes: int = 0
 
 
@@ -278,11 +290,16 @@ def _current_head(repo: Path) -> str | None:
         return None
 
 
-def _vtt_changed_since(repo: Path, since_commit: str) -> bool:
-    """Return *True* if any ``*.vtt`` file changed between *since_commit* and HEAD."""
+def _content_changed_since(repo: Path, since_commit: str) -> bool:
+    """Return *True* if indexed content changed between *since_commit* and HEAD.
+
+    Covers both caption files (``*.vtt``) and per-video ``metadata.json``
+    (titles/descriptions/tags feed the metadata records, FR-042f).
+    """
     try:
         result = subprocess.run(
-            ["git", "diff", "-z", "--name-only", since_commit, "HEAD", "--", "*.vtt"],
+            ["git", "diff", "-z", "--name-only", since_commit, "HEAD",
+             "--", "*.vtt", "*/metadata.json"],
             capture_output=True,
             text=True,
             cwd=repo,
@@ -637,9 +654,9 @@ async def build_caption_index(
                     head[:8],
                 )
                 return stats
-            if head and not _vtt_changed_since(archive_path, last_commit):
+            if head and not _content_changed_since(archive_path, last_commit):
                 logger.info(
-                    "Search index up to date (no caption changes since %s)",
+                    "Search index up to date (no caption/metadata changes since %s)",
                     last_commit[:8],
                 )
                 return stats
@@ -673,16 +690,45 @@ async def build_caption_index(
                 stats.videos_skipped += 1
                 continue
 
-            vtt_path, source = _find_vtt(video_dir)
-            if vtt_path is None:
-                stats.videos_skipped += 1
-                continue
-
             video_id = meta.get("video_id", "")
             title = meta.get("title", "")
             channel_name = meta.get("channel_name", meta.get("uploader", ""))
             upload_date = meta.get("published_at", "")[:10]  # YYYY-MM-DD
             year = upload_date[:4] if upload_date else ""
+
+            # One metadata record per video (title + description + tags) so
+            # every video is findable even without captions (FR-042f)
+            description = meta.get("description") or ""
+            tags = meta.get("tags") or []
+            metadata_content = "\n\n".join(
+                part for part in (title, description, ", ".join(tags)) if part
+            )
+            await index.add_custom_record(
+                url=f"#/video/{video_id}",
+                content=metadata_content,
+                language=meta.get("language") or "en",
+                meta={
+                    "title": title,
+                    "video_id": video_id,
+                    "channel_name": channel_name,
+                    "upload_date": upload_date,
+                    "record_type": "metadata",
+                },
+                filters={
+                    "record_type": ["metadata"],
+                    "channel_name": [channel_name],
+                    "year": [year],
+                    "language": [meta.get("language") or "en"],
+                },
+                sort={
+                    "date": upload_date,
+                },
+            )
+            stats.metadata_records += 1
+
+            vtt_path, source = _find_vtt(video_dir)
+            if vtt_path is None:
+                continue  # no captions; the metadata record still covers it
 
             # Detect language from filename: video.en.vtt or video.en-curated.vtt
             lang = "en"
@@ -695,17 +741,14 @@ async def build_caption_index(
             # Skip annexed VTT files whose content isn't available locally
             if vtt_path.is_symlink() and not vtt_path.exists():
                 logger.debug("Skipping %s (annexed, content not available)", vtt_path)
-                stats.videos_skipped += 1
                 continue
 
             try:
                 cues = parse_vtt(vtt_path)
             except OSError as exc:
-                logger.warning("Skipping %s: %s", vtt_path, exc)
-                stats.videos_skipped += 1
+                logger.warning("Skipping captions %s: %s", vtt_path, exc)
                 continue
             if not cues:
-                stats.videos_skipped += 1
                 continue
 
             chunks = chunk_vtt_cues(cues)
@@ -733,8 +776,10 @@ async def build_caption_index(
                         "channel_name": channel_name,
                         "upload_date": upload_date,
                         "timestamp": str(start_seconds),
+                        "record_type": "caption",
                     },
                     filters={
+                        "record_type": ["caption"],
                         "channel_name": [channel_name],
                         "year": [year],
                         "language": [lang],
@@ -746,8 +791,9 @@ async def build_caption_index(
                 stats.chunks_created += 1
 
         logger.info(
-            "Indexed %d videos, %d chunks — writing index files...",
-            stats.videos_indexed, stats.chunks_created,
+            "Indexed %d captioned videos (%d chunks), %d metadata records "
+            "— writing index files...",
+            stats.videos_indexed, stats.chunks_created, stats.metadata_records,
         )
         await _pagefind_write_files(service, index, tmpdir)
         logger.info("Index files written to temp dir")
@@ -776,12 +822,13 @@ async def build_caption_index(
         _save_pagefind_subdataset(archive_path)
 
     logger.info(
-        "Caption search index built: %d videos (%d curated, %d original), "
-        "%d chunks, %.1f MB",
+        "Search index built: %d captioned videos (%d curated, %d original), "
+        "%d chunks, %d metadata records, %.1f MB",
         stats.videos_indexed,
         stats.videos_curated,
         stats.videos_original,
         stats.chunks_created,
+        stats.metadata_records,
         stats.index_size_bytes / (1024 * 1024),
     )
 

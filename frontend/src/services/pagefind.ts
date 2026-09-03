@@ -1,8 +1,14 @@
 /**
  * Pagefind Service
  *
- * Provides full-text search across closed captions using Pagefind.
- * Lazily loads the Pagefind library and groups results by video.
+ * Provides full-text search across video metadata (title, description, tags)
+ * and closed captions using Pagefind ("Full" search mode). Records carry a
+ * record_type of 'metadata' or 'caption' (FR-042f); records without one come
+ * from pre-FR-042f indexes and are treated as captions.
+ * Lazily loads the Pagefind library, groups results by video, and flags
+ * videos whose only matches are Pagefind's truncated-word fallback.
+ * Excerpts are sanitized here, at the boundary where untrusted YouTube
+ * content enters the app, so every consumer can render them with {@html}.
  */
 
 /** Shape of a single result returned by the Pagefind JS API */
@@ -32,27 +38,38 @@ export interface PagefindResultData {
 
 /** A single caption match within a grouped result */
 export interface CaptionMatch {
+  /** Sanitized by sanitizeExcerpt(): safe to render with {@html} */
   excerpt: string;
   timestamp: number;
   url: string;
 }
 
-/** Results grouped by video -- one entry per video regardless of how many chunks matched */
-export interface GroupedCaptionResult {
+/** Results grouped by video -- one entry per video regardless of how many records matched */
+export interface GroupedSearchResult {
   videoId: string;
   title: string;
   channelName: string;
   uploadDate: string;
   thumbnailUrl: string;
+  /** Caption matches + 1 if the metadata record (description) matched */
   matchCount: number;
-  /** First (earliest timestamp) match */
+  /**
+   * Earliest-timestamp caption match; falls back to the description match
+   * when no captions matched (then primaryTimestamp is -1).
+   * Sanitized by sanitizeExcerpt(): safe to render with {@html}
+   */
   primaryExcerpt: string;
   primaryTimestamp: number;
   primaryUrl: string;
-  /** All matches for expansion, sorted by timestamp ascending */
+  /** Caption matches for expansion, sorted by timestamp ascending */
   allMatches: CaptionMatch[];
   /**
-   * True when none of this video's matched chunks actually contain the
+   * Match on the video's metadata record (title/description/tags), if any.
+   * The excerpt is sanitized by sanitizeExcerpt(): safe to render with {@html}
+   */
+  descriptionMatch?: { excerpt: string };
+  /**
+   * True when none of this video's matched records actually contain the
    * query -- Pagefind only matched a shorter indexed word (e.g. query
    * "reprostim" matching just "repro"). Absent/false means genuine.
    */
@@ -136,29 +153,65 @@ function parseTimestamp(url: string): number {
 const GENUINE_MATCH_MIN_SCORE = 300;
 
 /**
- * True when a result chunk contains no genuine match for the query,
+ * True when a result record contains no genuine match for the query,
  * i.e. Pagefind only matched via its truncated-word fallback.
- * Chunks without score data (older index) are treated as genuine.
+ *
+ * The two "no scores" cases differ and must not be conflated:
+ *   - field absent  -> index predates per-word scores; assume genuine
+ *   - empty array   -> the record matched with no word-level evidence at
+ *     all (e.g. a metadata record hit only through a tag). That is never
+ *     a genuine content match, and treating it as one would rank an
+ *     unrelated video above the near-misses.
  */
 function isApproximateMatch(data: PagefindResultData): boolean {
   const locations = data.weighted_locations;
-  if (!locations || locations.length === 0) return false;
+  if (!locations) return false;
+  if (locations.length === 0) return true;
   return locations.every((loc) => loc.balanced_score < GENUINE_MATCH_MIN_SCORE);
 }
 
 /**
- * Search captions via Pagefind, group results by video, and return
- * sorted GroupedCaptionResult[].
+ * Neutralize any markup in a Pagefind excerpt except its own <mark> highlights.
+ *
+ * Excerpts come from video descriptions and captions -- YouTube content we
+ * do not control -- and are rendered with {@html}.  Pagefind 1.x escapes
+ * `<` and `>` in the excerpt itself (its `content` field keeps them raw), so
+ * a description holding `<img src=x onerror=...>` currently reaches the DOM
+ * as text.  This does not depend on that: it escapes any remaining raw tag
+ * delimiter and restores only the exact <mark>/</mark> pair, so no
+ * attacker-supplied markup can become an element even if a future Pagefind
+ * stops escaping -- an allowlist by construction, mirroring what
+ * CaptionBrowser's highlightText() does for VTT cues.
+ *
+ * `&` is deliberately left alone: escaping it would double-escape
+ * Pagefind's own entities and show `&lt;img&gt;` to the reader instead of
+ * the `<img>` they typed.  Entities can never create an element, so
+ * leaving them is safe.  Highlight markup carrying attributes (Pagefind
+ * emits none) renders escaped rather than as an element: degraded
+ * highlighting, never injection.
+ */
+export function sanitizeExcerpt(excerpt: string): string {
+  return excerpt
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&lt;mark&gt;/g, '<mark>')
+    .replace(/&lt;\/mark&gt;/g, '</mark>');
+}
+
+/**
+ * Search metadata + captions via Pagefind ("Full" mode), group results by
+ * video, and return sorted GroupedSearchResult[].
  *
  * Groups are ordered by best match relevance (Pagefind's native ordering
- * determines which video appears first).  Within each group, matches are
- * sorted by timestamp ascending so the earliest match is the "primary"
- * one shown in the collapsed view.
+ * determines which video appears first).  Within each group, caption matches
+ * are sorted by timestamp ascending so the earliest match is the "primary"
+ * one shown in the collapsed view; a match on the video's metadata record
+ * (description) is kept separately in descriptionMatch.
  */
-export async function searchCaptions(
+export async function searchFull(
   query: string,
   filters?: Record<string, string[]>,
-): Promise<GroupedCaptionResult[]> {
+): Promise<GroupedSearchResult[]> {
   if (!pagefindInstance) {
     const ready = await initPagefind();
     if (!ready) return [];
@@ -176,54 +229,67 @@ export async function searchCaptions(
   // Group by video_id (from meta)
   // We preserve Pagefind's result ordering to determine group relevance:
   // the first occurrence of a video_id sets that group's position.
-  const groupMap = new Map<string, GroupedCaptionResult>();
+  const groupMap = new Map<string, GroupedSearchResult>();
   const groupOrder: string[] = [];
 
   for (const data of allData) {
     const videoId = data.meta?.video_id;
     if (!videoId) continue;
 
-    const timestamp = parseTimestamp(data.url);
-    const match: CaptionMatch = {
-      excerpt: data.excerpt,
-      timestamp,
-      url: data.url,
-    };
-    const approximate = isApproximateMatch(data);
-
-    const existing = groupMap.get(videoId);
-    if (existing) {
-      existing.matchCount += 1;
-      existing.allMatches.push(match);
-      // A single genuine chunk makes the whole video genuine
-      existing.approximate = existing.approximate && approximate;
-    } else {
+    let group = groupMap.get(videoId);
+    if (!group) {
       groupOrder.push(videoId);
-      groupMap.set(videoId, {
+      group = {
         videoId,
         title: data.meta?.title || videoId,
         channelName: data.meta?.channel_name || '',
         uploadDate: data.meta?.upload_date || '',
         thumbnailUrl: data.meta?.thumbnail_url || '',
-        matchCount: 1,
-        approximate,
-        // Placeholders -- will be finalized after sorting matches
-        primaryExcerpt: match.excerpt,
-        primaryTimestamp: match.timestamp,
-        primaryUrl: match.url,
-        allMatches: [match],
+        matchCount: 0,
+        // AND-ed over every matched record below: one genuine record
+        // makes the whole video genuine
+        approximate: true,
+        // Placeholders -- finalized below once all matches are collected
+        primaryExcerpt: '',
+        primaryTimestamp: -1,
+        primaryUrl: `#/video/${videoId}`,
+        allMatches: [],
+      };
+      groupMap.set(videoId, group);
+    }
+
+    group.approximate = group.approximate && isApproximateMatch(data);
+
+    if (data.meta?.record_type === 'metadata') {
+      // At most one metadata record per video
+      if (!group.descriptionMatch) {
+        group.descriptionMatch = { excerpt: sanitizeExcerpt(data.excerpt) };
+        group.matchCount += 1;
+      }
+    } else {
+      // 'caption' or absent (pre-FR-042f index)
+      group.allMatches.push({
+        excerpt: sanitizeExcerpt(data.excerpt),
+        timestamp: parseTimestamp(data.url),
+        url: data.url,
       });
+      group.matchCount += 1;
     }
   }
 
-  // Sort matches within each group by timestamp and set primary to earliest
-  const grouped: GroupedCaptionResult[] = [];
+  // Sort caption matches by timestamp; primary is the earliest caption
+  // match, or the description match (timestamp -1) when no captions matched
+  const grouped: GroupedSearchResult[] = [];
   for (const videoId of groupOrder) {
     const group = groupMap.get(videoId)!;
     group.allMatches.sort((a, b) => a.timestamp - b.timestamp);
-    group.primaryExcerpt = group.allMatches[0].excerpt;
-    group.primaryTimestamp = group.allMatches[0].timestamp;
-    group.primaryUrl = group.allMatches[0].url;
+    if (group.allMatches.length > 0) {
+      group.primaryExcerpt = group.allMatches[0].excerpt;
+      group.primaryTimestamp = group.allMatches[0].timestamp;
+      group.primaryUrl = group.allMatches[0].url;
+    } else if (group.descriptionMatch) {
+      group.primaryExcerpt = group.descriptionMatch.excerpt;
+    }
     grouped.push(group);
   }
 

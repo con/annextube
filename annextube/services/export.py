@@ -7,12 +7,28 @@ from pathlib import Path
 
 import magic
 
+from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
 from annextube.lib.tsv_utils import escape_tsv_field
 
 from .authors import AuthorsService
 
 logger = get_logger(__name__)
+
+# Full-description lookup exported next to videos.tsv (FR-042d). Stored under
+# the archive's normal .gitattributes rules -- large ones are annexed, and
+# their content simply needs to be deposited for the web UI to read them.
+FULLDESCRIPTIONS_FILENAME = "video_fulldescriptions.json"
+
+
+def first_description_line(text: str | None) -> str:
+    """Return the first non-empty line of a video description, stripped.
+
+    Handles LF, CRLF and CR line endings via str.splitlines().
+    """
+    if not text:
+        return ""
+    return next((line.strip() for line in text.splitlines() if line.strip()), "")
 
 
 class ExportService:
@@ -27,7 +43,8 @@ class ExportService:
         self.repo_path = repo_path
 
     def generate_videos_tsv(self, output_path: Path | None = None,
-                            base_dir: Path | None = None) -> Path:
+                            base_dir: Path | None = None,
+                            write_fulldescriptions: bool = True) -> Path:
         """Generate videos.tsv with summary metadata for all videos in a directory.
 
         Scans base_dir for metadata.json files (follows symlinks) and extracts
@@ -38,6 +55,9 @@ class ExportService:
             output_path: Optional custom output path (default: base_dir/videos.tsv)
             base_dir: Directory to scan for metadata.json files
                       (default: repo_path/videos/)
+            write_fulldescriptions: Also write video_fulldescriptions.json next
+                      to the TSV (FR-042d). Disabled for per-playlist exports,
+                      which would duplicate the channel-level lookup.
 
         Returns:
             Path to generated TSV file
@@ -53,6 +73,10 @@ class ExportService:
         if not base_dir.exists():
             logger.warning(f"Directory {base_dir} does not exist, creating empty TSV")
             self._write_empty_videos_tsv(output_path)
+            if write_fulldescriptions:
+                self._write_fulldescriptions_json(
+                    output_path.parent / FULLDESCRIPTIONS_FILENAME, {}
+                )
             return output_path
 
         # Collect video metadata
@@ -61,6 +85,7 @@ class ExportService:
         # Use os.walk with followlinks=True because Path.rglob does NOT
         # follow directory symlinks (playlist dirs contain symlinks to video dirs)
         videos = []
+        fulldescriptions: dict[str, str] = {}
         metadata_paths: list[Path] = []
         for root, _dirs, files in os.walk(base_dir, followlinks=True):
             if "metadata.json" in files:
@@ -154,8 +179,20 @@ class ExportService:
                     "download_status": download_status,
                     "source_url": f"https://www.youtube.com/watch?v={video_id}",
                     "path": str(relative_path),  # Relative to videos/ directory (e.g., "2026/01/video_dir" for hierarchical)
+                    # First non-empty line only; full text goes to
+                    # video_fulldescriptions.json (FR-042d)
+                    "description": first_description_line(metadata.get("description")),
                 }
                 videos.append(video_entry)
+
+                # Only videos whose description does NOT fit on the single
+                # TSV line need an entry here -- for the rest the TSV column
+                # already carries the whole text (FR-042d)
+                description = metadata.get("description") or ""
+                if description.strip() and description.strip() != first_description_line(
+                    description
+                ):
+                    fulldescriptions[video_id] = description
 
             except Exception as e:
                 logger.error(f"Failed to read metadata from {video_dir.relative_to(base_dir)}: {e}")
@@ -163,6 +200,11 @@ class ExportService:
         # Write TSV file
         self._write_videos_tsv(output_path, videos)
         logger.info(f"Generated videos.tsv with {len(videos)} entries")
+
+        if write_fulldescriptions:
+            self._write_fulldescriptions_json(
+                output_path.parent / FULLDESCRIPTIONS_FILENAME, fulldescriptions
+            )
 
         return output_path
 
@@ -231,7 +273,9 @@ class ExportService:
                 playlists.append(playlist_entry)
 
                 # Generate per-playlist videos.tsv
-                self.generate_videos_tsv(base_dir=playlist_dir)
+                self.generate_videos_tsv(
+                    base_dir=playlist_dir, write_fulldescriptions=False
+                )
 
             except Exception as e:
                 logger.error(f"Failed to read metadata from {playlist_dir.name}: {e}")
@@ -430,7 +474,8 @@ class ExportService:
             # Write header (frontend-compatible format)
             f.write("video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\t"
                     "duration\tview_count\tlike_count\tcomment_count\t"
-                    "thumbnail_url\tdownload_status\tsource_url\tpath\n")
+                    "thumbnail_url\tdownload_status\tsource_url\tpath\t"
+                    "description\n")
 
             # Write rows (escape special characters in string fields)
             for video in videos:
@@ -447,8 +492,35 @@ class ExportService:
                     f"{escape_tsv_field(video['thumbnail_url'])}\t"
                     f"{escape_tsv_field(video['download_status'])}\t"
                     f"{escape_tsv_field(video['source_url'])}\t"
-                    f"{escape_tsv_field(video['path'])}\n"
+                    f"{escape_tsv_field(video['path'])}\t"
+                    f"{escape_tsv_field(video.get('description', ''))}\n"
                 )
+
+    def _write_fulldescriptions_json(
+        self, output_path: Path, fulldescriptions: dict[str, str]
+    ) -> None:
+        """Write the {video_id: full description} lookup (FR-042d).
+
+        Only videos whose description does not fit on the single ``videos.tsv``
+        line get an entry; with no entries the file is not written at all (and
+        a stale one is removed).  Sorted keys and fixed formatting keep
+        re-exports byte-identical for unchanged content (diffable in git).
+        """
+        if not fulldescriptions:
+            if output_path.exists() or output_path.is_symlink():
+                output_path.unlink()
+            logger.debug(
+                f"No multi-line descriptions; skipping {output_path.name}"
+            )
+            return
+
+        with AtomicFileWriter(output_path) as f:
+            json.dump(fulldescriptions, f, indent=1, ensure_ascii=False,
+                      sort_keys=True)
+            f.write("\n")
+        logger.info(
+            f"Generated {output_path.name} with {len(fulldescriptions)} entries"
+        )
 
     def _write_playlists_tsv(self, output_path: Path, playlists: list[dict[str, str]]) -> None:
         """Write playlists to TSV file with proper escaping.
@@ -488,7 +560,8 @@ class ExportService:
         with open(output_path, "w", encoding="utf-8") as f:
             f.write("video_id\ttitle\tchannel_id\tchannel_name\tpublished_at\t"
                     "duration\tview_count\tlike_count\tcomment_count\t"
-                    "thumbnail_url\tdownload_status\tsource_url\tpath\n")
+                    "thumbnail_url\tdownload_status\tsource_url\tpath\t"
+                    "description\n")
 
     def _write_empty_playlists_tsv(self, output_path: Path) -> None:
         """Write empty playlists.tsv with header only.

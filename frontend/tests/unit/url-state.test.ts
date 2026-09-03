@@ -144,3 +144,87 @@ describe('URLStateManager', () => {
     expect(state.channels).toBeUndefined();
   });
 });
+
+describe('URLStateManager searchMode (FR-042g)', () => {
+  const urlStateManager = new URLStateManager();
+
+  test('parses mode=full', () => {
+    const state = urlStateManager.parseHash('#/?search=test&mode=full');
+    expect(state.searchMode).toBe('full');
+  });
+
+  test('maps legacy mode=captions to full', () => {
+    // Pre-rename shared URLs must keep working
+    const state = urlStateManager.parseHash('#/?search=test&mode=captions');
+    expect(state.searchMode).toBe('full');
+  });
+
+  test('absent mode leaves searchMode undefined (Metadata default)', () => {
+    const state = urlStateManager.parseHash('#/?search=test');
+    expect(state.searchMode).toBeUndefined();
+  });
+
+  test('encodes full mode as mode=full', () => {
+    const hash = urlStateManager.encodeHash({ search: 'x', searchMode: 'full' });
+    expect(hash).toContain('mode=full');
+  });
+
+  test('searchMode round-trips through encode/parse', () => {
+    const hash = urlStateManager.encodeHash({ search: 'x', searchMode: 'full' });
+    expect(urlStateManager.parseHash(hash).searchMode).toBe('full');
+  });
+});
+
+describe('URLStateManager route-prefixed hashes', () => {
+  const urlStateManager = new URLStateManager();
+
+  // Regression: parseHash stripped only a leading "#/" and parsed the rest as
+  // a query string, so on any non-root route the whole "route?param" became a
+  // single key and every filter param was silently dropped -- e.g. the shared
+  // link .../web/#/channel/ABCD-ReproNim_Course?search=Halchenko
+  test('parses search on a channel route', () => {
+    const state = urlStateManager.parseHash(
+      '#/channel/ABCD-ReproNim_Course?search=Halchenko',
+    );
+    expect(state.search).toBe('Halchenko');
+  });
+
+  test('parses all filter params on a channel route', () => {
+    const state = urlStateManager.parseHash(
+      '#/channel/ch-foo?search=x&from=2024-01-01&to=2024-12-31' +
+        '&channels=CH1,CH2&tags=t1&status=downloaded&playlists=PL1' +
+        '&sort=views&dir=asc&mode=full',
+    );
+    expect(state.search).toBe('x');
+    expect(state.dateFrom).toBe('2024-01-01');
+    expect(state.dateTo).toBe('2024-12-31');
+    expect(state.channels).toEqual(['CH1', 'CH2']);
+    expect(state.tags).toEqual(['t1']);
+    expect(state.downloadStatus).toEqual(['downloaded']);
+    expect(state.playlists).toEqual(['PL1']);
+    expect(state.sortField).toBe('views');
+    expect(state.sortDirection).toBe('asc');
+    expect(state.searchMode).toBe('full');
+  });
+
+  test('parses params on a nested video route', () => {
+    const state = urlStateManager.parseHash(
+      '#/channel/ch-foo/video/abc123?search=term',
+    );
+    expect(state.search).toBe('term');
+  });
+
+  test('route without query yields no params', () => {
+    const state = urlStateManager.parseHash('#/channel/ch-foo');
+    expect(state.search).toBeUndefined();
+    expect(state.sortField).toBeUndefined();
+  });
+
+  test('round-trips through encodeHash with a route prefix', () => {
+    const hash = urlStateManager.encodeHash(
+      { search: 'Halchenko' },
+      '/channel/ABCD-ReproNim_Course',
+    );
+    expect(urlStateManager.parseHash(hash).search).toBe('Halchenko');
+  });
+});

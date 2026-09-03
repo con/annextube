@@ -345,20 +345,62 @@ interface FilterConfig {
 
 Tab-separated file with summary metadata for all videos (FR-033).
 
-**Columns**:
+**Columns** (as written by `annextube/services/export.py`):
 ```
-video_id	title	channel_id	channel_name	published_at	duration	view_count	like_count	comment_count	has_captions	license	file_path	download_status	fetched_at
+video_id	title	channel_id	channel_name	published_at	duration	view_count	like_count	comment_count	thumbnail_url	download_status	source_url	path	description
 ```
+
+**Column stability guarantee**: `description` is always the **last** column, and
+any future column is only ever *appended* after it -- existing columns are never
+reordered, renamed or removed. Consumers must therefore parse by header name,
+which stays correct across re-exports; code parsing by *position* against the
+earlier 13-column layout silently misreads the trailing field and must be
+updated to read the header row.
 
 **Example**:
 ```
-dQw4w9WgXcQ	Never Gonna Give You Up	UCuAXFkgsw1L7xaCfnd5JJOw	Rick Astley	1987-11-12T00:00:00Z	213	1234567890	12345678	987654	en,es,fr	standard	videos/dQw4w9WgXcQ/video.mp4	downloaded	2026-01-24T12:00:00Z
+dQw4w9WgXcQ	Never Gonna Give You Up	UCuAXFkgsw1L7xaCfnd5JJOw	Rick Astley	1987-11-12T00:00:00Z	213	1234567890	12345678	987654	https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg	downloaded	https://www.youtube.com/watch?v=dQw4w9WgXcQ	1987/11/Never-Gonna-Give-You-Up_dQw4w9WgXcQ	The official video for "Never Gonna Give You Up"
 ```
+
+**Notes**:
+- `description` holds only the **first non-empty line** of the video description
+  (FR-042d); the complete text lives in `video_fulldescriptions.json` (below).
+  Tabs/newlines in fields are escaped per the shared TSV escaping rules.
 
 **Usage**:
 - Efficient querying without parsing individual JSON files
 - Loaded by web UI for fast filtering/search
 - Can be analyzed with DuckDB, Visidata, Excel
+
+---
+
+### video_fulldescriptions.json
+
+Complete video descriptions for search, exported next to `videos.tsv`
+(FR-042d/FR-042e; design: `.specify/specs/description-search.md`).
+
+**Location**: `videos/video_fulldescriptions.json` (single-channel) or
+`<channel_dir>/videos/video_fulldescriptions.json` (multi-channel, per channel).
+
+**Format**: flat JSON object with an entry only for videos whose description
+does not fit on the single `videos.tsv` line; sorted keys and small indent for
+deterministic, diffable re-exports. Not written at all when no video qualifies:
+```json
+{
+  "dQw4w9WgXcQ": "The official video for \"Never Gonna Give You Up\"\n\nStock Aitken Waterman..."
+}
+```
+
+**Storage**: the archive's normal `.gitattributes` rules apply — small files
+stay in git, larger ones are annexed and their content is deposited like any
+other archive file. The web UI degrades to the TSV first-line column (with a
+console warning) when the content is not available.
+
+**Usage**:
+- Fetched by the web UI in parallel with `videos.tsv` (one extra request) to
+  feed full descriptions into the client-side Metadata search index
+- Missing file (older archives, or no multi-line descriptions) degrades to the
+  TSV `description` first line
 
 ---
 

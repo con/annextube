@@ -12,8 +12,8 @@
   import { filterService } from '@/services/filter';
   import { sortService, type SortField, type SortDirection } from '@/services/sort';
   import { urlStateManager } from '@/services/url-state';
-  import { initPagefind, searchCaptions, type GroupedCaptionResult } from '@/services/pagefind';
-  import CaptionSearchResults from './CaptionSearchResults.svelte';
+  import { initPagefind, searchFull, type GroupedSearchResult } from '@/services/pagefind';
+  import FullSearchResults from './FullSearchResults.svelte';
 
   export let videos: Video[];
   export let playlists: Playlist[] = [];
@@ -21,10 +21,10 @@
   export let onCaptionSearchActive: ((active: boolean) => void) | undefined = undefined;
 
   // Caption search state
-  type SearchMode = 'videos' | 'captions';
-  let searchMode: SearchMode = 'videos';
+  type SearchMode = 'metadata' | 'full';
+  let searchMode: SearchMode = 'metadata';
   let pagefindAvailable = false;
-  let captionResults: GroupedCaptionResult[] = [];
+  let captionResults: GroupedSearchResult[] = [];
   let captionSearchLoading = false;
   let captionDebounceTimer: number;
 
@@ -53,10 +53,10 @@
     sortDirection = urlState.sortDirection || 'desc';
 
     // Restore caption search mode if pagefind is available
-    if (pagefindAvailable && urlState.searchMode === 'captions') {
-      searchMode = 'captions';
+    if (pagefindAvailable && urlState.searchMode === 'full') {
+      searchMode = 'full';
     } else {
-      searchMode = 'videos';
+      searchMode = 'metadata';
     }
 
     // Convert downloadStatus array to dropdown value
@@ -130,7 +130,7 @@
 
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
-      if (searchMode === 'videos') {
+      if (searchMode === 'metadata') {
         applyFilters();
       }
     }, 300);
@@ -156,8 +156,8 @@
   // Post-filter caption results by date range and playlists (Pagefind
   // only supports exact-match filters, not ranges or membership checks)
   function postFilterCaptionResults(
-    results: GroupedCaptionResult[],
-  ): GroupedCaptionResult[] {
+    results: GroupedSearchResult[],
+  ): GroupedSearchResult[] {
     let filtered = results;
 
     // Date range filter
@@ -196,13 +196,13 @@
     selectedPlaylists;
 
     clearTimeout(captionDebounceTimer);
-    if (searchMode === 'captions') {
+    if (searchMode === 'full') {
       updateURL();
       if (searchQuery.trim()) {
         captionSearchLoading = true;
         captionDebounceTimer = setTimeout(async () => {
           try {
-            const raw = await searchCaptions(searchQuery, buildPagefindFilters());
+            const raw = await searchFull(searchQuery, buildPagefindFilters());
             captionResults = postFilterCaptionResults(raw);
           } catch (err) {
             console.warn('Caption search failed:', err);
@@ -280,7 +280,7 @@
     urlDebounceTimer = setTimeout(() => {
       const newState = {
         search: searchQuery || undefined,
-        searchMode: searchMode === 'captions' ? 'captions' as const : undefined,
+        searchMode: searchMode === 'full' ? 'full' as const : undefined,
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
         channels: selectedChannels.length > 0 ? selectedChannels : undefined,
@@ -327,12 +327,12 @@
   }
 
   // Notify parent when caption search replaces the video grid
-  $: captionSearchIsActive = searchMode === 'captions' && (searchQuery.trim().length > 0 || captionSearchLoading);
+  $: captionSearchIsActive = searchMode === 'full' && (searchQuery.trim().length > 0 || captionSearchLoading);
   $: onCaptionSearchActive?.(captionSearchIsActive);
 
   function setSearchMode(mode: SearchMode) {
     searchMode = mode;
-    if (mode === 'videos') {
+    if (mode === 'metadata') {
       // Switching back to videos -- clear caption state and reapply filters
       captionResults = [];
       captionSearchLoading = false;
@@ -351,7 +351,7 @@
     selectedPlaylists = [];
     sortField = 'date';
     sortDirection = 'desc';
-    if (searchMode === 'captions') {
+    if (searchMode === 'full') {
       captionResults = [];
       captionSearchLoading = false;
     }
@@ -421,17 +421,17 @@
           <button
             role="tab"
             class="mode-tab"
-            class:active={searchMode === 'videos'}
-            aria-selected={searchMode === 'videos'}
-            on:click={() => setSearchMode('videos')}
-          >Videos</button>
+            class:active={searchMode === 'metadata'}
+            aria-selected={searchMode === 'metadata'}
+            on:click={() => setSearchMode('metadata')}
+          >Metadata</button>
           <button
             role="tab"
             class="mode-tab"
-            class:active={searchMode === 'captions'}
-            aria-selected={searchMode === 'captions'}
-            on:click={() => setSearchMode('captions')}
-          >Captions</button>
+            class:active={searchMode === 'full'}
+            aria-selected={searchMode === 'full'}
+            on:click={() => setSearchMode('full')}
+          >Full</button>
         </div>
       {/if}
     </div>
@@ -439,13 +439,13 @@
       id="search-input"
       type="text"
       bind:value={searchQuery}
-      placeholder={searchMode === 'captions' ? 'Search within captions...' : 'Search videos, channels, tags...'}
+      placeholder={searchMode === 'full' ? 'Search metadata and captions...' : 'Search titles, descriptions, tags...'}
       class="search-input"
     />
   </div>
 
-  {#if searchMode === 'captions' && (searchQuery.trim() || captionSearchLoading)}
-    <CaptionSearchResults
+  {#if searchMode === 'full' && (searchQuery.trim() || captionSearchLoading)}
+    <FullSearchResults
       results={captionResults}
       query={searchQuery}
       loading={captionSearchLoading}
