@@ -7,6 +7,7 @@ from pathlib import Path
 
 import magic
 
+from annextube.lib.file_utils import AtomicFileWriter
 from annextube.lib.logging_config import get_logger
 from annextube.lib.tsv_utils import escape_tsv_field
 
@@ -505,17 +506,15 @@ class ExportService:
         a stale one is removed).  Sorted keys and fixed formatting keep
         re-exports byte-identical for unchanged content (diffable in git).
         """
-        # Replace a stale file/annexed symlink (read-only object) if present
-        if output_path.is_symlink() or output_path.exists():
-            output_path.unlink()
-
         if not fulldescriptions:
+            if output_path.exists() or output_path.is_symlink():
+                output_path.unlink()
             logger.debug(
                 f"No multi-line descriptions; skipping {output_path.name}"
             )
             return
 
-        with open(output_path, "w", encoding="utf-8") as f:
+        with AtomicFileWriter(output_path) as f:
             json.dump(fulldescriptions, f, indent=1, ensure_ascii=False,
                       sort_keys=True)
             f.write("\n")
