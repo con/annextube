@@ -488,6 +488,8 @@ annextube backup
 - [X] T152 [US4] Reconcile with PR #7 (approximate caption matches) merged into master: keep both features in frontend/src/services/pagefind.ts (record_type split for descriptions AND per-record approximate scoring, a video approximate only when every matched record is, genuine videos listed first); carry #7's badge/count/notice onto FullSearchResults.svelte with wording generalized to descriptions ("No captions or descriptions contain '<query>'", "N videos with matches"); keep both test suites; renumber this branch's requirements FR-042c-f -> FR-042d-g since #7's FR-042c is authoritative, updating references across code, tests, docs and tasks (FR-042c-g)
 - [X] T153 [US4] Fix approximate classification for records that match with no word-level evidence in frontend/src/services/pagefind.ts: an absent weighted_locations field means the index predates per-word scores (genuine), but an empty array means no matching words at all and MUST count as approximate -- otherwise a video matched only through a tag outranks the near misses + test (FR-042c). Also forward PLAYWRIGHT_BROWSERS_PATH / PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD in the tox e2e and full envs so a pre-provisioned browser cache is used instead of re-downloading, and add the CHANGELOG entry
 
+- [X] T154 [US4] Address the second review of PR #6 (yarikoptic): sanitize Pagefind excerpts at the boundary in frontend/src/services/pagefind.ts before they reach the `{@html}` sites in FullSearchResults.svelte (escape raw tag delimiters, restore only `<mark>`, leave `&` alone so Pagefind's own entities are not double-escaped); detect an annex pointer in frontend/src/services/data-loader.ts by JSON parse failure rather than a substring test, so a genuine description quoting `/annex/objects/` is kept; warn in `deploy_frontend()` when a development checkout's built `web/` predates `frontend/src/` (the bundle is built at install time, so an unrebuilt checkout silently deploys the previous UI); state the videos.tsv column-stability guarantee in data-model.md + tests (FR-042d-g). Reviewer's own fix, `_write_fulldescriptions_json` using AtomicFileWriter with the empty-guard first, landed as 649752b
+
 **Checkpoint**: Searching a term that appears only in a video description returns that video in both Metadata and Full modes, including from a shared `#/channel/<dir>?search=...` link; old archives and old shared URLs keep working.
 
 ---
@@ -606,7 +608,7 @@ With multiple developers:
 
 ## Task Summary
 
-**Total Tasks**: 163 | **Completed**: 119 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
+**Total Tasks**: 164 | **Completed**: 120 | **Remaining**: 44 | **Obsolete**: 3 (T032, T033, T041 — included in Completed count)
 
 **Task Count by Phase** (completed / total):
 - Phase 1 (Setup): 6/6

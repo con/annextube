@@ -370,6 +370,42 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
       warn.mockRestore();
     });
 
+    test('keeps a genuine JSON whose description mentions /annex/objects/', async () => {
+      // The pointer check must not be a bare substring test: a real
+      // description may quote an annex path.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const description =
+        'Full text mentioning ../../.git/annex/objects/Xk/9F/SHA256E-s1--x\nand more';
+      mockArchive({ abc123: description });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(videos[0].description).toBe(description);
+      expect(warn).not.toHaveBeenCalled();
+      warn.mockRestore();
+    });
+
+    test('warns distinctly when the file is served but is not JSON', async () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.endsWith('/videos.tsv')) {
+          return { ok: true, text: async () => TSV_WITH_DESCRIPTION };
+        }
+        if (url.endsWith('/video_fulldescriptions.json')) {
+          return { ok: true, text: async () => '<html>404 page</html>' };
+        }
+        return { ok: false, status: 404 };
+      });
+
+      const videos = await dataLoader.loadVideos();
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('is not valid JSON')
+      );
+      expect(videos[0].description).toBe('First line only');
+      warn.mockRestore();
+    });
+
     test('loadChannelVideos merges channel-scoped full descriptions', async () => {
       mockArchive({ abc123: FULL_DESCRIPTION });
 

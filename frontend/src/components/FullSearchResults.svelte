@@ -158,6 +158,8 @@
                 {:else}
                   <span class="description-badge">description</span>
                 {/if}
+                <!-- Excerpts are sanitized in pagefind.ts (sanitizeExcerpt); only
+                     <mark> highlights survive. Keep any new excerpt source sanitized. -->
                 <span class="result-excerpt">{@html result.primaryExcerpt}</span>
               </div>
             </div>
@@ -180,6 +182,7 @@
                   on:click={() => navigateToDescriptionMatch(result.videoId)}
                 >
                   <span class="description-badge">description</span>
+                  <!-- sanitized in pagefind.ts (sanitizeExcerpt) -->
                   <span class="match-excerpt">{@html result.descriptionMatch.excerpt}</span>
                 </button>
               {/if}
@@ -190,6 +193,7 @@
                 >
                   <span class="match-index">{idx + 1}.</span>
                   <span class="timestamp-badge small">{formatTimestamp(match.timestamp)}</span>
+                  <!-- sanitized in pagefind.ts (sanitizeExcerpt) -->
                   <span class="match-excerpt">{@html match.excerpt}</span>
                 </button>
               {/each}

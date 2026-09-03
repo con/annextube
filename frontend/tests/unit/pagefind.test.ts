@@ -8,6 +8,7 @@ import { describe, test, expect, beforeEach, vi } from 'vitest';
 import {
   initPagefind,
   searchFull,
+  sanitizeExcerpt,
   formatTimestamp,
   _resetForTesting,
   type PagefindResult,
@@ -40,6 +41,86 @@ function makeMockPagefind(results: PagefindResult[]): PagefindInstance {
     search: vi.fn().mockResolvedValue({ results }),
   };
 }
+
+// ---------- sanitizeExcerpt (XSS in YouTube-sourced excerpts) ----------
+
+describe('sanitizeExcerpt', () => {
+  test('keeps Pagefind <mark> highlights', () => {
+    expect(sanitizeExcerpt('some <mark>caption</mark> text')).toBe(
+      'some <mark>caption</mark> text'
+    );
+  });
+
+  test('leaves an already-escaped Pagefind excerpt untouched', () => {
+    // What Pagefind 1.x actually returns for a description containing
+    // `<img src=x onerror=...>` -- it must render as the text the author
+    // typed, not as doubly-escaped entities.
+    const pagefindExcerpt =
+      'Payload &lt;img src=x onerror="alert(1)"&gt; <mark>ambush</mark>';
+    expect(sanitizeExcerpt(pagefindExcerpt)).toBe(pagefindExcerpt);
+  });
+
+  test('escapes raw markup should an excerpt ever carry it', () => {
+    const safe = sanitizeExcerpt('see <img src=x onerror=alert(1)> now');
+    expect(safe).toBe('see &lt;img src=x onerror=alert(1)&gt; now');
+    expect(safe).not.toContain('<img');
+  });
+
+  test('escapes a raw script tag around a highlight', () => {
+    expect(sanitizeExcerpt('<script>alert(1)</script> <mark>hit</mark>')).toBe(
+      '&lt;script&gt;alert(1)&lt;/script&gt; <mark>hit</mark>'
+    );
+  });
+
+  test('does not touch ampersands (entities cannot form elements)', () => {
+    expect(sanitizeExcerpt('a & b "q" <mark>c</mark>')).toBe(
+      'a & b "q" <mark>c</mark>'
+    );
+  });
+
+  test('a mark tag carrying attributes is escaped, not rendered', () => {
+    expect(sanitizeExcerpt('<mark onmouseover=alert(1)>x</mark>')).toBe(
+      '&lt;mark onmouseover=alert(1)&gt;x</mark>'
+    );
+  });
+
+  test('literal <mark> text in a description is inert markup at worst', () => {
+    // Restoring it can only ever produce a bare <mark> element
+    expect(sanitizeExcerpt('I typed <mark> myself')).toBe('I typed <mark> myself');
+  });
+});
+
+describe('searchFull sanitizes excerpts at the boundary', () => {
+  beforeEach(() => {
+    _resetForTesting(null);
+  });
+
+  test('description and caption excerpts are sanitized', async () => {
+    const attack = '<img src=x onerror=alert(1)> <mark>hit</mark>';
+    const meta = { video_id: 'abc123', title: 'T' };
+    const metadataRecord = makeData({
+      url: '#/video/abc123',
+      excerpt: attack,
+      meta: { ...meta, record_type: 'metadata' },
+    });
+    const captionRecord = makeData({
+      url: '/videos/abc123/video.en.vtt#t=10',
+      excerpt: attack,
+      meta: { ...meta, record_type: 'caption' },
+    });
+    _resetForTesting(
+      makeMockPagefind([makeResult(metadataRecord), makeResult(captionRecord)])
+    );
+
+    const groups = await searchFull('hit');
+
+    const expected = '&lt;img src=x onerror=alert(1)&gt; <mark>hit</mark>';
+    expect(groups[0].descriptionMatch?.excerpt).toBe(expected);
+    expect(groups[0].allMatches[0].excerpt).toBe(expected);
+    // primaryExcerpt is taken from those, so it is sanitized too
+    expect(groups[0].primaryExcerpt).toBe(expected);
+  });
+});
 
 // ---------- formatTimestamp ----------
 

@@ -7,6 +7,8 @@
  * from pre-FR-042f indexes and are treated as captions.
  * Lazily loads the Pagefind library, groups results by video, and flags
  * videos whose only matches are Pagefind's truncated-word fallback.
+ * Excerpts are sanitized here, at the boundary where untrusted YouTube
+ * content enters the app, so every consumer can render them with {@html}.
  */
 
 /** Shape of a single result returned by the Pagefind JS API */
@@ -36,6 +38,7 @@ export interface PagefindResultData {
 
 /** A single caption match within a grouped result */
 export interface CaptionMatch {
+  /** Sanitized by sanitizeExcerpt(): safe to render with {@html} */
   excerpt: string;
   timestamp: number;
   url: string;
@@ -52,14 +55,18 @@ export interface GroupedSearchResult {
   matchCount: number;
   /**
    * Earliest-timestamp caption match; falls back to the description match
-   * when no captions matched (then primaryTimestamp is -1)
+   * when no captions matched (then primaryTimestamp is -1).
+   * Sanitized by sanitizeExcerpt(): safe to render with {@html}
    */
   primaryExcerpt: string;
   primaryTimestamp: number;
   primaryUrl: string;
   /** Caption matches for expansion, sorted by timestamp ascending */
   allMatches: CaptionMatch[];
-  /** Match on the video's metadata record (title/description/tags), if any */
+  /**
+   * Match on the video's metadata record (title/description/tags), if any.
+   * The excerpt is sanitized by sanitizeExcerpt(): safe to render with {@html}
+   */
   descriptionMatch?: { excerpt: string };
   /**
    * True when none of this video's matched records actually contain the
@@ -164,6 +171,34 @@ function isApproximateMatch(data: PagefindResultData): boolean {
 }
 
 /**
+ * Neutralize any markup in a Pagefind excerpt except its own <mark> highlights.
+ *
+ * Excerpts come from video descriptions and captions -- YouTube content we
+ * do not control -- and are rendered with {@html}.  Pagefind 1.x escapes
+ * `<` and `>` in the excerpt itself (its `content` field keeps them raw), so
+ * a description holding `<img src=x onerror=...>` currently reaches the DOM
+ * as text.  This does not depend on that: it escapes any remaining raw tag
+ * delimiter and restores only the exact <mark>/</mark> pair, so no
+ * attacker-supplied markup can become an element even if a future Pagefind
+ * stops escaping -- an allowlist by construction, mirroring what
+ * CaptionBrowser's highlightText() does for VTT cues.
+ *
+ * `&` is deliberately left alone: escaping it would double-escape
+ * Pagefind's own entities and show `&lt;img&gt;` to the reader instead of
+ * the `<img>` they typed.  Entities can never create an element, so
+ * leaving them is safe.  Highlight markup carrying attributes (Pagefind
+ * emits none) renders escaped rather than as an element: degraded
+ * highlighting, never injection.
+ */
+export function sanitizeExcerpt(excerpt: string): string {
+  return excerpt
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&lt;mark&gt;/g, '<mark>')
+    .replace(/&lt;\/mark&gt;/g, '</mark>');
+}
+
+/**
  * Search metadata + captions via Pagefind ("Full" mode), group results by
  * video, and return sorted GroupedSearchResult[].
  *
@@ -228,13 +263,13 @@ export async function searchFull(
     if (data.meta?.record_type === 'metadata') {
       // At most one metadata record per video
       if (!group.descriptionMatch) {
-        group.descriptionMatch = { excerpt: data.excerpt };
+        group.descriptionMatch = { excerpt: sanitizeExcerpt(data.excerpt) };
         group.matchCount += 1;
       }
     } else {
       // 'caption' or absent (pre-FR-042f index)
       group.allMatches.push({
-        excerpt: data.excerpt,
+        excerpt: sanitizeExcerpt(data.excerpt),
         timestamp: parseTimestamp(data.url),
         url: data.url,
       });

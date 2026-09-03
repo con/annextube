@@ -345,10 +345,17 @@ interface FilterConfig {
 
 Tab-separated file with summary metadata for all videos (FR-033).
 
-**Columns** (as written by `annextube/services/export.py`; parsers are header-based, so new columns are always appended last):
+**Columns** (as written by `annextube/services/export.py`):
 ```
 video_id	title	channel_id	channel_name	published_at	duration	view_count	like_count	comment_count	thumbnail_url	download_status	source_url	path	description
 ```
+
+**Column stability guarantee**: `description` is always the **last** column, and
+any future column is only ever *appended* after it -- existing columns are never
+reordered, renamed or removed. Consumers must therefore parse by header name,
+which stays correct across re-exports; code parsing by *position* against the
+earlier 13-column layout silently misreads the trailing field and must be
+updated to read the header row.
 
 **Example**:
 ```

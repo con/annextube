@@ -19,6 +19,9 @@ FRONTEND_VERSION_PLACEHOLDER = "0.0.0-unknown"
 # Path to frontend build (relative to this file)
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "web"
 
+# Frontend sources -- only present in a development checkout
+FRONTEND_SRC_DIR = Path(__file__).parent.parent.parent / "frontend" / "src"
+
 
 def _inject_version(web_dir: Path, version: str) -> bool:
     """Replace placeholder version in built JS files with actual annextube version.
@@ -47,13 +50,62 @@ def _inject_version(web_dir: Path, version: str) -> bool:
     return replaced
 
 
+def _warn_if_bundle_stale() -> None:
+    """Warn when a development checkout's built ``web/`` predates its sources.
+
+    ``FRONTEND_BUILD_DIR`` is git-ignored and produced by ``hatch_build.py``
+    at install time, not on later source edits.  Checking out a branch that
+    changes ``frontend/src/`` therefore leaves the previously built bundle
+    in place, and ``generate-web`` silently deploys the *old* UI -- the
+    archive then lacks the frontend changes it was expected to carry.
+
+    Only meaningful where ``frontend/src/`` exists; an installed wheel has
+    no sources to compare against and is skipped.
+    """
+    if not FRONTEND_SRC_DIR.is_dir():
+        return
+
+    bundles = list((FRONTEND_BUILD_DIR / "assets").glob("*.js"))
+    if not bundles:
+        return
+    built_at = max(f.stat().st_mtime for f in bundles)
+
+    newer = sorted(
+        (
+            p
+            for p in FRONTEND_SRC_DIR.rglob("*")
+            if p.is_file() and p.stat().st_mtime > built_at
+        ),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not newer:
+        return
+
+    try:
+        example = newer[0].relative_to(FRONTEND_SRC_DIR.parent.parent)
+    except ValueError:  # pragma: no cover - defensive
+        example = newer[0]
+    click.echo(
+        f"  Warning: web/ bundle is older than {len(newer)} frontend "
+        f"source file(s) (newest: {example}).",
+        err=True,
+    )
+    click.echo(
+        "  Run 'cd frontend && npm run build' first, or the previously "
+        "built UI is deployed.",
+        err=True,
+    )
+
+
 def deploy_frontend(web_dir: Path) -> None:
     """Copy the built frontend to *web_dir* and inject the annextube version.
 
     This is the single code-path used by both ``generate-web`` and
     ``serve --regenerate``.  It:
 
-    1. Verifies that the frontend build exists.
+    1. Verifies that the frontend build exists (and warns when it is
+       older than the frontend sources of a development checkout).
     2. Replaces *web_dir* with a fresh copy of the build.
     3. Injects ``__version__`` into the JS bundle so the UI shows the
        correct annextube version.
@@ -78,6 +130,8 @@ def deploy_frontend(web_dir: Path) -> None:
         click.echo()
         click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
         raise click.Abort()
+
+    _warn_if_bundle_stale()
 
     # Preserve web/pagefind/ if it exists (may be a DataLad subdataset
     # with the search index that should survive frontend re-deploys).

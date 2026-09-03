@@ -173,17 +173,26 @@ export class DataLoader {
       }
 
       const text = await response.text();
-      // git-annex symlink/pointer served verbatim: the file is annexed but
-      // its content was never deposited on this remote
-      if (text.includes('/annex/objects/')) {
-        console.warn(
-          `[DataLoader] ${url} is annexed but its content is not available ` +
-          'here; deposit the file content to enable full description search.'
-        );
+      try {
+        return JSON.parse(text) as Record<string, string>;
+      } catch {
+        // Anything that is not JSON is unusable; name the likely cause.
+        // A git-annex symlink/pointer served verbatim never parses, so the
+        // marker is only consulted here -- a genuine JSON file mentioning
+        // '/annex/objects/' inside a description still parses and is kept.
+        if (text.includes('/annex/objects/')) {
+          console.warn(
+            `[DataLoader] ${url} is annexed but its content is not available ` +
+            'here; deposit the file content to enable full description search.'
+          );
+        } else {
+          console.warn(
+            `[DataLoader] ${url} is not valid JSON; search falls back to the ` +
+            'first description line.'
+          );
+        }
         return {};
       }
-
-      return JSON.parse(text) as Record<string, string>;
     } catch (err) {
       console.warn(`[DataLoader] Could not load ${url}:`, err);
       return {};
