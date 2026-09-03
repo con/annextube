@@ -1,0 +1,52 @@
+{
+  "baseBranch": "master",
+  "onlyPublishWithReleaseLabel": true,
+  "plugins": [
+    "git-tag",
+    [
+      "exec",
+      {
+        "afterRelease": "python -m build && twine upload dist/*"
+      }
+    ],
+    "released"
+  ],
+  "labels": [
+    {
+      "name": "release-major",
+      "releaseType": "major",
+      "description": "Increment the major version when merged",
+      "color": "e11d48"
+    },
+    {
+      "name": "release-minor",
+      "releaseType": "minor",
+      "description": "Increment the minor version when merged",
+      "color": "7c3aed"
+    },
+    {
+      "name": "release-patch",
+      "releaseType": "patch",
+      "description": "Increment the patch version when merged",
+      "color": "0284c7"
+    },
+    {
+      "name": "release",
+      "releaseType": "release",
+      "description": "Create a release when this PR is merged",
+      "color": "16a34a"
+    },
+    {
+      "name": "skip-release",
+      "releaseType": "skip",
+      "description": "Do not create a release for this PR",
+      "color": "6b7280"
+    },
+    {
+      "name": "released",
+      "releaseType": "released",
+      "description": "This PR has been released",
+      "color": "84cc16"
+    }
+  ]
+}
