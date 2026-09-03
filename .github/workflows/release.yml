@@ -3,6 +3,7 @@ name: Release
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 jobs:
   release:
@@ -40,4 +41,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: ~/auto shipit
+        run: |
+          # On push: only release if the merged PR carried a 'release' label.
+          # On workflow_dispatch: always release (label not required).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ~/auto shipit -vv
+          else
+            ~/auto shipit -vv --only-publish-with-release-label
+          fi

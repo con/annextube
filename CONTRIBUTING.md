@@ -17,9 +17,18 @@ uv run tox -e py3     # unit tests only
 ## Release Process
 
 Releases are automated via [intuit/auto](https://intuit.github.io/auto/).
-Every push to `master` triggers the `Release` GitHub Actions workflow; a new release is
-cut only when the merged PR carries **both** a version-bump label **and** the `release`
-label (controlled by `onlyPublishWithReleaseLabel: true` in `.autorc`).
+The `Release` GitHub Actions workflow runs on every push to `master` and can also
+be triggered manually from the Actions tab (`workflow_dispatch`).
+
+**Two trigger modes:**
+
+| Trigger                     | When a release is cut                                                          |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| Push to `master`            | Only when the merged PR carries a version-bump label **and** the `release` label |
+| Manual dispatch (Actions UI) | Always — releases regardless of PR labels                                      |
+
+The manual dispatch is useful for cutting an ad-hoc release (e.g. a hotfix) without
+needing to label a PR.
 
 ### Labels
 
@@ -44,20 +53,23 @@ label (controlled by `onlyPublishWithReleaseLabel: true` in `.autorc`).
 
 | Label          | Effect       | When to use                            |
 | -------------- | ------------ | -------------------------------------- |
-| `release`      | (trigger)    | Required alongside a bump label        |
+| `release`      | (trigger)    | Optional — gates push-triggered releases |
 | `skip-release` | (none)       | Merge without cutting a release        |
 | `released`     | (auto-set)   | Applied by auto after a release is cut |
 
-> **Both labels are required.** A PR with only `release-patch` will not cut a
-> release. A PR with only `release` will not cut a release. You need **both** a
-> version-bump label (`release-major`/`release-minor`/`release-patch`) **and**
-> the `release` trigger label on the same PR.
+> **For push-triggered releases, both labels are required.** A PR with only
+> `release-patch` will not cut a release. A PR with only `release` will not cut a
+> release. You need **both** a version-bump label (`release-major`/`release-minor`/
+> `release-patch`) **and** the `release` trigger label on the same PR.
+> For a manual dispatch release, no labels are needed on a PR.
 
 > **Why the `release-` prefix?** Dependabot adds plain `major`, `minor`, and `patch`
 > labels to its own PRs. Using `release-major`/`release-minor`/`release-patch` avoids
 > accidentally triggering a release when a Dependabot PR is merged.
 
 ### Cutting a Release
+
+**Via PR merge (standard flow):**
 
 1. Open (or update) a PR that represents the release intent.
 2. Add the appropriate version-bump label (`release-major`, `release-minor`, or
@@ -71,6 +83,13 @@ label (controlled by `onlyPublishWithReleaseLabel: true` in `.autorc`).
    - Build the Python package and upload to PyPI.
    - Apply the `released` label to all PRs included in this release and post a
      comment with the release version.
+
+**Via manual dispatch (ad-hoc / hotfix):**
+
+1. Go to **Actions → Release → Run workflow** in the GitHub UI.
+2. Click **Run workflow** — no PR labels required.
+3. auto computes the next version from all unreleased PRs since the last tag and
+   runs the same release steps as above.
 
 ### First-Time Repository Setup (maintainers only)
 
