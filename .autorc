@@ -1,5 +1,6 @@
 {
   "baseBranch": "master",
+  "noVersionPrefix": false,
   "onlyPublishWithReleaseLabel": true,
   "plugins": [
     "git-tag",

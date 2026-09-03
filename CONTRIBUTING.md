@@ -23,14 +23,26 @@ label (controlled by `onlyPublishWithReleaseLabel: true` in `.autorc`).
 
 ### Labels
 
-| Label           | Version bump | When to use                             |
-| --------------- | ------------ | --------------------------------------- |
-| `release-major` | X.0.0        | Breaking API or CLI changes             |
-| `release-minor` | 0.X.0        | New backward-compatible features        |
-| `release-patch` | 0.0.X        | Bug fixes, docs, minor improvements    |
-| `release`       | (trigger)    | Required alongside a bump label         |
-| `skip-release`  | (none)       | Merge without cutting a release         |
-| `released`      | (auto-set)   | Applied by auto after a release is cut  |
+**Version-bump labels** (control *what kind* of release):
+
+| Label           | Version bump | When to use                          |
+| --------------- | ------------ | ------------------------------------ |
+| `release-major` | X.0.0        | Breaking API or CLI changes          |
+| `release-minor` | 0.X.0        | New backward-compatible features     |
+| `release-patch` | 0.0.X        | Bug fixes, docs, minor improvements  |
+
+**Trigger / control labels**:
+
+| Label          | Effect       | When to use                            |
+| -------------- | ------------ | -------------------------------------- |
+| `release`      | (trigger)    | Required alongside a bump label        |
+| `skip-release` | (none)       | Merge without cutting a release        |
+| `released`     | (auto-set)   | Applied by auto after a release is cut |
+
+> **Both labels are required.** A PR with only `release-patch` will not cut a
+> release. A PR with only `release` will not cut a release. You need **both** a
+> version-bump label (`release-major`/`release-minor`/`release-patch`) **and**
+> the `release` trigger label on the same PR.
 
 > **Why the `release-` prefix?** Dependabot adds plain `major`, `minor`, and `patch`
 > labels to its own PRs. Using `release-major`/`release-minor`/`release-patch` avoids
@@ -83,17 +95,22 @@ auto is robust but occasionally fails. Here are the common failure modes:
 **CHANGELOG too large (GitHub release body limit ~125 KB)**
 - Symptom: `422 Unprocessable Entity` or `RequestError: body is too long` in the release
   step (auto calls the GitHub Releases API which has a body-size cap).
-- Fix: Create the release manually:
+- Fix: First check whether auto already staged a CHANGELOG commit:
 
   ```bash
-  gh release create vX.Y.Z --title "vX.Y.Z" --notes "See CHANGELOG.md for details."
+  git log --oneline -3
   ```
 
-  Then push the CHANGELOG commit that auto staged:
+  If the top commit is auto's CHANGELOG update (message like `Update CHANGELOG.md`),
+  push it and create the release manually:
 
   ```bash
   git push origin master
+  gh release create vX.Y.Z --title "vX.Y.Z" --notes "See CHANGELOG.md for details."
   ```
+
+  If auto did NOT commit yet, update `CHANGELOG.md` manually, commit it, then run
+  the two commands above.
 
 **PyPI upload fails**
 - Symptom: `twine upload` error; the git tag and GitHub Release are already created.
@@ -126,7 +143,7 @@ auto is robust but occasionally fails. Here are the common failure modes:
 
 ```bash
 # Download auto locally first (one-time)
-curl -vkL https://github.com/intuit/auto/releases/download/v11.3.6/auto-linux.gz \
+curl -fsSL https://github.com/intuit/auto/releases/download/v11.3.6/auto-linux.gz \
   | gunzip > ~/auto && chmod a+x ~/auto
 
 GH_TOKEN=<your-token> ~/auto version    # prints next version
@@ -141,7 +158,8 @@ If auto is unavailable or broken:
 NEW_VERSION=X.Y.Z
 
 # Edit CHANGELOG.md with the release notes, then:
-git commit -am "chore: release $NEW_VERSION"
+git add CHANGELOG.md
+git commit -m "chore: release $NEW_VERSION"
 git tag "v$NEW_VERSION"
 git push origin master "v$NEW_VERSION"
 

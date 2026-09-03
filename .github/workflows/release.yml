@@ -21,17 +21,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y git-annex
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
       - name: Install build tools
         run: pip install build twine
 
       - name: Download auto
         run: |
-          curl -vkL https://github.com/intuit/auto/releases/download/v11.3.6/auto-linux.gz \
+          curl -fsSL https://github.com/intuit/auto/releases/download/v11.3.6/auto-linux.gz \
             | gunzip > ~/auto
           chmod a+x ~/auto
 
