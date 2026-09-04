@@ -11,8 +11,10 @@
   export let fuzzyStartIndex: number = Infinity;
 
   $: isFiltered = totalVideos > 0 && videos.length !== totalVideos;
+  $: searchActive = fuzzyStartIndex < Infinity;
   $: exactCount = fuzzyStartIndex < videos.length ? fuzzyStartIndex : videos.length;
   $: fuzzyCount = fuzzyStartIndex < videos.length ? videos.length - fuzzyStartIndex : 0;
+  $: allMatch = searchActive && !isFiltered && fuzzyCount === 0;
 </script>
 
 <div class="video-list-container">
@@ -40,13 +42,18 @@
     {#if totalVideos > 0}
       <div class="result-header">
         <p class="result-count">
-          {#if fuzzyCount > 0}
-            {exactCount} exact + {fuzzyCount} approximate
-            {#if isFiltered}of {totalVideos}{/if} matches
+          {#if searchActive}
+            {#if allMatch}
+              All {totalVideos} video{totalVideos !== 1 ? 's' : ''} match
+            {:else if fuzzyCount > 0}
+              Showing {exactCount} exact + {fuzzyCount} approximate hits from {totalVideos} videos
+            {:else}
+              Showing {exactCount} exact hit{exactCount !== 1 ? 's' : ''} from {totalVideos} videos
+            {/if}
           {:else if isFiltered}
             Showing {videos.length} of {totalVideos} videos
           {:else}
-            {videos.length} videos
+            {totalVideos} videos
           {/if}
         </p>
       </div>

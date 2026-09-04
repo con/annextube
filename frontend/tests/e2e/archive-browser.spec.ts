@@ -55,6 +55,11 @@ test.describe('Archive Browser', () => {
     const videoCards = page.locator('.video-card');
     await expect(videoCards).toHaveCount(1);
     await expect(page.getByText('Test Video Alpha')).toBeVisible();
+
+    // Result count should use unified "exact hits from N videos" format
+    const resultCount = page.locator('.result-count');
+    await expect(resultCount).toContainText('exact');
+    await expect(resultCount).toContainText('from 3 videos');
   });
 
   test('channel filter works', async ({ page }) => {
