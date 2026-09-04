@@ -195,16 +195,20 @@
   }
 
   let initialTimeApplied = false;
+  let initialAutoplayApplied = false;
   function handleVideoCanPlay() {
     console.log('[VideoPlayer] Video can play');
     if (initialTime != null && !initialTimeApplied) {
       initialTimeApplied = true;
       seekTo(initialTime);
-      if (initialAutoplay && videoElement) {
-        videoElement.play().catch((err) => {
-          console.log('[VideoPlayer] Auto-play blocked by browser:', err);
-        });
-      }
+    }
+    // Auto-play on entering the page, independent of whether a start time
+    // was given (issue #14: video should not require an explicit click).
+    if (initialAutoplay && !initialAutoplayApplied && videoElement) {
+      initialAutoplayApplied = true;
+      videoElement.play().catch((err) => {
+        console.log('[VideoPlayer] Auto-play blocked by browser:', err);
+      });
     }
   }
 
