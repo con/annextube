@@ -50,7 +50,7 @@ describe('DataLoader multi-channel', () => {
 
       const channels = await dataLoader.loadChannels(false);
 
-      expect(fetch).toHaveBeenCalledWith('..//channels.tsv');
+      expect(fetch).toHaveBeenCalledWith('..//channels.tsv', { cache: 'no-cache' });
       expect(channels).toHaveLength(2);
       expect(channels[0]).toMatchObject({
         channel_id: 'UC001',
@@ -154,7 +154,7 @@ describe('DataLoader multi-channel', () => {
 
       const videos = await dataLoader.loadChannelVideos('ch-alphachannel');
 
-      expect(fetch).toHaveBeenCalledWith('..//ch-alphachannel/videos/videos.tsv');
+      expect(fetch).toHaveBeenCalledWith('..//ch-alphachannel/videos/videos.tsv', { cache: 'no-cache' });
       expect(videos).toHaveLength(1);
       expect(videos[0]).toMatchObject({
         video_id: 'V001',
@@ -196,7 +196,8 @@ describe('DataLoader multi-channel', () => {
       await dataLoader.loadVideoMetadata(video as any, 'ch-alphachannel');
 
       expect(fetch).toHaveBeenCalledWith(
-        '..//ch-alphachannel/videos/alpha-video-one/metadata.json'
+        '..//ch-alphachannel/videos/alpha-video-one/metadata.json',
+        { cache: 'no-cache' }
       );
     });
   });

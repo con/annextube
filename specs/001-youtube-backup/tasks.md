@@ -494,6 +494,23 @@ annextube backup
 
 ---
 
+## Phase 17: Cache Revalidation + Exact/Approximate Metadata Search
+
+**Goal**: Fix stale-cache symptom (Ctrl+R insufficient after archive update) and surface Fuse.js exact vs approximate hit distinction in the Metadata search path.
+
+**Requirements**: FR-039a, FR-042h (spec.md § Web Interface)
+
+**Motivation**: A browser cached `videos.tsv` was served on JS-initiated `fetch()` calls even after a Ctrl+R, because that only reloads the HTML document. The Cody Baker talk did not appear in Metadata search on `datasets.datalad.org/centerforopenneuroscience/contube` despite the archive having been updated. Separately, a search for "Cody" returned 6 unrelated talks via fuzzy matching ("code" ≈ "cody" at Fuse.js threshold 0.3); those approximate hits were indistinguishable from exact ones.
+
+### Implementation
+
+- [X] T155 [US4] Pass `{ cache: 'no-cache' }` to every `fetch()` call for dynamic data files (videos.tsv, video_fulldescriptions.json, metadata.json, channels.tsv, channel.json, per-channel videos.tsv / playlists.tsv) in frontend/src/services/data-loader.ts; HEAD probes and comments.json exempt; update 6 `toHaveBeenCalledWith` assertions in data-loader.test.ts and channel-list.test.ts (FR-039a)
+- [X] T156 [US4] Add `isExact: boolean` to `SearchResult` (literal substring check across title/channel_name/description/tags) in frontend/src/services/search.ts; partition exact/fuzzy groups in FilterPanel.svelte, sort each independently, concatenate, expose `fuzzyStartIndex` bindable prop; thread `fuzzyStartIndex` through App.svelte to VideoList.svelte; render "Approximate matches" separator at boundary; unify result-count phrasing: "All N videos match" / "Showing N exact hit(s) from T videos" / "Showing N exact + M approximate hits from T videos"; add result-count format assertion to existing archive-browser e2e test (FR-042h)
+
+**Checkpoint**: Loading a page in a browser that previously cached an older archive version shows updated search results without a hard reload; Metadata search result-count header always uses the "Showing … hits from T videos" / "All N videos match" form when a search is active.
+
+---
+
 ## Future Work (Not Yet Scheduled)
 
 ### Archive Sharing via GitHub Pages (TD-001–TD-020)
@@ -519,6 +536,7 @@ These requirements will be tracked in a future phase once core features (Phases 
 - **Documentation (Phase 12)**: Can proceed in parallel with user stories
 - **Polish (Phase 13)**: Depends on all desired user stories being complete
 - **Searchable Descriptions (Phase 16)**: Depends on US4 (web interface + export) and the Phase 6 search index tasks (T056-T064); within the phase: T142/T143 before T144; T145 before T146 before T147; T148/T149 last
+- **Cache + Exact/Approx Search (Phase 17)**: Depends on Phase 16 (builds on FilterPanel/VideoList from Phase 6 and the SearchResult type from Phase 16); T155 and T156 can run in parallel
 
 ### User Story Dependencies
 
@@ -628,12 +646,13 @@ With multiple developers:
 - Phase 14 (API Enhancement): 7/8
 - Phase 15 (Test Infrastructure): 7/7
 - Phase 16 (Searchable Descriptions): 12/12
+- Phase 17 (Cache Revalidation + Exact/Approximate Search): 2/2
 
 **Task Count by User Story**:
 - US1 (Initial Channel Archive - P1): 19 tasks
 - US2 (Incremental Updates - P1): 12 tasks
 - US3 (Filtering - P2): 9 tasks
-- US4 (Web Interface - P2): 31 tasks (19 in Phase 6 + 12 in Phase 16)
+- US4 (Web Interface - P2): 33 tasks (19 in Phase 6 + 12 in Phase 16 + 2 in Phase 17)
 - US5 (Organization - P3): 6 tasks
 - US6 (Export Metadata - P3): 4 tasks
 - US7 (Caption Curation - P4): 5 tasks

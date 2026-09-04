@@ -19,6 +19,12 @@
   export let playlists: Playlist[] = [];
   export let onFilterChange: (filtered: Video[]) => void;
   export let onCaptionSearchActive: ((active: boolean) => void) | undefined = undefined;
+  /**
+   * Index of the first approximate (non-exact) result in the filtered list.
+   * Infinity when no search is active or all results are exact.
+   * Named "fuzzy" internally (Fuse.js mechanism); user-visible label is "approximate" (FR-042h).
+   */
+  export let fuzzyStartIndex: number = Infinity;
 
   // Caption search state
   type SearchMode = 'metadata' | 'full';
@@ -236,11 +242,16 @@
 
   function applyFilters() {
     let filtered = videos;
+    let exactIds: Set<string> | null = null;
 
     // 1. Search (if query provided)
     if (searchQuery.trim()) {
       const results = searchService.search(searchQuery);
-      filtered = results.map((r) => r.video);
+      // Partition exact before fuzzy so each group can be sorted independently
+      const exact = results.filter((r) => r.isExact);
+      const fuzzy = results.filter((r) => !r.isExact);
+      exactIds = new Set(exact.map((r) => r.video.video_id));
+      filtered = [...exact, ...fuzzy].map((r) => r.video);
     }
 
     // 2. Filter by criteria
@@ -259,8 +270,20 @@
       playlists
     );
 
-    // 3. Sort
-    filtered = sortService.sort(filtered, { field: sortField, direction: sortDirection });
+    // 3. Sort each partition independently to preserve exact-before-fuzzy boundary
+    if (exactIds !== null) {
+      const exactGroup = filtered.filter((v) => exactIds!.has(v.video_id));
+      const fuzzyGroup = filtered.filter((v) => !exactIds!.has(v.video_id));
+      const sortOpts = { field: sortField, direction: sortDirection };
+      filtered = [
+        ...sortService.sort(exactGroup, sortOpts),
+        ...sortService.sort(fuzzyGroup, sortOpts),
+      ];
+      fuzzyStartIndex = exactGroup.length;
+    } else {
+      filtered = sortService.sort(filtered, { field: sortField, direction: sortDirection });
+      fuzzyStartIndex = Infinity;
+    }
 
     // 4. Update URL hash (debounced separately to avoid history pollution)
     updateURL();
