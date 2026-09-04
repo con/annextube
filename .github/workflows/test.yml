@@ -29,6 +29,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
+      # Node.js is only needed by the tox envs (e2e, duplication) that run
+      # on the 3.12 leg -- see [gh-actions] in tox.ini. Set it up unconditionally
+      # since setup-node is cheap and this keeps the workflow simple.
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Install CI dependencies
         run: pip install -e ".[ci]"
 
