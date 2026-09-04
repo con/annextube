@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    if: "!contains(github.event.head_commit.message, 'ci skip') && !contains(github.event.head_commit.message, 'skip ci')"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install build tools
+        run: pip install build twine
+
+      - name: Download auto
+        run: |
+          curl -fsSL https://github.com/intuit/auto/releases/download/v11.3.6/auto-linux.gz \
+            | gunzip > ~/auto
+          chmod a+x ~/auto
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          # On push: only release if the merged PR carried a 'release' label.
+          # On workflow_dispatch: always release (label not required).
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ~/auto shipit -vv
+          else
+            ~/auto shipit -vv --only-publish-with-release-label
+          fi
