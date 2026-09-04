@@ -19,7 +19,11 @@
   export let playlists: Playlist[] = [];
   export let onFilterChange: (filtered: Video[]) => void;
   export let onCaptionSearchActive: ((active: boolean) => void) | undefined = undefined;
-  /** Index of the first fuzzy (non-exact) result in the filtered list; Infinity when no search or all exact. */
+  /**
+   * Index of the first approximate (non-exact) result in the filtered list.
+   * Infinity when no search is active or all results are exact.
+   * Named "fuzzy" internally (Fuse.js mechanism); user-visible label is "approximate" (FR-042h).
+   */
   export let fuzzyStartIndex: number = Infinity;
 
   // Caption search state

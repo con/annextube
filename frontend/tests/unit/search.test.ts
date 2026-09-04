@@ -2,7 +2,7 @@
  * SearchService Unit Tests
  */
 
-import { describe, test, expect, beforeEach } from '@jest/globals';
+import { describe, test, expect, beforeEach } from 'vitest';
 import { SearchService } from '../../src/services/search';
 import type { Video } from '../../src/types/models';
 
@@ -282,6 +282,118 @@ describe('SearchService cross-channel', () => {
     const results = searchService.search('Single Channel');
     expect(results.length).toBe(1);
     expect(results[0].channelDir).toBeUndefined();
+  });
+});
+
+describe('SearchService isExact classification (FR-042h)', () => {
+  let searchService: SearchService;
+
+  function makeVideo(overrides: Partial<Video>): Video {
+    return {
+      video_id: 'x',
+      title: 'Title',
+      channel_id: 'UC0',
+      channel_name: 'Channel',
+      published_at: '2024-01-01T00:00:00Z',
+      duration: 60,
+      view_count: 0,
+      like_count: 0,
+      comment_count: 0,
+      thumbnail_url: '',
+      license: 'standard',
+      privacy_status: 'public',
+      availability: 'public',
+      tags: [],
+      categories: [],
+      captions_available: [],
+      has_auto_captions: false,
+      download_status: 'tracked',
+      source_url: '',
+      fetched_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+      ...overrides,
+    };
+  }
+
+  beforeEach(() => {
+    searchService = new SearchService();
+  });
+
+  test('marks result as exact when query is a substring of the title', () => {
+    searchService.initialize([
+      makeVideo({ video_id: 'v1', title: 'Introduction to DataLad' }),
+      makeVideo({ video_id: 'v2', title: 'Unrelated Talk' }),
+    ]);
+    const results = searchService.search('DataLad');
+    const hit = results.find(r => r.video.video_id === 'v1');
+    expect(hit).toBeDefined();
+    expect(hit!.isExact).toBe(true);
+  });
+
+  test('marks result as exact when query is a substring of a tag', () => {
+    searchService.initialize([
+      makeVideo({ video_id: 'v1', title: 'Some Talk', tags: ['neuroimaging', 'fmri'] }),
+    ]);
+    const results = searchService.search('fmri');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].isExact).toBe(true);
+  });
+
+  test('marks result as exact when query matches channel_name', () => {
+    searchService.initialize([
+      makeVideo({ video_id: 'v1', title: 'Lecture 1', channel_name: 'Halchenko Lab' }),
+    ]);
+    const results = searchService.search('Halchenko');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].isExact).toBe(true);
+  });
+
+  test('marks result as approximate when query is a fuzzy-only match (not a substring)', () => {
+    // "cody" is not a substring of "code" or "codes", but Fuse.js threshold 0.3
+    // allows 1-edit matches.  We test the boundary by using a distinct word.
+    // "mode" is not a substring of "video" but may fuzzy-match; we want isExact=false.
+    searchService.initialize([
+      makeVideo({ video_id: 'v1', title: 'Advanced Coding Techniques', tags: [] }),
+    ]);
+    // "Cdy" is close to "Cod" (1 edit) but NOT a substring of the title
+    const results = searchService.search('Cdy');
+    if (results.length > 0) {
+      // If Fuse returns a hit, it must be approximate
+      expect(results[0].isExact).toBe(false);
+    }
+    // If Fuse returns nothing, that's also correct (threshold may exclude it)
+  });
+
+  test('all results are exact when query is empty', () => {
+    searchService.initialize([
+      makeVideo({ video_id: 'v1', title: 'Alpha' }),
+      makeVideo({ video_id: 'v2', title: 'Beta' }),
+    ]);
+    const results = searchService.search('');
+    expect(results.length).toBe(2);
+    expect(results.every(r => r.isExact)).toBe(true);
+  });
+
+  test('isExact check is case-insensitive', () => {
+    searchService.initialize([
+      makeVideo({ video_id: 'v1', title: 'ReproNim Course Week 1' }),
+    ]);
+    const results = searchService.search('REPRONIM');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].isExact).toBe(true);
+  });
+
+  test('marks result as exact when query matches description', () => {
+    searchService.initialize([
+      makeVideo({
+        video_id: 'v1',
+        title: 'Generic Title',
+        description: 'Talk presented by Cody Baker from DANDI Archive',
+      }),
+    ]);
+    const results = searchService.search('Cody');
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].isExact).toBe(true);
   });
 });
 

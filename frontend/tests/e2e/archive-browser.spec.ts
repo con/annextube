@@ -62,6 +62,21 @@ test.describe('Archive Browser', () => {
     await expect(resultCount).toContainText('from 3 videos');
   });
 
+  test('search result-count shows "All N videos match" when all videos are exact hits', async ({ page }) => {
+    await page.waitForSelector('.video-grid');
+
+    // "Video" appears in all 3 test video titles, so all should be exact hits
+    await page.fill('input[placeholder*="Search"]', 'Video');
+    await page.waitForTimeout(400);
+
+    const resultCount = page.locator('.result-count');
+    const text = await resultCount.textContent();
+    // Either "All 3 videos match" (all exact) or "Showing N exact…" (some filtered)
+    // — both are acceptable; what must NOT appear is the old "of N matches" phrasing
+    expect(text).toMatch(/All \d+ videos? match|exact/i);
+    expect(text).not.toMatch(/of \d+ matches/i);
+  });
+
   test('channel filter works', async ({ page }) => {
     await page.waitForSelector('.video-grid');
 

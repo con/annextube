@@ -536,6 +536,7 @@ These requirements will be tracked in a future phase once core features (Phases 
 - **Documentation (Phase 12)**: Can proceed in parallel with user stories
 - **Polish (Phase 13)**: Depends on all desired user stories being complete
 - **Searchable Descriptions (Phase 16)**: Depends on US4 (web interface + export) and the Phase 6 search index tasks (T056-T064); within the phase: T142/T143 before T144; T145 before T146 before T147; T148/T149 last
+- **Cache + Exact/Approx Search (Phase 17)**: Depends on Phase 16 (builds on FilterPanel/VideoList from Phase 6 and the SearchResult type from Phase 16); T155 and T156 can run in parallel
 
 ### User Story Dependencies
 
