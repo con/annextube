@@ -7,8 +7,12 @@
   export let onVideoClick: (video: Video) => void = () => {};
   export let loading: boolean = false;
   export let error: string | null = null;
+  /** Index of the first fuzzy result; Infinity when there is no search or all results are exact. */
+  export let fuzzyStartIndex: number = Infinity;
 
   $: isFiltered = totalVideos > 0 && videos.length !== totalVideos;
+  $: exactCount = fuzzyStartIndex < videos.length ? fuzzyStartIndex : videos.length;
+  $: fuzzyCount = fuzzyStartIndex < videos.length ? videos.length - fuzzyStartIndex : 0;
 </script>
 
 <div class="video-list-container">
@@ -36,7 +40,10 @@
     {#if totalVideos > 0}
       <div class="result-header">
         <p class="result-count">
-          {#if isFiltered}
+          {#if fuzzyCount > 0}
+            {exactCount} exact + {fuzzyCount} approximate
+            {#if isFiltered}of {totalVideos}{/if} matches
+          {:else if isFiltered}
             Showing {videos.length} of {totalVideos} videos
           {:else}
             {videos.length} videos
@@ -45,7 +52,12 @@
       </div>
     {/if}
     <div class="video-grid">
-      {#each videos as video (video.video_id)}
+      {#each videos as video, i (video.video_id)}
+        {#if i === fuzzyStartIndex}
+          <div class="fuzzy-separator" role="separator">
+            <span>Approximate matches</span>
+          </div>
+        {/if}
         <VideoCard {video} onClick={onVideoClick} />
       {/each}
     </div>
@@ -150,5 +162,23 @@
   .hint {
     font-size: 14px;
     color: #999;
+  }
+
+  .fuzzy-separator {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0 4px;
+    color: #999;
+    font-size: 13px;
+  }
+
+  .fuzzy-separator::before,
+  .fuzzy-separator::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e0e0e0;
   }
 </style>

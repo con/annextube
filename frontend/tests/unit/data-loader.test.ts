@@ -62,7 +62,7 @@ abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10
 
       const videos = await dataLoader.loadVideos();
 
-      expect(fetch).toHaveBeenCalledWith('..//videos/videos.tsv');
+      expect(fetch).toHaveBeenCalledWith('..//videos/videos.tsv', { cache: 'no-cache' });
       expect(videos).toHaveLength(1);
       expect(videos[0]).toMatchObject({
         video_id: 'abc123',
@@ -118,7 +118,7 @@ PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z
 
       const playlists = await dataLoader.loadPlaylists();
 
-      expect(fetch).toHaveBeenCalledWith('..//playlists/playlists.tsv');
+      expect(fetch).toHaveBeenCalledWith('..//playlists/playlists.tsv', { cache: 'no-cache' });
       expect(playlists).toHaveLength(1);
       expect(playlists[0]).toMatchObject({
         playlist_id: 'PL123',
@@ -152,7 +152,7 @@ PL123\tTest Playlist\tUC123\tTest Channel\t5\t1500\tpublic\t2024-01-01T00:00:00Z
       const metadata = await dataLoader.loadVideoMetadata(video);
 
       expect(fetch).toHaveBeenCalledWith(
-        '..//videos/abc123/metadata.json'
+        '..//videos/abc123/metadata.json', { cache: 'no-cache' }
       );
       expect(metadata).toMatchObject(mockMetadata);
     });
@@ -296,7 +296,7 @@ abc123\tTest Video\tUC123\tTest Channel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10
 
       const videos = await dataLoader.loadVideos();
 
-      expect(fetch).toHaveBeenCalledWith('..//videos/video_fulldescriptions.json');
+      expect(fetch).toHaveBeenCalledWith('..//videos/video_fulldescriptions.json', { cache: 'no-cache' });
       expect(videos[0].description).toBe(FULL_DESCRIPTION);
     });
 
@@ -411,9 +411,9 @@ abc123\tTest\tUC123\tChannel\t2024-01-01T00:00:00Z\t300\t1000\t50\t10\thttp://ex
 
       const videos = await dataLoader.loadChannelVideos('ch-test');
 
-      expect(fetch).toHaveBeenCalledWith('..//ch-test/videos/videos.tsv');
+      expect(fetch).toHaveBeenCalledWith('..//ch-test/videos/videos.tsv', { cache: 'no-cache' });
       expect(fetch).toHaveBeenCalledWith(
-        '..//ch-test/videos/video_fulldescriptions.json'
+        '..//ch-test/videos/video_fulldescriptions.json', { cache: 'no-cache' }
       );
       expect(videos[0].description).toBe(FULL_DESCRIPTION);
     });

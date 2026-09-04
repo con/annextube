@@ -18,6 +18,7 @@ export interface SearchResult {
   score: number;       // Relevance score from fuse.js (lower = better)
   matches: string[];   // Which fields matched
   channelDir?: string; // Channel directory for cross-channel attribution
+  isExact: boolean;    // true when query is a literal substring of a searchable field
 }
 
 export class SearchService {
@@ -54,17 +55,24 @@ export class SearchService {
   search(query: string, options?: SearchOptions): SearchResult[] {
     // If no search index or empty query, return all videos
     if (!this.fuse || !query.trim()) {
-      return this.videos.map((v) => ({ video: v, score: 0, matches: [] }));
+      return this.videos.map((v) => ({ video: v, score: 0, matches: [], isExact: true }));
     }
 
+    const q = query.toLowerCase();
     const results = this.fuse.search(query);
 
-    const mapped = results.map((r) => ({
-      video: r.item,
-      score: r.score || 0,
-      matches: r.matches?.map((m) => m.key || '') || [],
-      channelDir: (r.item as Video & { channel_dir?: string }).channel_dir,
-    }));
+    const mapped = results.map((r) => {
+      const v = r.item;
+      const isExact = [v.title, v.channel_name, v.description, ...(v.tags ?? [])]
+        .some((s) => typeof s === 'string' && s.toLowerCase().includes(q));
+      return {
+        video: v,
+        score: r.score || 0,
+        matches: r.matches?.map((m) => m.key || '') || [],
+        channelDir: (v as Video & { channel_dir?: string }).channel_dir,
+        isExact,
+      };
+    });
 
     // Apply limit if specified
     if (options?.limit && options.limit > 0) {

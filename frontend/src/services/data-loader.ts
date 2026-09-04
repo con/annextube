@@ -131,7 +131,7 @@ export class DataLoader {
     }
 
     const [response, fulldescriptions] = await Promise.all([
-      fetch(`${this.baseUrl}/videos/videos.tsv`),
+      fetch(`${this.baseUrl}/videos/videos.tsv`, { cache: 'no-cache' }),
       this.loadFullDescriptions(
         `${this.baseUrl}/videos/video_fulldescriptions.json`
       ),
@@ -162,7 +162,7 @@ export class DataLoader {
     url: string
   ): Promise<Record<string, string>> {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, { cache: 'no-cache' });
       if (!response.ok) {
         console.warn(
           `[DataLoader] ${url} unavailable (HTTP ${response.status}); ` +
@@ -207,7 +207,7 @@ export class DataLoader {
       return this.playlistsCache;
     }
 
-    const response = await fetch(`${this.baseUrl}/playlists/playlists.tsv`);
+    const response = await fetch(`${this.baseUrl}/playlists/playlists.tsv`, { cache: 'no-cache' });
     if (!response.ok) {
       throw new Error(
         `Failed to load playlists.tsv: ${response.statusText}`
@@ -249,7 +249,7 @@ export class DataLoader {
       : `${this.baseUrl}/videos/${filePath}/metadata.json`;
 
     // Fetch from JSON file
-    const response = await fetch(metadataUrl);
+    const response = await fetch(metadataUrl, { cache: 'no-cache' });
     if (!response.ok) {
       throw new Error(
         `Failed to load metadata for ${videoId}: ${response.statusText}`
@@ -386,7 +386,7 @@ export class DataLoader {
    * @param loadFullMetadata - If true, load full channel.json for each channel (includes complete archive_stats)
    */
   async loadChannels(loadFullMetadata = true): Promise<Channel[]> {
-    const response = await fetch(`${this.baseUrl}/channels.tsv`);
+    const response = await fetch(`${this.baseUrl}/channels.tsv`, { cache: 'no-cache' });
     if (!response.ok) {
       throw new Error(`Failed to load channels.tsv: ${response.statusText}`);
     }
@@ -429,7 +429,8 @@ export class DataLoader {
    */
   async loadChannelMetadata(channelDir: string): Promise<Channel> {
     const response = await fetch(
-      `${this.baseUrl}/${channelDir}/channel.json`
+      `${this.baseUrl}/${channelDir}/channel.json`,
+      { cache: 'no-cache' }
     );
     if (!response.ok) {
       throw new Error(
@@ -478,7 +479,7 @@ export class DataLoader {
    */
   async loadChannelVideos(channelDir: string): Promise<Video[]> {
     const [response, fulldescriptions] = await Promise.all([
-      fetch(`${this.baseUrl}/${channelDir}/videos/videos.tsv`),
+      fetch(`${this.baseUrl}/${channelDir}/videos/videos.tsv`, { cache: 'no-cache' }),
       this.loadFullDescriptions(
         `${this.baseUrl}/${channelDir}/videos/video_fulldescriptions.json`
       ),
@@ -503,7 +504,8 @@ export class DataLoader {
    */
   async loadChannelPlaylists(channelDir: string): Promise<Playlist[]> {
     const response = await fetch(
-      `${this.baseUrl}/${channelDir}/playlists/playlists.tsv`
+      `${this.baseUrl}/${channelDir}/playlists/playlists.tsv`,
+      { cache: 'no-cache' }
     );
     if (!response.ok) {
       throw new Error(

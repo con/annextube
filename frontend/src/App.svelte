@@ -17,6 +17,7 @@
   let selectedChannel: Channel | null = null;
   let allVideos: Video[] = [];
   let filteredVideos: Video[] = [];
+  let fuzzyStartIndex: number = Infinity;
   let playlists: Playlist[] = [];
   let loading = true;
   let error: string | null = null;
@@ -251,6 +252,7 @@
           {playlists}
           onFilterChange={handleFilterChange}
           onCaptionSearchActive={handleCaptionSearchActive}
+          bind:fuzzyStartIndex
         />
       {/if}
       {#if !captionSearchActive}
@@ -260,6 +262,7 @@
         {loading}
         {error}
         onVideoClick={handleVideoClick}
+        {fuzzyStartIndex}
       />
       {/if}
     {/if}
