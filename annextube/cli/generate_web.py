@@ -1,6 +1,5 @@
 """Generate web command for annextube."""
 
-import re
 import shutil
 from pathlib import Path
 
@@ -14,13 +13,17 @@ from annextube.services.export import ExportService
 
 logger = get_logger(__name__)
 
-# Matches the quoted semver-like string `_inject_version()` writes in place
-# of FRONTEND_VERSION_PLACEHOLDER (an optional "v" prefix is tolerated for
-# forward/backward compatibility, though the placeholder itself has none).
-_BUNDLED_VERSION_RE = re.compile(r'"v?(\d+\.\d+\.\d+(?:[.\-][0-9A-Za-z]+)*)"')
-
 # Placeholder baked into the Vite build (must match frontend/vite.config.ts)
 FRONTEND_VERSION_PLACEHOLDER = "0.0.0-unknown"
+
+# Records the annextube version a web/ bundle was deployed with, so a later
+# check_and_regenerate_web() can tell it apart from an installed version
+# without guessing. A plain-text sidecar file rather than scraping the
+# minified JS: a bundled dependency can itself contain an arbitrary quoted
+# "X.Y.Z"-shaped string (e.g. its own package version), so pattern-matching
+# the bundle for "the" version string is unreliable -- and it isn't needed
+# when deploy_frontend() already knows the exact version it deployed.
+_VERSION_MARKER_FILENAME = ".annextube-version"
 
 # Path to frontend build (relative to this file)
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "web"
@@ -171,6 +174,13 @@ def deploy_frontend(web_dir: Path, quiet: bool = False) -> None:
     if _inject_version(web_dir, __version__):
         if not quiet:
             click.echo(f"  [ok] web/ (v{__version__})")
+        # Stamp the deployed version so a later check_and_regenerate_web()
+        # can detect drift without re-parsing the (minified,
+        # third-party-code-laden) JS bundle -- see _VERSION_MARKER_FILENAME.
+        # Only on successful injection: otherwise the bundle doesn't
+        # actually show __version__, and stamping it anyway would make
+        # check_and_regenerate_web() wrongly consider it up to date forever.
+        (web_dir / _VERSION_MARKER_FILENAME).write_text(__version__ + "\n")
     else:
         click.echo(
             f"  Warning: could not inject version v{__version__} "
@@ -180,25 +190,19 @@ def deploy_frontend(web_dir: Path, quiet: bool = False) -> None:
 
 
 def _extract_version_from_bundle(web_dir: Path) -> str | None:
-    """Read the annextube version already baked into an existing web/ bundle.
+    """Read the annextube version an existing web/ bundle was deployed with.
 
-    Scans ``web_dir/assets/*.js`` for the first quoted semver-like string --
-    the same shape ``_inject_version()`` writes in place of
-    ``FRONTEND_VERSION_PLACEHOLDER``.
+    Reads the sidecar file ``deploy_frontend()`` stamps with ``__version__``
+    at deploy time (see ``_VERSION_MARKER_FILENAME``).
 
     Returns:
-        The version string (without a leading "v"), or None if there is no
-        assets/ directory or no version-like string could be found.
+        The version string, or None if ``web_dir`` predates this marker
+        (e.g. deployed by an older annextube) and so has none.
     """
-    assets_dir = web_dir / "assets"
-    if not assets_dir.exists():
+    marker = web_dir / _VERSION_MARKER_FILENAME
+    if not marker.is_file():
         return None
-
-    for js_file in sorted(assets_dir.glob("*.js")):
-        match = _BUNDLED_VERSION_RE.search(js_file.read_text())
-        if match:
-            return match.group(1)
-    return None
+    return marker.read_text().strip() or None
 
 
 def check_and_regenerate_web(archive_path: Path, quiet: bool = False) -> bool:

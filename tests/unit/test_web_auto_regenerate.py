@@ -14,34 +14,51 @@ from annextube.cli import generate_web
 
 
 def _make_bundle(tmp_path, version: str | None):
-    """Build a fake web/ with one built JS asset, optionally version-stamped."""
+    """Build a fake web/ stamped with the given deployed version.
+
+    Mirrors what ``deploy_frontend()`` actually leaves behind: a JS asset
+    (content irrelevant to version detection -- the version comes from the
+    ``_VERSION_MARKER_FILENAME`` sidecar file, not from parsing the bundle)
+    plus that marker file, unless ``version`` is None (simulating a web/
+    deployed by an annextube version that predates the marker file).
+    """
     assets = tmp_path / "web" / "assets"
     assets.mkdir(parents=True)
-    content = f'console.log("app");const v="{version}";' if version else "console.log('app');"
-    (assets / "index.js").write_text(content)
+    (assets / "index.js").write_text("console.log('app');")
+    if version is not None:
+        (tmp_path / "web" / generate_web._VERSION_MARKER_FILENAME).write_text(version + "\n")
     return tmp_path / "web"
 
 
 @pytest.mark.ai_generated
 class TestExtractVersionFromBundle:
-    def test_finds_bare_version_string(self, tmp_path):
-        web_dir = _make_bundle(tmp_path, "0.13.0")
-        assert generate_web._extract_version_from_bundle(web_dir) == "0.13.0"
+    @pytest.mark.parametrize(
+        "version",
+        [
+            "0.13.0",
+            # hatch-vcs PEP 440 local versions, e.g. tagged...
+            "0.2.0.post1+gc6bd677.d20260905",
+            # ...and its untagged-checkout fallback shape (shorter base).
+            "0.0.post101+gdcfbbeec1.d20260905",
+        ],
+    )
+    def test_finds_stamped_version(self, tmp_path, version):
+        web_dir = _make_bundle(tmp_path, version)
+        assert generate_web._extract_version_from_bundle(web_dir) == version
 
-    def test_strips_leading_v_prefix(self, tmp_path):
-        web_dir = _make_bundle(tmp_path, "v0.13.0")
-        assert generate_web._extract_version_from_bundle(web_dir) == "0.13.0"
+    def test_ignores_unrelated_version_looking_strings_in_the_bundle(self, tmp_path):
+        """A bundled dependency's own quoted version string (e.g. from a
+        third-party JS library) must not be mistaken for annextube's --
+        only the marker file deploy_frontend() stamps is authoritative.
+        """
+        web_dir = _make_bundle(tmp_path, "0.14.0")
+        (web_dir / "assets" / "index.js").write_text('const libVersion="7.1.0";')
+        assert generate_web._extract_version_from_bundle(web_dir) == "0.14.0"
 
-    def test_none_when_no_assets_dir(self, tmp_path):
-        web_dir = tmp_path / "web"
-        web_dir.mkdir()
+    def test_none_when_no_marker_file(self, tmp_path):
+        """A web/ deployed by an annextube version older than the marker file."""
+        web_dir = _make_bundle(tmp_path, None)
         assert generate_web._extract_version_from_bundle(web_dir) is None
-
-    def test_none_when_no_version_like_string_present(self, tmp_path):
-        assets = tmp_path / "web" / "assets"
-        assets.mkdir(parents=True)
-        (assets / "index.js").write_text("console.log('no version here');")
-        assert generate_web._extract_version_from_bundle(tmp_path / "web") is None
 
 
 @pytest.mark.ai_generated
@@ -117,6 +134,38 @@ class TestDeployFrontendQuiet:
 
         assert capsys.readouterr().out == ""
         assert (web_dir / "assets" / "index.js").exists()
+
+    def test_stamps_version_marker(self, tmp_path, monkeypatch):
+        """deploy_frontend() must stamp the marker _extract_version_from_bundle()
+        later reads back -- otherwise check_and_regenerate_web() can never
+        detect that this bundle is up to date.
+        """
+        build_dir = self._make_build(tmp_path)
+        monkeypatch.setattr(generate_web, "FRONTEND_BUILD_DIR", build_dir)
+        monkeypatch.setattr(generate_web, "FRONTEND_SRC_DIR", tmp_path / "absent")
+        monkeypatch.setattr(generate_web, "__version__", "0.14.0")
+        web_dir = tmp_path / "web"
+
+        generate_web.deploy_frontend(web_dir, quiet=True)
+
+        assert generate_web._extract_version_from_bundle(web_dir) == "0.14.0"
+
+    def test_no_marker_when_placeholder_injection_fails(self, tmp_path, monkeypatch):
+        """If the placeholder isn't found (e.g. a future build drift), the
+        bundle doesn't actually show __version__ -- so the marker must NOT
+        be stamped, or check_and_regenerate_web() would wrongly consider
+        this deploy up to date forever instead of retrying next time.
+        """
+        assets = tmp_path / "build" / "assets"
+        assets.mkdir(parents=True)
+        (assets / "index.js").write_text("console.log('no placeholder here');")
+        monkeypatch.setattr(generate_web, "FRONTEND_BUILD_DIR", tmp_path / "build")
+        monkeypatch.setattr(generate_web, "FRONTEND_SRC_DIR", tmp_path / "absent")
+        web_dir = tmp_path / "web"
+
+        generate_web.deploy_frontend(web_dir, quiet=True)
+
+        assert generate_web._extract_version_from_bundle(web_dir) is None
 
     def test_missing_build_error_is_quiet_on_stdout(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setattr(generate_web, "FRONTEND_BUILD_DIR", tmp_path / "no-build")
