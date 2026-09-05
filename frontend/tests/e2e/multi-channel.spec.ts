@@ -200,6 +200,10 @@ test.describe('Multi-Channel Navigation', () => {
     await expect(breadcrumb).toBeVisible();
     await expect(breadcrumb).toContainText('Channels');
 
+    // Should show the selected channel's name, not "undefined" (regression: #20)
+    await expect(breadcrumb).toContainText('Alpha Channel');
+    await expect(breadcrumb).not.toContainText('undefined');
+
     // Should show 2 videos
     const videoCards = page.locator('.video-card');
     await expect(videoCards).toHaveCount(2);
@@ -221,6 +225,24 @@ test.describe('Multi-Channel Navigation', () => {
     await page.waitForSelector('.channel-card', { timeout: 10000 });
     const channelCards = page.locator('.channel-card');
     await expect(channelCards).toHaveCount(2);
+  });
+
+  test('video breadcrumb shows channel name, not "undefined" (regression: #20)', async ({
+    page,
+  }) => {
+    await setupMultiChannelRoutes(page);
+    await page.goto('/');
+    await page.waitForSelector('.channel-card', { timeout: 10000 });
+
+    // Navigate to channel, then into a video
+    await page.locator('.channel-card').first().click();
+    await page.waitForSelector('.video-card', { timeout: 10000 });
+    await page.locator('.video-card').first().click();
+
+    const breadcrumb = page.locator('.breadcrumb');
+    await expect(breadcrumb).toBeVisible();
+    await expect(breadcrumb).toContainText('Alpha Channel');
+    await expect(breadcrumb).not.toContainText('undefined');
   });
 });
 
