@@ -14,7 +14,7 @@ jobs:
         python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # hatch-vcs needs tags for version
 
@@ -24,7 +24,7 @@ jobs:
           sudo apt-get install -y git-annex
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
@@ -47,7 +47,7 @@ jobs:
         env: [lint, type, e2e, spec-check, duplication]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0  # hatch-vcs needs tags for version
 
@@ -57,16 +57,16 @@ jobs:
           sudo apt-get install -y git-annex
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       # Only e2e and duplication actually need Node/npm, but setup-node is
       # cheap and this keeps the job matrix uniform.
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Install CI dependencies
         run: pip install -e ".[ci]"
