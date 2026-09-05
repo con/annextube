@@ -1,3 +1,24 @@
+# v0.14.1 (Sat Sep 05 2026)
+
+#### 🐛 Bug Fix
+
+- Auto-play video when entering the video page [#16](https://github.com/con/annextube/pull/16) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+- feat(frontend): add GitHub icon link in header [#13](https://github.com/con/annextube/pull/13) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+- ci: actually run e2e, spec-check, duplication tox envs in CI [#17](https://github.com/con/annextube/pull/17) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+- fix(search): cache revalidation + exact/approximate hit classification [#9](https://github.com/con/annextube/pull/9) ([@yarikoptic](https://github.com/yarikoptic) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+
+#### ⚠️ Pushed to `master`
+
+- docs: retroactively expand v0.14.0 CHANGELOG with full feature detail ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 3
+
+- Claude ([@claude](https://github.com/claude))
+- GitMate for @yarikoptic ([@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # v0.14.0 (Fri Sep 04 2026)
 
 #### 🚀 Enhancement
