@@ -31,7 +31,7 @@ def _make_bundle(tmp_path, version: str | None):
 
 
 @pytest.mark.ai_generated
-class TestExtractVersionFromBundle:
+class TestReadDeployedVersion:
     @pytest.mark.parametrize(
         "version",
         [
@@ -44,7 +44,7 @@ class TestExtractVersionFromBundle:
     )
     def test_finds_stamped_version(self, tmp_path, version):
         web_dir = _make_bundle(tmp_path, version)
-        assert generate_web._extract_version_from_bundle(web_dir) == version
+        assert generate_web._read_deployed_version(web_dir) == version
 
     def test_ignores_unrelated_version_looking_strings_in_the_bundle(self, tmp_path):
         """A bundled dependency's own quoted version string (e.g. from a
@@ -53,12 +53,12 @@ class TestExtractVersionFromBundle:
         """
         web_dir = _make_bundle(tmp_path, "0.14.0")
         (web_dir / "assets" / "index.js").write_text('const libVersion="7.1.0";')
-        assert generate_web._extract_version_from_bundle(web_dir) == "0.14.0"
+        assert generate_web._read_deployed_version(web_dir) == "0.14.0"
 
     def test_none_when_no_marker_file(self, tmp_path):
         """A web/ deployed by an annextube version older than the marker file."""
         web_dir = _make_bundle(tmp_path, None)
-        assert generate_web._extract_version_from_bundle(web_dir) is None
+        assert generate_web._read_deployed_version(web_dir) is None
 
 
 @pytest.mark.ai_generated
@@ -76,15 +76,23 @@ class TestCheckAndRegenerateWeb:
         assert result is False
         mock_deploy.assert_not_called()
 
-    def test_false_when_bundle_version_unknown(self, tmp_path, monkeypatch):
+    def test_regenerates_once_when_marker_missing(self, tmp_path, monkeypatch, capsys):
+        """A web/ deployed before this feature existed has no marker at all.
+
+        It must regenerate once (which then stamps the marker) rather than
+        never auto-upgrading -- otherwise every archive that already had a
+        web/ before upgrading annextube would never benefit from this
+        feature until someone ran `generate-web --force` by hand.
+        """
         monkeypatch.setattr(generate_web, "__version__", "0.14.0")
-        _make_bundle(tmp_path, None)
+        web_dir = _make_bundle(tmp_path, None)
 
         with patch.object(generate_web, "deploy_frontend") as mock_deploy:
             result = generate_web.check_and_regenerate_web(tmp_path)
 
-        assert result is False
-        mock_deploy.assert_not_called()
+        assert result is True
+        mock_deploy.assert_called_once_with(web_dir, quiet=False)
+        assert "0.14.0" in capsys.readouterr().out
 
     def test_regenerates_when_version_differs(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setattr(generate_web, "__version__", "0.14.0")
@@ -136,7 +144,7 @@ class TestDeployFrontendQuiet:
         assert (web_dir / "assets" / "index.js").exists()
 
     def test_stamps_version_marker(self, tmp_path, monkeypatch):
-        """deploy_frontend() must stamp the marker _extract_version_from_bundle()
+        """deploy_frontend() must stamp the marker _read_deployed_version()
         later reads back -- otherwise check_and_regenerate_web() can never
         detect that this bundle is up to date.
         """
@@ -148,7 +156,7 @@ class TestDeployFrontendQuiet:
 
         generate_web.deploy_frontend(web_dir, quiet=True)
 
-        assert generate_web._extract_version_from_bundle(web_dir) == "0.14.0"
+        assert generate_web._read_deployed_version(web_dir) == "0.14.0"
 
     def test_no_marker_when_placeholder_injection_fails(self, tmp_path, monkeypatch):
         """If the placeholder isn't found (e.g. a future build drift), the
@@ -165,7 +173,7 @@ class TestDeployFrontendQuiet:
 
         generate_web.deploy_frontend(web_dir, quiet=True)
 
-        assert generate_web._extract_version_from_bundle(web_dir) is None
+        assert generate_web._read_deployed_version(web_dir) is None
 
     def test_missing_build_error_is_quiet_on_stdout(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setattr(generate_web, "FRONTEND_BUILD_DIR", tmp_path / "no-build")

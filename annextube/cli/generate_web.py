@@ -189,8 +189,8 @@ def deploy_frontend(web_dir: Path, quiet: bool = False) -> None:
         )
 
 
-def _extract_version_from_bundle(web_dir: Path) -> str | None:
-    """Read the annextube version an existing web/ bundle was deployed with.
+def _read_deployed_version(web_dir: Path) -> str | None:
+    """Read the annextube version an existing web/ was deployed with.
 
     Reads the sidecar file ``deploy_frontend()`` stamps with ``__version__``
     at deploy time (see ``_VERSION_MARKER_FILENAME``).
@@ -212,27 +212,37 @@ def check_and_regenerate_web(archive_path: Path, quiet: bool = False) -> bool:
     CI) keep the archive's web UI in sync with the installed annextube
     version, without a manual ``generate-web --force`` after every upgrade.
 
+    A ``web/`` with no version marker (deployed by an annextube older than
+    the marker itself) is treated the same as a stale one and regenerated
+    once -- otherwise an archive predating the marker would never pick up
+    this whole auto-regeneration feature. That regeneration stamps the
+    marker, so later calls compare against it normally.
+
     Args:
         archive_path: Archive root (containing ``web/``).
         quiet: Suppress stdout status messages, e.g. for ``backup --json``
             where stray stdout would corrupt machine-readable output.
 
     Returns:
-        True if regeneration happened; False if web/ does not exist, its
-        version could not be determined, or it already matches
-        ``__version__``.
+        True if regeneration happened; False if web/ does not exist or it
+        already matches ``__version__``.
     """
     web_dir = archive_path / "web"
     if not web_dir.exists():
         return False
 
-    stored_version = _extract_version_from_bundle(web_dir)
-    if stored_version is None or stored_version == __version__:
+    deployed_version = _read_deployed_version(web_dir)
+    if deployed_version == __version__:
         return False
 
-    logger.info(f"web/ version changed: {stored_version} -> {__version__}, regenerating")
-    if not quiet:
-        click.echo(f"Regenerating web/ (v{stored_version} -> v{__version__})...")
+    if deployed_version is None:
+        logger.info("web/ predates version tracking, regenerating")
+        if not quiet:
+            click.echo(f"Regenerating web/ (unknown version -> v{__version__})...")
+    else:
+        logger.info(f"web/ version changed: {deployed_version} -> {__version__}, regenerating")
+        if not quiet:
+            click.echo(f"Regenerating web/ (v{deployed_version} -> v{__version__})...")
     deploy_frontend(web_dir, quiet=quiet)
     return True
 
