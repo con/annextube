@@ -27,7 +27,9 @@
   const initialCaseSensitive = urlParams.cs === '1';
   const initialUseRegex = urlParams.re === '1';
   const initialFilterMode = urlParams.filter === '1';
-  const initialAutoplay = urlParams.autoplay === '1';
+  // Auto-play by default when entering a video page (issue #14); an explicit
+  // `autoplay=0` in the URL (e.g. a shared link) opts back out.
+  const initialAutoplay = urlParams.autoplay !== '0';
   const initialMatchPos = urlParams.match ? Number(urlParams.match) : undefined;
 
   let playerRef: VideoPlayer;
