@@ -190,11 +190,11 @@
           {#if selectedChannel}
             <span class="separator">/</span>
             {#if selectedVideo}
-              <button on:click={handleBackToList}>{selectedChannel.title}</button>
+              <button on:click={handleBackToList}>{selectedChannel.name}</button>
               <span class="separator">/</span>
               <span class="current">{selectedVideo.title}</span>
             {:else}
-              <span class="current">{selectedChannel.title}</span>
+              <span class="current">{selectedChannel.name}</span>
             {/if}
           {/if}
         </nav>
