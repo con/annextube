@@ -29,9 +29,40 @@ jobs:
           python-version: ${{ matrix.python-version }}
           allow-prereleases: true
 
-      # Node.js is only needed by the tox envs (e2e, duplication) that run
-      # on the 3.12 leg -- see [gh-actions] in tox.ini. Set it up unconditionally
-      # since setup-node is cheap and this keeps the workflow simple.
+      - name: Install CI dependencies
+        run: pip install -e ".[ci]"
+
+      - name: Run tox
+        run: tox
+
+  checks:
+    # Non-pytest tox environments, run once each as their own job/check
+    # (rather than folded into one Python version's `tox` run) so a failure
+    # in any one of them shows up as its own clearly-named, clearly-failing
+    # check on the PR.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [lint, type, e2e, spec-check, duplication]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # hatch-vcs needs tags for version
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-annex
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Only e2e and duplication actually need Node/npm, but setup-node is
+      # cheap and this keeps the job matrix uniform.
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -40,5 +71,5 @@ jobs:
       - name: Install CI dependencies
         run: pip install -e ".[ci]"
 
-      - name: Run tox
-        run: tox
+      - name: Run tox -e ${{ matrix.env }}
+        run: tox -e ${{ matrix.env }}
