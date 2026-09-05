@@ -16,6 +16,15 @@ logger = get_logger(__name__)
 # Placeholder baked into the Vite build (must match frontend/vite.config.ts)
 FRONTEND_VERSION_PLACEHOLDER = "0.0.0-unknown"
 
+# Records the annextube version a web/ bundle was deployed with, so a later
+# check_and_regenerate_web() can tell it apart from an installed version
+# without guessing. A plain-text sidecar file rather than scraping the
+# minified JS: a bundled dependency can itself contain an arbitrary quoted
+# "X.Y.Z"-shaped string (e.g. its own package version), so pattern-matching
+# the bundle for "the" version string is unreliable -- and it isn't needed
+# when deploy_frontend() already knows the exact version it deployed.
+_VERSION_MARKER_FILENAME = ".annextube-version"
+
 # Path to frontend build (relative to this file)
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent.parent / "web"
 
@@ -98,17 +107,23 @@ def _warn_if_bundle_stale() -> None:
     )
 
 
-def deploy_frontend(web_dir: Path) -> None:
+def deploy_frontend(web_dir: Path, quiet: bool = False) -> None:
     """Copy the built frontend to *web_dir* and inject the annextube version.
 
-    This is the single code-path used by both ``generate-web`` and
-    ``serve --regenerate``.  It:
+    This is the single code-path used by ``generate-web``, ``serve
+    --regenerate`` and ``backup``'s auto-regeneration.  It:
 
     1. Verifies that the frontend build exists (and warns when it is
        older than the frontend sources of a development checkout).
     2. Replaces *web_dir* with a fresh copy of the build.
     3. Injects ``__version__`` into the JS bundle so the UI shows the
        correct annextube version.
+
+    Args:
+        web_dir: Archive's ``web/`` directory to (re)deploy into.
+        quiet: Suppress stdout status/progress messages (errors still
+            raise). Used by automation like ``backup --json``, where
+            stray stdout would corrupt machine-readable output.
 
     Raises
     ------
@@ -120,18 +135,20 @@ def deploy_frontend(web_dir: Path) -> None:
             f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
             err=True,
         )
-        click.echo()
-        click.echo("The web frontend is not included in this installation.")
-        click.echo()
-        click.echo("Options to fix this:")
-        click.echo("  1. Development: Run 'cd frontend && npm run build' to build the frontend")
-        click.echo("  2. Production: Install from a release that includes the built frontend")
-        click.echo("  3. Manual: Copy a pre-built web/ directory to your installation")
-        click.echo()
-        click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
+        if not quiet:
+            click.echo()
+            click.echo("The web frontend is not included in this installation.")
+            click.echo()
+            click.echo("Options to fix this:")
+            click.echo("  1. Development: Run 'cd frontend && npm run build' to build the frontend")
+            click.echo("  2. Production: Install from a release that includes the built frontend")
+            click.echo("  3. Manual: Copy a pre-built web/ directory to your installation")
+            click.echo()
+            click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
         raise click.Abort()
 
-    _warn_if_bundle_stale()
+    if not quiet:
+        _warn_if_bundle_stale()
 
     # Preserve web/pagefind/ if it exists (may be a DataLad subdataset
     # with the search index that should survive frontend re-deploys).
@@ -155,13 +172,79 @@ def deploy_frontend(web_dir: Path) -> None:
         pagefind_backup.rename(target)
 
     if _inject_version(web_dir, __version__):
-        click.echo(f"  [ok] web/ (v{__version__})")
+        if not quiet:
+            click.echo(f"  [ok] web/ (v{__version__})")
+        # Stamp the deployed version so a later check_and_regenerate_web()
+        # can detect drift without re-parsing the (minified,
+        # third-party-code-laden) JS bundle -- see _VERSION_MARKER_FILENAME.
+        # Only on successful injection: otherwise the bundle doesn't
+        # actually show __version__, and stamping it anyway would make
+        # check_and_regenerate_web() wrongly consider it up to date forever.
+        (web_dir / _VERSION_MARKER_FILENAME).write_text(__version__ + "\n")
     else:
         click.echo(
             f"  Warning: could not inject version v{__version__} "
             f"(placeholder '{FRONTEND_VERSION_PLACEHOLDER}' not found in JS bundle)",
             err=True,
         )
+
+
+def _read_deployed_version(web_dir: Path) -> str | None:
+    """Read the annextube version an existing web/ was deployed with.
+
+    Reads the sidecar file ``deploy_frontend()`` stamps with ``__version__``
+    at deploy time (see ``_VERSION_MARKER_FILENAME``).
+
+    Returns:
+        The version string, or None if ``web_dir`` predates this marker
+        (e.g. deployed by an older annextube) and so has none.
+    """
+    marker = web_dir / _VERSION_MARKER_FILENAME
+    if not marker.is_file():
+        return None
+    return marker.read_text().strip() or None
+
+
+def check_and_regenerate_web(archive_path: Path, quiet: bool = False) -> bool:
+    """Regenerate web/ if it was built with a different annextube version.
+
+    Used by ``annextube backup`` so automated update workflows (cron jobs,
+    CI) keep the archive's web UI in sync with the installed annextube
+    version, without a manual ``generate-web --force`` after every upgrade.
+
+    A ``web/`` with no version marker (deployed by an annextube older than
+    the marker itself) is treated the same as a stale one and regenerated
+    once -- otherwise an archive predating the marker would never pick up
+    this whole auto-regeneration feature. That regeneration stamps the
+    marker, so later calls compare against it normally.
+
+    Args:
+        archive_path: Archive root (containing ``web/``).
+        quiet: Suppress stdout status messages, e.g. for ``backup --json``
+            where stray stdout would corrupt machine-readable output.
+
+    Returns:
+        True if regeneration happened; False if web/ does not exist or it
+        already matches ``__version__``.
+    """
+    web_dir = archive_path / "web"
+    if not web_dir.exists():
+        return False
+
+    deployed_version = _read_deployed_version(web_dir)
+    if deployed_version == __version__:
+        return False
+
+    if deployed_version is None:
+        logger.info("web/ predates version tracking, regenerating")
+        if not quiet:
+            click.echo(f"Regenerating web/ (unknown version -> v{__version__})...")
+    else:
+        logger.info(f"web/ version changed: {deployed_version} -> {__version__}, regenerating")
+        if not quiet:
+            click.echo(f"Regenerating web/ (v{deployed_version} -> v{__version__})...")
+    deploy_frontend(web_dir, quiet=quiet)
+    return True
 
 
 def _build_search_index(archive_path: Path, force: bool = False) -> None:
