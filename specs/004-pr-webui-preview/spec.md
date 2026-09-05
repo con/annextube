@@ -77,10 +77,11 @@ run is triggered and no preview comment appears.
 
 1. **Given** a PR that only changes `docs/content/**`, **When** the PR is
    opened, **Then** the preview workflow does not run.
-2. **Given** a PR that changes `annextube/services/generate_web.py` (or
-   equivalent backend code feeding the generated web UI), **When** the PR
-   is opened, **Then** the preview workflow does run, since the output
-   depends on that code even though `frontend/` itself is untouched.
+2. **Given** a PR that changes `annextube/cli/generate_web.py` (or
+   `annextube/services/export.py`, which feeds the generated web UI's
+   data files), **When** the PR is opened, **Then** the preview workflow
+   does run, since the output depends on that code even though
+   `frontend/` itself is untouched.
 
 ---
 
@@ -107,6 +108,10 @@ run is triggered and no preview comment appears.
   seconds of each other should not queue redundant builds indefinitely;
   the workflow should behave like normal CI (latest push wins, via
   `concurrency` groups keyed on PR number).
+- **Required-status-check interaction**: if this workflow is later made a
+  required status check, PRs that don't touch in-scope paths (FR-007)
+  would never trigger it and could block merge indefinitely. Not planned
+  for v1, but a no-op fallback job would be needed if that changes.
 
 ## Requirements *(mandatory)*
 
@@ -123,12 +128,15 @@ run is triggered and no preview comment appears.
   to succeed on every PR build. It MUST reuse a single, previously
   generated demo archive (the `@AnnexTubeTesting` channel dataset) shared
   across all PR previews, refreshed independently of individual PR builds.
-- **FR-004**: The system MUST avoid duplicating the shared demo dataset's
-  metadata/thumbnails/captions once per PR preview; the per-PR artifact
-  MUST contain only what differs per PR (the built frontend bundle),
-  referencing the shared dataset. (Exact mechanism — copy vs. shared path
-  vs. symlink — is an implementation-planning decision, not a spec-level
-  one; see `research.md`.)
+- **FR-004**: The system SHOULD minimize duplicating the shared demo
+  dataset's metadata/thumbnails/captions once per PR preview. True sharing
+  (per-PR artifact containing only the built frontend bundle, referencing
+  one on-disk copy of the dataset) requires a small `data-loader.ts`
+  change (it currently only discovers data by climbing ancestor
+  directories, not by pointing at a named sibling — see `research.md`
+  §3); a per-PR copy of the ~1 MB dataset is an acceptable v1 fallback if
+  that change is deferred (bounded by SC-005). A literal filesystem
+  symlink is not viable — GitHub Pages does not resolve symlinks.
 - **FR-005**: The system MUST post a single PR comment containing the
   preview link, and MUST update (not duplicate) that comment on subsequent
   pushes to the same PR.
@@ -143,11 +151,12 @@ run is triggered and no preview comment appears.
   established by `deploy-demo.yml`/`tools/deploy-demo.sh`) instead of
   introducing a new, unrelated hosting mechanism, unless the design plan
   concludes an external service is materially better (see `research.md`).
-- **FR-009**: System MUST authenticate/authorize the preview-cleanup step
-  such that only the repository's own CI can modify the hosting branch;
-  no new broadly-scoped credentials beyond what `deploy-demo.yml` already
-  uses [NEEDS CLARIFICATION: none — `contents: write` on `GITHUB_TOKEN`,
-  already used by `deploy-demo.yml`, is sufficient for same-repo PRs].
+- **FR-009**: System MUST authenticate/authorize the build/publish/cleanup
+  steps such that only the repository's own CI can modify the hosting
+  branch and post/update PR comments, using only same-repo `GITHUB_TOKEN`
+  scopes — `contents: write` (already granted to `deploy-demo.yml`) plus
+  `pull-requests: write` for posting/updating the preview comment. No new,
+  broader, or externally-issued credential is required.
 
 ### Key Entities
 
@@ -159,8 +168,9 @@ run is triggered and no preview comment appears.
 - **Shared Demo Dataset**: The generated `@AnnexTubeTesting` archive
   (videos.tsv, playlists.tsv, per-video metadata/captions/thumbnails; no
   video binaries — playback falls back to the YouTube tab in the player
-  UI). Single copy, refreshed independently of PR previews, referenced by
-  every PR preview build.
+  UI). Refreshed independently of PR previews; ideally a single copy
+  referenced by every PR preview build, or (v1 fallback, see FR-004) one
+  small copy per PR preview.
 
 ## Success Criteria *(mandatory)*
 
@@ -173,13 +183,16 @@ run is triggered and no preview comment appears.
   run; no orphaned `pr-<number>/` paths remain after a PR is closed.
 - **SC-003**: Opening/updating an in-scope PR does not trigger a live
   YouTube/`yt-dlp` fetch; preview builds succeed even when YouTube bot
-  detection would otherwise block a fresh fetch.
+  detection would otherwise block a fresh fetch. (Requires fixing the
+  dataset-refresh gap identified in `research.md` §1 as a prerequisite —
+  today's `deploy-demo.yml` still fetches live on every run.)
 - **SC-004**: A PR that does not touch frontend-affecting paths does not
   trigger the preview workflow at all (zero added CI cost for the common
   case).
 - **SC-005**: Hosting-branch growth per additional concurrently-open PR
-  preview is small (bundle-only, no duplicated dataset) — target well
-  under 1 MB per preview, based on the current demo dataset's ~1 MB size.
+  preview stays well under 1 MB, whether that's achieved via a true
+  shared dataset (bundle-only per PR) or a small per-PR copy of the
+  current ~1 MB dataset (acceptable v1 fallback, see FR-004).
 
 ## Out of Scope (initial version)
 
@@ -188,3 +201,12 @@ run is triggered and no preview comment appears.
   as an alternative in `research.md`, not required for v1.
 - Previewing arbitrary user-supplied archives (only the shared demo
   dataset is used).
+
+## Prerequisites
+
+- Fixing the `deploy-demo.yml`/`tools/deploy-demo.sh` data-copy gap
+  (`web/` is deployed today, but the sibling `videos/`/`playlists/`/
+  `authors.tsv`/`channel.json` export files are not — see `research.md`
+  §1) is in scope for this feature, not a separate prior piece of work,
+  since PR previews need the same data-plus-frontend deploy to work
+  correctly.
