@@ -1,3 +1,20 @@
+# v0.14.2 (Sat Sep 05 2026)
+
+#### 🐛 Bug Fix
+
+- fix(web): show channel name instead of undefined in breadcrumb [#22](https://github.com/con/annextube/pull/22) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+
+#### 🧪 Tests
+
+- ci: bump GitHub Actions to node24-compatible versions [#19](https://github.com/con/annextube/pull/19) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+
+#### Authors: 2
+
+- Claude ([@claude](https://github.com/claude))
+- GitMate for @yarikoptic ([@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+
+---
+
 # v0.14.1 (Sat Sep 05 2026)
 
 #### 🐛 Bug Fix
