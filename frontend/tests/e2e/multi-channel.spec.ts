@@ -195,10 +195,12 @@ test.describe('Multi-Channel Navigation', () => {
     // Wait for videos to load
     await page.waitForSelector('.video-card', { timeout: 10000 });
 
-    // Should show breadcrumb
+    // Should show breadcrumb with the channel's actual name (not "undefined")
     const breadcrumb = page.locator('.breadcrumb');
     await expect(breadcrumb).toBeVisible();
     await expect(breadcrumb).toContainText('Channels');
+    await expect(breadcrumb).toContainText('Alpha Channel');
+    await expect(breadcrumb).not.toContainText('undefined');
 
     // Should show 2 videos
     const videoCards = page.locator('.video-card');
