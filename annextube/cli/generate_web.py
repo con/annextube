@@ -104,17 +104,23 @@ def _warn_if_bundle_stale() -> None:
     )
 
 
-def deploy_frontend(web_dir: Path) -> None:
+def deploy_frontend(web_dir: Path, quiet: bool = False) -> None:
     """Copy the built frontend to *web_dir* and inject the annextube version.
 
-    This is the single code-path used by both ``generate-web`` and
-    ``serve --regenerate``.  It:
+    This is the single code-path used by ``generate-web``, ``serve
+    --regenerate`` and ``backup``'s auto-regeneration.  It:
 
     1. Verifies that the frontend build exists (and warns when it is
        older than the frontend sources of a development checkout).
     2. Replaces *web_dir* with a fresh copy of the build.
     3. Injects ``__version__`` into the JS bundle so the UI shows the
        correct annextube version.
+
+    Args:
+        web_dir: Archive's ``web/`` directory to (re)deploy into.
+        quiet: Suppress stdout status/progress messages (errors still
+            raise). Used by automation like ``backup --json``, where
+            stray stdout would corrupt machine-readable output.
 
     Raises
     ------
@@ -126,18 +132,20 @@ def deploy_frontend(web_dir: Path) -> None:
             f"Error: Frontend build not found at {FRONTEND_BUILD_DIR}",
             err=True,
         )
-        click.echo()
-        click.echo("The web frontend is not included in this installation.")
-        click.echo()
-        click.echo("Options to fix this:")
-        click.echo("  1. Development: Run 'cd frontend && npm run build' to build the frontend")
-        click.echo("  2. Production: Install from a release that includes the built frontend")
-        click.echo("  3. Manual: Copy a pre-built web/ directory to your installation")
-        click.echo()
-        click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
+        if not quiet:
+            click.echo()
+            click.echo("The web frontend is not included in this installation.")
+            click.echo()
+            click.echo("Options to fix this:")
+            click.echo("  1. Development: Run 'cd frontend && npm run build' to build the frontend")
+            click.echo("  2. Production: Install from a release that includes the built frontend")
+            click.echo("  3. Manual: Copy a pre-built web/ directory to your installation")
+            click.echo()
+            click.echo(f"Expected location: {FRONTEND_BUILD_DIR}")
         raise click.Abort()
 
-    _warn_if_bundle_stale()
+    if not quiet:
+        _warn_if_bundle_stale()
 
     # Preserve web/pagefind/ if it exists (may be a DataLad subdataset
     # with the search index that should survive frontend re-deploys).
@@ -161,7 +169,8 @@ def deploy_frontend(web_dir: Path) -> None:
         pagefind_backup.rename(target)
 
     if _inject_version(web_dir, __version__):
-        click.echo(f"  [ok] web/ (v{__version__})")
+        if not quiet:
+            click.echo(f"  [ok] web/ (v{__version__})")
     else:
         click.echo(
             f"  Warning: could not inject version v{__version__} "
@@ -192,12 +201,17 @@ def _extract_version_from_bundle(web_dir: Path) -> str | None:
     return None
 
 
-def check_and_regenerate_web(archive_path: Path) -> bool:
+def check_and_regenerate_web(archive_path: Path, quiet: bool = False) -> bool:
     """Regenerate web/ if it was built with a different annextube version.
 
     Used by ``annextube backup`` so automated update workflows (cron jobs,
     CI) keep the archive's web UI in sync with the installed annextube
     version, without a manual ``generate-web --force`` after every upgrade.
+
+    Args:
+        archive_path: Archive root (containing ``web/``).
+        quiet: Suppress stdout status messages, e.g. for ``backup --json``
+            where stray stdout would corrupt machine-readable output.
 
     Returns:
         True if regeneration happened; False if web/ does not exist, its
@@ -213,8 +227,9 @@ def check_and_regenerate_web(archive_path: Path) -> bool:
         return False
 
     logger.info(f"web/ version changed: {stored_version} -> {__version__}, regenerating")
-    click.echo(f"Regenerating web/ (v{stored_version} -> v{__version__})...")
-    deploy_frontend(web_dir)
+    if not quiet:
+        click.echo(f"Regenerating web/ (v{stored_version} -> v{__version__})...")
+    deploy_frontend(web_dir, quiet=quiet)
     return True
 
 

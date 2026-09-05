@@ -778,7 +778,7 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
 # `annextube generate-web --force`). Override per-run with
 # --regenerate-web / --no-regenerate-web.
 [web]
-# auto_regenerate = true  # Uncomment to disable: auto_regenerate = false
+# auto_regenerate = false  # Uncomment to disable (default: true)
 
 {organization_section}{filters_section}
 # Optional date range filter

@@ -7,6 +7,7 @@
 
 from unittest.mock import patch
 
+import click
 import pytest
 
 from annextube.cli import generate_web
@@ -76,7 +77,54 @@ class TestCheckAndRegenerateWeb:
             result = generate_web.check_and_regenerate_web(tmp_path)
 
         assert result is True
-        mock_deploy.assert_called_once_with(web_dir)
+        mock_deploy.assert_called_once_with(web_dir, quiet=False)
         out = capsys.readouterr().out
         assert "0.13.0" in out
         assert "0.14.0" in out
+
+    def test_quiet_suppresses_stdout_and_forwards_to_deploy(self, tmp_path, monkeypatch, capsys):
+        """quiet=True must not print to stdout (e.g. for `backup --json`)."""
+        monkeypatch.setattr(generate_web, "__version__", "0.14.0")
+        web_dir = _make_bundle(tmp_path, "0.13.0")
+
+        with patch.object(generate_web, "deploy_frontend") as mock_deploy:
+            result = generate_web.check_and_regenerate_web(tmp_path, quiet=True)
+
+        assert result is True
+        mock_deploy.assert_called_once_with(web_dir, quiet=True)
+        assert capsys.readouterr().out == ""
+
+
+@pytest.mark.ai_generated
+class TestDeployFrontendQuiet:
+    """``quiet=True`` must not write to stdout (e.g. for ``backup --json``)."""
+
+    def _make_build(self, tmp_path):
+        assets = tmp_path / "build" / "assets"
+        assets.mkdir(parents=True)
+        (assets / "index.js").write_text(
+            f'const v="{generate_web.FRONTEND_VERSION_PLACEHOLDER}";'
+        )
+        return tmp_path / "build"
+
+    def test_quiet_suppresses_success_message(self, tmp_path, monkeypatch, capsys):
+        build_dir = self._make_build(tmp_path)
+        monkeypatch.setattr(generate_web, "FRONTEND_BUILD_DIR", build_dir)
+        monkeypatch.setattr(generate_web, "FRONTEND_SRC_DIR", tmp_path / "absent")
+        web_dir = tmp_path / "web"
+
+        generate_web.deploy_frontend(web_dir, quiet=True)
+
+        assert capsys.readouterr().out == ""
+        assert (web_dir / "assets" / "index.js").exists()
+
+    def test_missing_build_error_is_quiet_on_stdout(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(generate_web, "FRONTEND_BUILD_DIR", tmp_path / "no-build")
+        web_dir = tmp_path / "web"
+
+        with pytest.raises(click.exceptions.Abort):
+            generate_web.deploy_frontend(web_dir, quiet=True)
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "Frontend build not found" in captured.err

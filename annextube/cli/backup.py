@@ -399,7 +399,7 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
         do_regenerate_web = config.web.auto_regenerate if regenerate_web is None else regenerate_web
         if do_regenerate_web:
             try:
-                if check_and_regenerate_web(output_dir):
+                if check_and_regenerate_web(output_dir, quiet=json_output):
                     logger.info("Regenerated web/ for current annextube version")
             except Exception as e:
                 if not json_output:
