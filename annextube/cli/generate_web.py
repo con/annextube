@@ -1,5 +1,6 @@
 """Generate web command for annextube."""
 
+import re
 import shutil
 from pathlib import Path
 
@@ -12,6 +13,11 @@ from annextube.lib.logging_config import get_logger
 from annextube.services.export import ExportService
 
 logger = get_logger(__name__)
+
+# Matches the quoted semver-like string `_inject_version()` writes in place
+# of FRONTEND_VERSION_PLACEHOLDER (an optional "v" prefix is tolerated for
+# forward/backward compatibility, though the placeholder itself has none).
+_BUNDLED_VERSION_RE = re.compile(r'"v?(\d+\.\d+\.\d+(?:[.\-][0-9A-Za-z]+)*)"')
 
 # Placeholder baked into the Vite build (must match frontend/vite.config.ts)
 FRONTEND_VERSION_PLACEHOLDER = "0.0.0-unknown"
@@ -162,6 +168,54 @@ def deploy_frontend(web_dir: Path) -> None:
             f"(placeholder '{FRONTEND_VERSION_PLACEHOLDER}' not found in JS bundle)",
             err=True,
         )
+
+
+def _extract_version_from_bundle(web_dir: Path) -> str | None:
+    """Read the annextube version already baked into an existing web/ bundle.
+
+    Scans ``web_dir/assets/*.js`` for the first quoted semver-like string --
+    the same shape ``_inject_version()`` writes in place of
+    ``FRONTEND_VERSION_PLACEHOLDER``.
+
+    Returns:
+        The version string (without a leading "v"), or None if there is no
+        assets/ directory or no version-like string could be found.
+    """
+    assets_dir = web_dir / "assets"
+    if not assets_dir.exists():
+        return None
+
+    for js_file in sorted(assets_dir.glob("*.js")):
+        match = _BUNDLED_VERSION_RE.search(js_file.read_text())
+        if match:
+            return match.group(1)
+    return None
+
+
+def check_and_regenerate_web(archive_path: Path) -> bool:
+    """Regenerate web/ if it was built with a different annextube version.
+
+    Used by ``annextube backup`` so automated update workflows (cron jobs,
+    CI) keep the archive's web UI in sync with the installed annextube
+    version, without a manual ``generate-web --force`` after every upgrade.
+
+    Returns:
+        True if regeneration happened; False if web/ does not exist, its
+        version could not be determined, or it already matches
+        ``__version__``.
+    """
+    web_dir = archive_path / "web"
+    if not web_dir.exists():
+        return False
+
+    stored_version = _extract_version_from_bundle(web_dir)
+    if stored_version is None or stored_version == __version__:
+        return False
+
+    logger.info(f"web/ version changed: {stored_version} -> {__version__}, regenerating")
+    click.echo(f"Regenerating web/ (v{stored_version} -> v{__version__})...")
+    deploy_frontend(web_dir)
+    return True
 
 
 def _build_search_index(archive_path: Path, force: bool = False) -> None:

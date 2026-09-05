@@ -57,6 +57,13 @@ class SearchConfig:
 
 
 @dataclass
+class WebConfig:
+    """Configuration for the generated web browser (``web/``)."""
+
+    auto_regenerate: bool = True  # Regenerate web/ during backup when its version is stale
+
+
+@dataclass
 class SourceConfig:
     """Configuration for a YouTube source (channel or playlist)."""
 
@@ -263,6 +270,7 @@ class Config:
     backup: BackupConfig = field(default_factory=BackupConfig)
     curation: CurationConfig = field(default_factory=CurationConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+    web: WebConfig = field(default_factory=WebConfig)
 
     # Collection-level settings (only present at collection root)
     collection: CollectionConfig | None = None
@@ -374,6 +382,11 @@ class Config:
             enabled=search_data.get("enabled", False),
         )
 
+        web_data = data.get("web", {})
+        web = WebConfig(
+            auto_regenerate=web_data.get("auto_regenerate", True),
+        )
+
         # Optional [collection] section (only at collection root)
         collection_data = data.get("collection")
         collection = (
@@ -389,6 +402,7 @@ class Config:
             organization=organization,
             curation=curation,
             search=search,
+            web=web,
             collection=collection,
         )
 
@@ -757,6 +771,14 @@ caption_languages = ".*"  # Regex pattern for caption languages to download
 # Builds a Pagefind full-text search index from caption VTT files after backup
 [search]
 {"enabled = true  # Auto-build search index after backup" if enable_search else "# enabled = true  # Uncomment to auto-build search index after backup"}
+
+# Web browser (web/) regeneration
+# When `annextube backup` finds an existing web/ built with a different
+# annextube version, it regenerates it automatically (equivalent to
+# `annextube generate-web --force`). Override per-run with
+# --regenerate-web / --no-regenerate-web.
+[web]
+# auto_regenerate = true  # Uncomment to disable: auto_regenerate = false
 
 {organization_section}{filters_section}
 # Optional date range filter

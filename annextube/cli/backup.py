@@ -9,6 +9,7 @@ from typing import Any
 
 import click
 
+from annextube.cli.generate_web import check_and_regenerate_web
 from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.cli_options import output_dir_option
 from annextube.lib.config import load_config
@@ -96,8 +97,13 @@ def _json_error(command: str, code: int, message: str, details: str = "") -> str
     default=None,
     help="Build caption search index after backup (default: use [search] config)",
 )
+@click.option(
+    "--regenerate-web/--no-regenerate-web",
+    default=None,
+    help="Regenerate web/ if built with a different annextube version (default: use [web] auto_regenerate config)",
+)
 @click.pass_context
-def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, yt_dlp_max_parallel: int | None, skip_existing: bool, search_index: bool | None):
+def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: str, from_date: str, to_date: str, comments_depth: int | None, yt_dlp_max_parallel: int | None, skip_existing: bool, search_index: bool | None, regenerate_web: bool | None):
     """Backup YouTube channel or playlist.
 
     If URL is provided, backs up that specific channel/playlist (ad-hoc mode).
@@ -387,6 +393,19 @@ def backup(ctx: click.Context, url: str, output_dir: Path, limit: int, update: s
                         click.echo(f"Warning: search index build failed: {e}", err=True)
                     else:
                         logger.warning(f"Search index build failed: {e}")
+
+        # Regenerate web/ if it was built with a different annextube version.
+        # CLI flag overrides config: True=force check, False=skip, None=use config
+        do_regenerate_web = config.web.auto_regenerate if regenerate_web is None else regenerate_web
+        if do_regenerate_web:
+            try:
+                if check_and_regenerate_web(output_dir):
+                    logger.info("Regenerated web/ for current annextube version")
+            except Exception as e:
+                if not json_output:
+                    click.echo(f"Warning: web/ regeneration failed: {e}", err=True)
+                else:
+                    logger.warning(f"web/ regeneration failed: {e}")
 
         duration_seconds = round(time.monotonic() - start_time, 1)
 
