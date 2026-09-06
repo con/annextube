@@ -1,11 +1,24 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import type { Video } from '@/types/models';
   import { formatDuration, formatViews, formatRelativeTime, formatCommentCount } from '@/utils/format';
+  import { checkVideoAvailability } from '@/services/availability';
+  import { dataLoader } from '@/services/data-loader';
 
   export let video: Video;
   export let onClick: (video: Video) => void = () => {};
+  export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
 
   let thumbnailError = false;
+
+  // Hover-to-preview (issue #11): play the actual video, muted, inline,
+  // within the thumbnail area, reverting to the static image on
+  // mouseleave. No snippet extraction/caching -- just the real file.
+  let isHovering = false;
+  let hasLocalVideo = false;
+  let previewVideoElement: HTMLVideoElement | null = null;
+
+  $: previewUrl = dataLoader.getVideoFileUrl(video, channelDir);
 
   function handleThumbnailError() {
     thumbnailError = true;
@@ -17,6 +30,36 @@
       onClick(video);
     }
   }
+
+  async function handleMouseEnter() {
+    isHovering = true;
+    // Only bother probing when the archive actually has a local copy;
+    // checkVideoAvailability caches the HEAD request so re-hovering is free.
+    if (video.download_status === 'downloaded' || video.download_status === 'tracked') {
+      const available = await checkVideoAvailability(previewUrl);
+      if (isHovering) hasLocalVideo = available;
+    }
+  }
+
+  function handleMouseLeave() {
+    isHovering = false;
+    // Pause explicitly rather than relying on the {#if} removing the
+    // element -- a detached but still-referenced <video> can keep playing.
+    previewVideoElement?.pause();
+  }
+
+  function handlePreviewCanPlay() {
+    previewVideoElement?.play().catch(() => {
+      // Autoplay can be blocked by the browser; the static thumbnail
+      // stays visible underneath, so there's nothing more to do.
+    });
+  }
+
+  // Belt-and-braces: if the card is torn down (e.g. list re-render while
+  // the pointer is still over it) without a mouseleave ever firing.
+  onDestroy(() => {
+    previewVideoElement?.pause();
+  });
 </script>
 
 <div
@@ -26,7 +69,11 @@
   role="button"
   tabindex="0"
 >
-  <div class="thumbnail-container">
+  <div
+    class="thumbnail-container"
+    on:mouseenter={handleMouseEnter}
+    on:mouseleave={handleMouseLeave}
+  >
     {#if thumbnailError}
       <div class="thumbnail-placeholder">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -42,6 +89,25 @@
         loading="lazy"
         on:error={handleThumbnailError}
       />
+    {/if}
+
+    {#if isHovering && hasLocalVideo}
+      <!-- Decorative hover preview -- the accessible experience is the
+           thumbnail img (with its alt text) plus the card's click/Enter
+           handling; this overlay adds nothing for keyboard/AT users. -->
+      <!-- svelte-ignore a11y-media-has-caption -->
+      <video
+        bind:this={previewVideoElement}
+        class="preview-video"
+        src={previewUrl}
+        muted
+        loop
+        playsinline
+        preload="auto"
+        tabindex="-1"
+        aria-hidden="true"
+        on:canplay={handlePreviewCanPlay}
+      ></video>
     {/if}
 
     <!-- Download status badge -->
@@ -111,6 +177,16 @@
     height: 100%;
     object-fit: cover;
     display: block;
+  }
+
+  .preview-video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
   }
 
   .thumbnail-placeholder {
