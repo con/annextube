@@ -2,7 +2,7 @@
   import { onDestroy } from 'svelte';
   import type { Video } from '@/types/models';
   import { formatDuration, formatViews, formatRelativeTime, formatCommentCount } from '@/utils/format';
-  import { checkVideoAvailability } from '@/services/availability';
+  import { checkVideoAvailability, clearAvailabilityCache } from '@/services/availability';
   import { dataLoader } from '@/services/data-loader';
 
   export let video: Video;
@@ -53,6 +53,16 @@
       // Autoplay can be blocked by the browser; the static thumbnail
       // stays visible underneath, so there's nothing more to do.
     });
+  }
+
+  function handlePreviewError() {
+    // The availability cache said this file was there, but loading it
+    // failed anyway (e.g. content dropped from the annex mid-session).
+    // Fall back to the static thumbnail and stop trusting the stale cache
+    // entry so the next hover re-checks for real, instead of leaving an
+    // opaque, permanently-broken overlay over the thumbnail.
+    hasLocalVideo = false;
+    clearAvailabilityCache(previewUrl);
   }
 
   // Belt-and-braces: if the card is torn down (e.g. list re-render while
@@ -107,6 +117,7 @@
         tabindex="-1"
         aria-hidden="true"
         on:canplay={handlePreviewCanPlay}
+        on:error={handlePreviewError}
       ></video>
     {/if}
 

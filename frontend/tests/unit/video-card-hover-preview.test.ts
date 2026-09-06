@@ -151,4 +151,33 @@ describe('VideoCard hover preview', () => {
 
     expect(pauseSpy).toHaveBeenCalled();
   });
+
+  test('falls back to the thumbnail and drops the stale cache entry when the file fails to load', async () => {
+    // The availability check said the file was there (e.g. a stale cache
+    // entry from before the content was dropped from the annex), but
+    // actually loading it fails.
+    const { container } = render(VideoCard, { props: { video: makeVideo() } });
+    const thumbnail = container.querySelector('.thumbnail-container') as HTMLElement;
+
+    await fireEvent.mouseEnter(thumbnail);
+    await waitFor(() => {
+      expect(container.querySelector('.preview-video')).not.toBeNull();
+    });
+
+    container.querySelector('.preview-video')!.dispatchEvent(new Event('error'));
+
+    // No permanently-broken black overlay: the preview is torn down and the
+    // static thumbnail is shown again, even though the mouse never left.
+    await waitFor(() => {
+      expect(container.querySelector('.preview-video')).toBeNull();
+    });
+    expect(container.querySelector('img.thumbnail')).not.toBeNull();
+
+    // The stale cache entry must not be trusted again: re-hovering issues a
+    // fresh HEAD check instead of reusing the (wrong) cached "available".
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    await fireEvent.mouseLeave(thumbnail);
+    await fireEvent.mouseEnter(thumbnail);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+  });
 });
