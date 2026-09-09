@@ -38,6 +38,29 @@ logger = logging.getLogger(__name__)
     default=True,
     help='Copy data files (videos/, playlists/, etc.) to gh-pages branch (default: enabled)'
 )
+@click.option(
+    '--subpath',
+    default=None,
+    help=(
+        'Publish under this subdirectory of the target branch '
+        '(e.g. "pr-42") instead of the branch root. Only this subpath is '
+        'written to -- the branch root and any other subpath (e.g. other '
+        'PRs\' previews) are left untouched.'
+    )
+)
+@click.option(
+    '--source-dir',
+    default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help=(
+        'Copy the frontend build and data files from this directory '
+        'instead of building fresh and reading data from --output-dir\'s '
+        'own origin/master (or origin/main). The directory must already '
+        'contain a built "web/" subdirectory (e.g. the output of '
+        '`annextube generate-web`) alongside the data files. Implies '
+        'skipping the frontend build step.'
+    )
+)
 @click.pass_context
 def prepare_ghpages(
     ctx: click.Context,
@@ -45,7 +68,9 @@ def prepare_ghpages(
     repo_name: str | None,
     gh_branch: str,
     build_frontend: bool,
-    copy_data: bool
+    copy_data: bool,
+    subpath: str | None,
+    source_dir: Path | None,
 ):
     """Prepare archive for GitHub Pages deployment.
 
@@ -66,8 +91,15 @@ def prepare_ghpages(
 
         # Skip data copy (metadata only, useful for large archives)
         annextube prepare-ghpages --output-dir ~/my-archive --no-copy-data
+
+        # Publish a pre-built preview under a subpath, from an already-built
+        # source directory (e.g. a downloaded CI build artifact), leaving
+        # everything else on the branch untouched
+        annextube prepare-ghpages --output-dir ~/annextube-checkout \\
+            --source-dir /tmp/pr-42-build --subpath pr-42
     """
     repo_path = output_dir.resolve()
+    source_path = source_dir.resolve() if source_dir else None
 
     # 1. Detect or validate repo name
     if not repo_name:
@@ -80,14 +112,22 @@ def prepare_ghpages(
             )
         click.echo(f"Detected repository: {repo_name}")
 
-    # 2. Build frontend with GitHub Pages config
-    if build_frontend:
-        click.echo(f"\nBuilding frontend for GitHub Pages (/{repo_name}/)...")
+    # 2. Build frontend with GitHub Pages config -- skipped when --source-dir
+    # is given, since it must already contain a pre-built web/ directory
+    do_build_frontend = build_frontend and source_path is None
+    if do_build_frontend:
+        base_path = f'/{repo_name}/{subpath}/' if subpath else f'/{repo_name}/'
+        click.echo(f"\nBuilding frontend for GitHub Pages ({base_path})...")
         try:
-            build_frontend_for_ghpages(repo_path, repo_name)
+            build_frontend_for_ghpages(repo_path, repo_name, subpath=subpath)
             click.echo("✓ Frontend build completed")
         except Exception as e:
             raise click.ClickException(f"Frontend build failed: {e}") from e
+    elif source_path is not None:
+        click.echo(
+            "\nSkipping frontend build: using pre-built content from "
+            f"--source-dir ({source_path})"
+        )
 
     # 3. Create/update gh-pages branch
     click.echo(f"\nPreparing {gh_branch} branch...")
@@ -97,19 +137,25 @@ def prepare_ghpages(
     except Exception as e:
         raise click.ClickException(f"Failed to create {gh_branch} branch: {e}") from e
 
-    # 4. Copy frontend build to gh-pages branch
-    click.echo(f"\nCopying frontend to {gh_branch} branch...")
+    # 4. Copy frontend build to gh-pages branch (into --subpath if given)
+    dest = f"{gh_branch}/{subpath}" if subpath else gh_branch
+    click.echo(f"\nCopying frontend to {dest}...")
     try:
-        copy_frontend_to_ghpages(repo_path, gh_branch, build_frontend)
+        copy_frontend_to_ghpages(
+            repo_path, gh_branch, do_build_frontend,
+            subpath=subpath, source_dir=source_path,
+        )
         click.echo("✓ Frontend copied")
     except Exception as e:
         raise click.ClickException(f"Failed to copy frontend: {e}") from e
 
-    # 5. Copy data files if requested
+    # 5. Copy data files if requested (into --subpath if given)
     if copy_data:
-        click.echo(f"\nCopying data files to {gh_branch} branch...")
+        click.echo(f"\nCopying data files to {dest}...")
         try:
-            copy_data_to_ghpages(repo_path, gh_branch)
+            copy_data_to_ghpages(
+                repo_path, gh_branch, subpath=subpath, source_dir=source_path,
+            )
             click.echo("✓ Data files copied")
         except Exception as e:
             raise click.ClickException(f"Failed to copy data files: {e}") from e
@@ -190,12 +236,18 @@ def get_github_repo_name(repo_path: Path) -> str | None:
     return None
 
 
-def build_frontend_for_ghpages(repo_path: Path, repo_name: str) -> None:
+def build_frontend_for_ghpages(
+    repo_path: Path, repo_name: str, subpath: str | None = None
+) -> None:
     """Build frontend with GitHub Pages base path.
 
     Args:
         repo_path: Path to repository
         repo_name: GitHub repository name
+        subpath: If given, build for `/{repo_name}/{subpath}/` instead of
+            `/{repo_name}/`, so the built assets resolve correctly when
+            published under a subdirectory of the branch (e.g. a per-PR
+            preview).
     """
     # Find frontend directory
     # Try multiple locations:
@@ -240,7 +292,7 @@ def build_frontend_for_ghpages(repo_path: Path, repo_name: str) -> None:
 
     # Set base path via environment variable
     env = os.environ.copy()
-    env['VITE_BASE_PATH'] = f'/{repo_name}/'
+    env['VITE_BASE_PATH'] = f'/{repo_name}/{subpath}/' if subpath else f'/{repo_name}/'
 
     # Install dependencies if needed
     if not (frontend_dir / 'node_modules').exists():
@@ -318,7 +370,9 @@ def create_ghpages_branch(repo_path: Path, branch_name: str) -> None:
 def copy_frontend_to_ghpages(
     repo_path: Path,
     branch_name: str,
-    was_built: bool
+    was_built: bool,
+    subpath: str | None = None,
+    source_dir: Path | None = None,
 ) -> None:
     """Copy built frontend to gh-pages branch.
 
@@ -326,46 +380,66 @@ def copy_frontend_to_ghpages(
         repo_path: Path to repository
         branch_name: Target branch name
         was_built: Whether frontend was just built
+        subpath: If given, copy into `<repo_path>/<subpath>/` instead of
+            `<repo_path>/`, leaving everything else on the branch untouched.
+        source_dir: If given, copy from `<source_dir>/web` instead of
+            searching the usual build-output locations (used when the
+            frontend was already built elsewhere, e.g. by an untrusted CI
+            build job whose artifact this is).
     """
-    # Find frontend dist directory using same logic as build
-    import annextube
+    if source_dir is not None:
+        dist_dir = source_dir / 'web'
+        if not dist_dir.exists():
+            raise FileNotFoundError(
+                f"--source-dir given but no 'web/' directory found in it: "
+                f"{source_dir}"
+            )
+    else:
+        # Find frontend dist directory using same logic as build
+        import annextube
 
-    search_paths = []
+        search_paths = []
 
-    # Check environment variable first (same as build step)
-    env_frontend = os.environ.get('ANNEXTUBE_FRONTEND_DIR')
-    if env_frontend:
-        search_paths.append(Path(env_frontend))
+        # Check environment variable first (same as build step)
+        env_frontend = os.environ.get('ANNEXTUBE_FRONTEND_DIR')
+        if env_frontend:
+            search_paths.append(Path(env_frontend))
 
-    if hasattr(annextube, '__file__') and annextube.__file__:
-        annextube_root = Path(annextube.__file__).parent.parent
-        search_paths.append(annextube_root / 'frontend')
+        if hasattr(annextube, '__file__') and annextube.__file__:
+            annextube_root = Path(annextube.__file__).parent.parent
+            search_paths.append(annextube_root / 'frontend')
 
-    search_paths.extend([
-        repo_path.parent.parent / 'frontend',
-        repo_path.parent / 'frontend',
-        repo_path / 'frontend'
-    ])
+        search_paths.extend([
+            repo_path.parent.parent / 'frontend',
+            repo_path.parent / 'frontend',
+            repo_path / 'frontend'
+        ])
 
-    dist_dir = None
-    for path in search_paths:
-        # Check dist/ (gh-pages mode), web/ subdir, and ../web (vite outDir: '../web')
-        for candidate in (path / 'dist', path / 'web', path.parent / 'web'):
-            if candidate.exists():
-                dist_dir = candidate
+        dist_dir = None
+        for path in search_paths:
+            # Check dist/ (gh-pages mode), web/ subdir, and ../web (vite outDir: '../web')
+            for candidate in (path / 'dist', path / 'web', path.parent / 'web'):
+                if candidate.exists():
+                    dist_dir = candidate
+                    break
+            if dist_dir:
                 break
-        if dist_dir:
-            break
 
-    if not dist_dir:
-        raise FileNotFoundError(
-            "Frontend dist directory not found.\n"
-            "Run with --build-frontend to build first."
-        )
+        if not dist_dir:
+            raise FileNotFoundError(
+                "Frontend dist directory not found.\n"
+                "Run with --build-frontend to build first."
+            )
 
-    # Copy all files from dist/ to repository root
+    assert dist_dir is not None  # guaranteed by the branches above (else they raise)
+
+    dest_root = (repo_path / subpath) if subpath else repo_path
+    dest_root.mkdir(parents=True, exist_ok=True)
+
+    # Copy all files from dist/ to the destination root -- never touches
+    # anything outside dest_root, so sibling subpaths are left alone
     for item in dist_dir.iterdir():
-        dest = repo_path / item.name
+        dest = dest_root / item.name
 
         # Remove existing
         if dest.exists():
@@ -383,42 +457,88 @@ def copy_frontend_to_ghpages(
         logger.debug(f"Copied: {item.name}")
 
 
-def copy_data_to_ghpages(repo_path: Path, branch_name: str) -> None:
-    """Copy data files from master branch to gh-pages.
+def copy_data_to_ghpages(
+    repo_path: Path,
+    branch_name: str,
+    subpath: str | None = None,
+    source_dir: Path | None = None,
+) -> None:
+    """Copy data files (videos/, playlists/, authors.tsv) to gh-pages.
 
-    Copies both unannexed files and git-annex symlinks. The symlinks can be
-    resolved later by running 'git annex get' or removed if content is unavailable.
+    Without --source-dir, copies both unannexed files and git-annex symlinks
+    from `--output-dir`'s own `origin/master`/`origin/main`. The symlinks
+    can be resolved later by running 'git annex get' or removed if content
+    is unavailable.
+
+    With --source-dir, copies real files directly from that directory
+    instead (used when the data comes from a separate export, e.g. the
+    `annextubetesting` branch's content, not this repo's own default
+    branch).
 
     Args:
         repo_path: Path to repository
         branch_name: Target branch name
+        subpath: If given, copy into `<repo_path>/<subpath>/` instead of
+            `<repo_path>/`, leaving everything else on the branch untouched.
+        source_dir: If given, copy directly from this directory instead of
+            checking out from `origin/master`/`origin/main`.
     """
     # List of data directories/files to copy
     data_items = ['videos/', 'playlists/', 'authors.tsv']
+    dest_root = (repo_path / subpath) if subpath else repo_path
+    dest_root.mkdir(parents=True, exist_ok=True)
+
+    if source_dir is not None:
+        for item in data_items:
+            item_name = item.rstrip('/')
+            src = source_dir / item_name
+            if not src.exists():
+                logger.warning(f"Could not copy {item} (not found in {source_dir})")
+                continue
+            dest = dest_root / item_name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+            if src.is_dir():
+                shutil.copytree(src, dest)
+            else:
+                shutil.copy2(src, dest)
+            logger.debug(f"Copied from --source-dir: {item}")
+        logger.info(f"Data files copied to {branch_name} from {source_dir}")
+        return
 
     for item in data_items:
-        try:
-            # Check out item from master/main branch
-            subprocess.run(
-                ['git', 'checkout', 'origin/master', '--', item],
+        item_name = item.rstrip('/')
+        copied_from = None
+        for candidate_branch in ('origin/master', 'origin/main'):
+            result = subprocess.run(
+                ['git', 'checkout', candidate_branch, '--', item],
                 cwd=repo_path,
-                check=True,
-                capture_output=True
+                capture_output=True,
             )
-            logger.debug(f"Copied from master: {item}")
-        except subprocess.CalledProcessError:
-            try:
-                # Try main branch
-                subprocess.run(
-                    ['git', 'checkout', 'origin/main', '--', item],
-                    cwd=repo_path,
-                    check=True,
-                    capture_output=True
-                )
-                logger.debug(f"Copied from main: {item}")
-            except subprocess.CalledProcessError:
-                logger.warning(f"Could not copy {item} (not found in master/main)")
-                continue
+            if result.returncode == 0:
+                copied_from = candidate_branch
+                break
+
+        if not copied_from:
+            logger.warning(f"Could not copy {item} (not found in master/main)")
+            continue
+
+        if subpath:
+            # `git checkout -- <item>` always lands at repo_path's own root
+            # (relative to the repo), so relocate into the subpath.
+            checked_out = repo_path / item_name
+            dest = dest_root / item_name
+            if dest.exists():
+                if dest.is_dir():
+                    shutil.rmtree(dest)
+                else:
+                    dest.unlink()
+            shutil.move(str(checked_out), str(dest))
+
+        logger.debug(f"Copied from {copied_from}: {item}")
 
     logger.info(f"Data files copied to {branch_name} (including any git-annex symlinks)")
     logger.info("Run 'git annex get' to fetch annexed content, or remove symlinks if content is unavailable")
