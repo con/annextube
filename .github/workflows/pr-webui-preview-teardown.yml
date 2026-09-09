@@ -1,0 +1,66 @@
+name: PR Web UI Preview - Teardown
+
+# Removes a closed/merged PR's preview subpath from gh-pages, so hosting
+# usage doesn't grow without bound as PRs accumulate (FR-009). Touches only
+# that one PR's subpath -- never the branch root or any other PR's preview.
+# Same path filter as the build workflow, since only PRs that could have
+# gotten a preview built need a teardown attempt.
+
+on:
+  pull_request:
+    types: [closed]
+    paths:
+      - 'frontend/**'
+      - 'annextube/cli/generate_web.py'
+      - 'annextube/cli/prepare_ghpages.py'
+      - '.github/workflows/pr-webui-preview-build.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Remove pr-<number>/ if present (retry on push races)
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -e
+          subpath="pr-${PR_NUMBER}"
+
+          if ! git fetch origin gh-pages; then
+            echo "No gh-pages branch yet, nothing to tear down."
+            exit 0
+          fi
+
+          attempt=1
+          max_attempts=5
+          while true; do
+            git checkout -B gh-pages origin/gh-pages
+
+            if [ ! -d "$subpath" ]; then
+              echo "$subpath/ not present (never published, or already torn down)."
+              exit 0
+            fi
+
+            git rm -rf "$subpath" >/dev/null
+            git commit -m "Retire preview for closed PR #${PR_NUMBER}"
+
+            if git push origin gh-pages; then
+              break
+            fi
+
+            attempt=$((attempt + 1))
+            if [ "$attempt" -gt "$max_attempts" ]; then
+              echo "ERROR: gh-pages push kept losing the race after" \
+                  "$max_attempts attempts" >&2
+              exit 1
+            fi
+            echo "Push rejected (concurrent publish/teardown), retrying" \
+                "($attempt/$max_attempts)..."
+            git fetch origin gh-pages
+          done

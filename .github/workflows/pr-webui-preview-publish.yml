@@ -1,0 +1,138 @@
+name: PR Web UI Preview - Publish
+
+# Trusted publish job: only this workflow holds `contents: write`. It never
+# checks out, builds, or executes anything from the PR's own ref -- it only
+# consumes the static artifact the (untrusted) build workflow produced, and
+# derives the PR number and build freshness from GitHub-authoritative fields
+# on the workflow_run event, never from the artifact itself. See
+# specs/004-pr-webui-preview/research.md, "Decision: Fork-PR trust boundary
+# and build-freshness check".
+
+on:
+  workflow_run:
+    workflows: ["PR Web UI Preview - Build"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Checked out at the *base* repo's default branch (this is a
+      # workflow_run job, so it always runs this workflow's own trusted
+      # definition regardless of what the PR changed) -- a real git clone
+      # with an `origin` remote, which `annextube prepare-ghpages`'s git
+      # operations assume.
+      - name: Checkout annextube
+        uses: actions/checkout@v7
+
+      - name: Resolve target PR and check build freshness
+        id: resolve
+        run: |
+          pr_number=$(tools/pr_preview_resolve_target.sh \
+              "${{ github.event.workflow_run.head_sha }}")
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-preview-build
+          path: /tmp/pr-preview-artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Deliberately no actions/setup-node here: without npm on PATH,
+      # hatch_build.py's frontend-build hook warns and skips (by design --
+      # see hatch_build.py), which is exactly what we want since this job
+      # publishes an already-built artifact via --source-dir and never
+      # needs to build the frontend itself.
+      - name: Install annextube (for the prepare-ghpages CLI)
+        run: pip install -e .
+
+      - name: Publish preview under pr-<number>/ (retry on push races)
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        run: |
+          set -e
+          attempt=1
+          max_attempts=5
+          while true; do
+            # Reset the local gh-pages checkout to match origin fresh on
+            # every attempt -- necessary because a concurrent publish job
+            # for a different PR may have pushed gh-pages since our last
+            # attempt (each PR's subpath is independent, but they share one
+            # branch/commit history).
+            git fetch origin gh-pages 2>/dev/null || true
+            if git rev-parse --verify --quiet refs/remotes/origin/gh-pages \
+                >/dev/null; then
+              git checkout -B gh-pages origin/gh-pages
+            fi
+            git checkout master 2>/dev/null || git checkout main
+
+            annextube prepare-ghpages \
+              --output-dir "$GITHUB_WORKSPACE" \
+              --source-dir /tmp/pr-preview-artifact \
+              --gh-branch gh-pages \
+              --subpath "pr-${PR_NUMBER}"
+
+            if git push origin gh-pages; then
+              break
+            fi
+
+            attempt=$((attempt + 1))
+            if [ "$attempt" -gt "$max_attempts" ]; then
+              echo "ERROR: gh-pages push kept losing the race after" \
+                  "$max_attempts attempts" >&2
+              exit 1
+            fi
+            echo "Push rejected (concurrent publish), retrying" \
+                "($attempt/$max_attempts)..."
+          done
+
+      - name: Post or update PR comment with the preview link
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        with:
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER);
+            const headSha = process.env.HEAD_SHA;
+            const url = `https://con.github.io/annextube/pr-${prNumber}/`;
+            const marker = '<!-- pr-webui-preview -->';
+            const body = `${marker}\n### 🔍 Web UI Preview\n\n` +
+              `**[View preview](${url})** (built from ${headSha.substring(0, 7)})\n`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }

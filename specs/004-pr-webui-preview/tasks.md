@@ -56,7 +56,7 @@ from its own code against the `annextubetesting` dataset.
 follow the posted preview link, confirm it's a working, browsable instance
 of the archive UI (per `quickstart.md`).
 
-- [ ] T007 [US1] Create `.github/workflows/pr-webui-preview-build.yml`:
+- [x] T007 [US1] Create `.github/workflows/pr-webui-preview-build.yml`:
       `pull_request: [opened, synchronize, reopened]` filtered by
       `paths: ['frontend/**', 'annextube/cli/generate_web.py']`; untrusted
       job (no secrets) that checks out the PR head, exports
@@ -66,7 +66,7 @@ of the archive UI (per `quickstart.md`).
       success. On failure the job fails (no artifact upload) — satisfies
       FR-008 without extra code (`contracts/preview-workflow.md`, Build
       step).
-- [ ] T008 [US1] Create `.github/workflows/pr-webui-preview-publish.yml`:
+- [x] T008 [US1] Create `.github/workflows/pr-webui-preview-publish.yml`:
       `workflow_run` triggered on completion of the build workflow; trusted
       job (`permissions: contents: write`) that downloads the build
       artifact, derives the PR number from `workflow_run.head_sha` via
@@ -74,7 +74,7 @@ of the archive UI (per `quickstart.md`).
       artifact), and runs `annextube prepare-ghpages --output-dir <checkout>
       --source-dir <artifact> --gh-branch gh-pages --subpath pr-<number>`
       (`contracts/preview-workflow.md`, Publish step 1-3).
-- [ ] T009 [US1] In the same publish job, create-or-update (by a marker
+- [x] T009 [US1] In the same publish job, create-or-update (by a marker
       string, not re-posting) a PR comment with the preview URL
       (`https://<pages-domain>/pr-<number>/`) and which commit it reflects
       (FR-004).
@@ -97,13 +97,13 @@ commit never overwrites a newer one.
 open PR with an existing preview; confirm the preview updates to the new
 commit and an artificially-delayed old build would not clobber it.
 
-- [ ] T011 [P] [US2] Extract the "resolve the PR number and compare head SHAs"
+- [x] T011 [P] [US2] Extract the "resolve the PR number and compare head SHAs"
       logic from T008 into `tools/pr_preview_resolve_target.sh` (shellcheck-
       clean, independently invocable) so the freshness check
       (`contracts/preview-workflow.md`, Publish step 2) is a reviewable,
       testable unit rather than inline workflow YAML; the publish workflow
       calls it and skips publishing on any mismatch (FR-007).
-- [ ] T012 [US2] `shellcheck tools/pr_preview_resolve_target.sh` passes
+- [x] T012 [US2] `shellcheck tools/pr_preview_resolve_target.sh` passes
       (`CLAUDE.md` shell-script convention).
 
 **Checkpoint**: Two rapid pushes to the same PR settle on the newer commit's
@@ -118,7 +118,7 @@ content regardless of build-finish order.
 confirm `gh-pages:/pr-<number>/` is gone afterward and other PRs' previews
 are untouched.
 
-- [ ] T013 [US3] Create `.github/workflows/pr-webui-preview-teardown.yml`:
+- [x] T013 [US3] Create `.github/workflows/pr-webui-preview-teardown.yml`:
       `pull_request: [closed]` (covers merge and close-without-merge);
       trusted job (`contents: write`) that checks out `gh-pages`, removes
       `pr-<number>/` if present, and commits (FR-009) — touching only that
@@ -128,9 +128,9 @@ are untouched.
 
 ## Phase 6: Polish & Cross-Cutting
 
-- [ ] T014 [P] Update `CLAUDE.md`'s "Recent Changes"/Active Technologies
+- [x] T014 [P] Update `CLAUDE.md`'s "Recent Changes"/Active Technologies
       004 entry from "design phase" to reflect the implemented workflows.
-- [ ] T015 Run `tox -e py3` (new `test_prepare_ghpages.py`), `ruff check`,
+- [x] T015 Run `tox -e py3` (new `test_prepare_ghpages.py`), `ruff check`,
       and `shellcheck tools/*.sh` — all must pass before this PR is pushed.
 
 ## Dependencies & Execution Order

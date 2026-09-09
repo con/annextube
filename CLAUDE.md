@@ -27,7 +27,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-24
 - VTT for captions
 - DataLad superdatasets for multi-channel collections (003)
 
-**CI/CD Infrastructure** (004, design phase — see `specs/004-pr-webui-preview/`):
+**CI/CD Infrastructure** (004 — see `specs/004-pr-webui-preview/`):
 - GitHub Actions (per-PR web UI preview builds, reusing the existing
   `gh-pages` deployment and `annextubetesting` test-dataset branch)
 
@@ -163,7 +163,7 @@ annextube generate-web --output-dir ~/my-archive
 
 ## Recent Changes
 
-- 004-pr-webui-preview: Design plan (spec + plan) for automated per-PR web UI previews, published via GitHub Pages subpaths built from the existing `annextubetesting` dataset — no implementation yet
+- 004-pr-webui-preview: Automated per-PR web UI previews — `annextube prepare-ghpages` gained `--subpath`/`--source-dir`; new build/publish/teardown GitHub Actions workflows publish to `gh-pages:/pr-<number>/`. Requires the `annextubetesting` branch to be pushed to `origin` once (not yet done — see tasks.md T001) before previews can build in CI.
 - 003-multi-channel-collections: Multi-channel collection management (DataLad superdatasets, aggregate, collection add/backup)
 - 001-youtube-backup: Added Python 3.10+
 

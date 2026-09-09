@@ -1,0 +1,81 @@
+name: PR Web UI Preview - Build
+
+# Untrusted build job: runs the PR's own code (frontend/, generate_web.py),
+# so it MUST NOT hold any write credential. It only uploads a build
+# artifact; a separate, trusted workflow (pr-webui-preview-publish.yml)
+# decides whether and how to publish it. See
+# specs/004-pr-webui-preview/research.md, "Decision: Fork-PR trust boundary
+# and build-freshness check".
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'frontend/**'
+      - 'annextube/cli/generate_web.py'
+      - 'annextube/cli/prepare_ghpages.py'
+      - '.github/workflows/pr-webui-preview-build.yml'
+
+# Supersede an in-flight build for the same PR as soon as a newer push
+# arrives -- cheap, though the publish job's own freshness re-check (not
+# this) is what actually guarantees no stale overwrite (FR-007).
+concurrency:
+  group: pr-webui-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v7
+        with:
+          # Need the annextubetesting branch too (see next step); the PR's
+          # own history doesn't need to be deep.
+          fetch-depth: 1
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-annex
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install annextube (builds the frontend via hatch_build.py)
+        run: pip install -e ".[ci]"
+
+      - name: Fetch the annextubetesting preview-source dataset
+        run: git fetch --depth=1 origin annextubetesting
+
+      - name: Export annextubetesting dataset (no live YouTube fetch)
+        run: |
+          mkdir -p /tmp/preview-build
+          git archive FETCH_HEAD | tar -x -C /tmp/preview-build
+
+      - name: Generate web UI from this PR's code
+        run: annextube generate-web --output-dir /tmp/preview-build
+
+      # Uploaded as a build artifact rather than published directly -- this
+      # job has no gh-pages write access. The whole export (data files +
+      # the web/ subdirectory generate-web just added) is uploaded, not
+      # just web/ alone: the frontend resolves videos/, playlists/, etc.
+      # relative to its own deployed base path, so both pieces are needed
+      # together at publish time.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-preview-build
+          path: /tmp/preview-build
+          retention-days: 7
+          if-no-files-found: error
