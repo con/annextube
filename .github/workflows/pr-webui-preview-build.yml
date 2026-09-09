@@ -34,8 +34,10 @@ jobs:
         uses: actions/checkout@v7
         with:
           # Need the annextubetesting branch too (see next step); the PR's
-          # own history doesn't need to be deep.
+          # own history doesn't need to be deep. No git credentials are
+          # needed beyond this read-only clone -- this job never pushes.
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Install system dependencies
         run: |
@@ -71,7 +73,9 @@ jobs:
       # the web/ subdirectory generate-web just added) is uploaded, not
       # just web/ alone: the frontend resolves videos/, playlists/, etc.
       # relative to its own deployed base path, so both pieces are needed
-      # together at publish time.
+      # together at publish time. The publish job treats this artifact as
+      # untrusted content (e.g. refuses to follow any symlink in it) since
+      # it was produced by this PR's own, possibly fork-originated, code.
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:

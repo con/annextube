@@ -43,13 +43,25 @@ fi
 
 # Derive the PR number from the commit itself (GitHub-authoritative), not
 # from anything the build job self-reports.
-pr_number=$(gh api "repos/{owner}/{repo}/commits/${head_sha}/pulls" \
-    --jq '.[0].number' 2>/dev/null)
+pr_numbers=$(gh api "repos/{owner}/{repo}/commits/${head_sha}/pulls" \
+    --jq '.[].number' 2>/dev/null)
+pr_count=$(printf '%s' "$pr_numbers" | grep -c . || true)
 
-if [ -z "$pr_number" ] || [ "$pr_number" = "null" ]; then
+if [ "$pr_count" -eq 0 ]; then
     echo "ERROR: no pull request found for commit ${head_sha}" >&2
     exit 1
 fi
+if [ "$pr_count" -gt 1 ]; then
+    # Only plausible if the same commit object is the head of more than one
+    # open PR (e.g. two forks both pointed at the exact same upstream
+    # commit) -- their content is byte-identical by construction, but pick
+    # neither rather than silently resolving to an unverified one.
+    echo "ERROR: commit ${head_sha} is associated with more than one" \
+        "pull request ($(printf '%s' "$pr_numbers" | tr '\n' ' '))," \
+        "refusing to guess which one to publish for" >&2
+    exit 1
+fi
+pr_number="$pr_numbers"
 
 # Fetch that PR's *current* head SHA and compare -- if a newer commit has
 # since been pushed, this build is stale and must not publish (FR-007).

@@ -3,17 +3,25 @@ name: PR Web UI Preview - Teardown
 # Removes a closed/merged PR's preview subpath from gh-pages, so hosting
 # usage doesn't grow without bound as PRs accumulate (FR-009). Touches only
 # that one PR's subpath -- never the branch root or any other PR's preview.
-# Same path filter as the build workflow, since only PRs that could have
-# gotten a preview built need a teardown attempt.
+#
+# Uses `pull_request_target`, not `pull_request`: GitHub silently downgrades
+# the GITHUB_TOKEN to read-only for `pull_request`-triggered runs from forks,
+# regardless of the `permissions:` block below, which would make every
+# `git push` here fail for exactly the fork-PR case FR-010 requires this to
+# support. `pull_request_target` runs the base repo's own trusted workflow
+# definition with the requested permissions honored -- safe here because
+# this job never checks out or executes anything from the PR's own ref (no
+# `actions/checkout` with a PR ref at all; it only operates on gh-pages).
+#
+# No `paths:` filter (unlike the build workflow): a PR's *final* diff might
+# no longer touch the build-triggering paths (e.g. changes added then
+# reverted within the same PR) even though it has a previously-published,
+# now-orphaned preview -- FR-009 is unconditional, and the mutate script
+# below is already a safe, cheap no-op when there is nothing to tear down.
 
 on:
-  pull_request:
+  pull_request_target:
     types: [closed]
-    paths:
-      - 'frontend/**'
-      - 'annextube/cli/generate_web.py'
-      - 'annextube/cli/prepare_ghpages.py'
-      - '.github/workflows/pr-webui-preview-build.yml'
 
 permissions:
   contents: write
@@ -25,42 +33,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Configure git identity for gh-pages commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Remove pr-<number>/ if present (retry on push races)
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          set -e
-          subpath="pr-${PR_NUMBER}"
-
-          if ! git fetch origin gh-pages; then
-            echo "No gh-pages branch yet, nothing to tear down."
-            exit 0
-          fi
-
-          attempt=1
-          max_attempts=5
-          while true; do
-            git checkout -B gh-pages origin/gh-pages
-
-            if [ ! -d "$subpath" ]; then
-              echo "$subpath/ not present (never published, or already torn down)."
-              exit 0
-            fi
-
-            git rm -rf "$subpath" >/dev/null
-            git commit -m "Retire preview for closed PR #${PR_NUMBER}"
-
-            if git push origin gh-pages; then
-              break
-            fi
-
-            attempt=$((attempt + 1))
-            if [ "$attempt" -gt "$max_attempts" ]; then
-              echo "ERROR: gh-pages push kept losing the race after" \
-                  "$max_attempts attempts" >&2
-              exit 1
-            fi
-            echo "Push rejected (concurrent publish/teardown), retrying" \
-                "($attempt/$max_attempts)..."
-            git fetch origin gh-pages
-          done
+          tools/gh_pages_push_retry.sh /tmp/gh-pages-worktree -- \
+            tools/gh_pages_teardown_subpath.sh /tmp/gh-pages-worktree "$PR_NUMBER"

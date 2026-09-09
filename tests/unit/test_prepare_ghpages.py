@@ -6,14 +6,17 @@ branch root, and reading frontend/data files from an explicit `--source-dir`
 instead of the usual build-output search / `origin/master` checkout.
 """
 
+import subprocess
 from pathlib import Path
 
 import pytest
+from click.testing import CliRunner
 
 from annextube.cli.prepare_ghpages import (
     build_frontend_for_ghpages,
     copy_data_to_ghpages,
     copy_frontend_to_ghpages,
+    prepare_ghpages,
 )
 
 
@@ -181,3 +184,142 @@ def test_build_frontend_base_path_without_subpath(monkeypatch, tmp_path: Path) -
     build_frontend_for_ghpages(tmp_path / "repo", "annextube")
 
     assert captured_env["VITE_BASE_PATH"] == "/annextube/"
+
+
+# --- Regression tests for issues found in security/correctness review ---
+
+
+@pytest.mark.ai_generated
+def test_copy_frontend_to_ghpages_rejects_symlink_in_source_dir(tmp_path: Path) -> None:
+    """A malicious build artifact containing a symlink must be refused, not
+    dereferenced and published under the public gh-pages branch."""
+    source = _make_source_dir(tmp_path)
+    outside = tmp_path / "outside_secret.txt"
+    outside.write_text("host secret")
+    (source / "web" / "leak.txt").symlink_to(outside)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    with pytest.raises(ValueError, match="symlink"):
+        copy_frontend_to_ghpages(
+            repo, "gh-pages", was_built=False, subpath="pr-1", source_dir=source
+        )
+    assert not (repo / "pr-1" / "leak.txt").exists()
+
+
+@pytest.mark.ai_generated
+def test_copy_frontend_to_ghpages_rejects_symlinked_web_dir(tmp_path: Path) -> None:
+    """A --source-dir whose top-level web/ is itself a symlink must be refused."""
+    real_web = tmp_path / "real_web"
+    real_web.mkdir()
+    (real_web / "index.html").write_text("<html></html>")
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "web").symlink_to(real_web)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    with pytest.raises(ValueError, match="symlink"):
+        copy_frontend_to_ghpages(
+            repo, "gh-pages", was_built=False, subpath="pr-1", source_dir=source
+        )
+
+
+@pytest.mark.ai_generated
+def test_copy_data_to_ghpages_rejects_symlink_in_source_dir(tmp_path: Path) -> None:
+    """Same symlink protection applies to the data-file copy path."""
+    source = _make_source_dir(tmp_path)
+    outside = tmp_path / "outside_secret.txt"
+    outside.write_text("host secret")
+    (source / "authors.tsv").unlink()
+    (source / "authors.tsv").symlink_to(outside)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    with pytest.raises(ValueError, match="symlink"):
+        copy_data_to_ghpages(repo, "gh-pages", subpath="pr-1", source_dir=source)
+
+
+def _run_git(args: list[str], cwd: Path) -> None:
+    subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
+
+
+def _make_repo_with_origin_master_data(tmp_path: Path) -> Path:
+    """A local repo with data files reachable via origin/master, currently
+    checked out to an orphan branch that already has real content at its
+    root (simulating a pre-existing gh-pages deployment)."""
+    remote = tmp_path / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-b", "master", str(remote)], check=True, capture_output=True
+    )
+
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    _run_git(["init", "-b", "master"], seed)
+    _run_git(["config", "user.email", "t@example.com"], seed)
+    _run_git(["config", "user.name", "Test"], seed)
+    (seed / "videos").mkdir()
+    (seed / "videos" / "v1.txt").write_text("video content")
+    (seed / "playlists").mkdir()
+    (seed / "playlists" / "playlists.tsv").write_text("id\tname\n")
+    (seed / "authors.tsv").write_text("id\tname\n")
+    _run_git(["add", "-A"], seed)
+    _run_git(["commit", "-m", "seed data"], seed)
+    _run_git(["push", str(remote), "master"], seed)
+
+    repo = tmp_path / "repo"
+    subprocess.run(
+        ["git", "clone", str(remote), str(repo)], check=True, capture_output=True
+    )
+    _run_git(["config", "user.email", "t@example.com"], repo)
+    _run_git(["config", "user.name", "Test"], repo)
+    # Simulate the target (gh-pages-like) branch already having real content
+    # at its root that a subpath publish must not disturb.
+    _run_git(["checkout", "--orphan", "gh-pages"], repo)
+    _run_git(["rm", "-rf", "."], repo)
+    (repo / "authors.tsv").write_text("EXISTING ROOT CONTENT\n")
+    _run_git(["add", "-A"], repo)
+    _run_git(["commit", "-m", "existing root content"], repo)
+
+    return repo
+
+
+@pytest.mark.ai_generated
+def test_copy_data_to_ghpages_no_source_dir_preserves_root_content(tmp_path: Path) -> None:
+    """Publishing a --subpath without --source-dir must not clobber existing
+    real content at the branch root -- regression test for a bug where
+    `git checkout origin/master -- <item>` landed at the repo root and was
+    then moved, deleting whatever was already there first."""
+    repo = _make_repo_with_origin_master_data(tmp_path)
+
+    copy_data_to_ghpages(repo, "gh-pages", subpath="pr-9")
+
+    assert (repo / "authors.tsv").read_text() == "EXISTING ROOT CONTENT\n"
+    assert (repo / "pr-9" / "authors.tsv").read_text() == "id\tname\n"
+    assert (repo / "pr-9" / "videos" / "v1.txt").read_text() == "video content"
+    assert (repo / "pr-9" / "playlists" / "playlists.tsv").exists()
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    "bad_subpath", ["../escape", "a/b", "/absolute", ".", "..", ""]
+)
+def test_prepare_ghpages_rejects_unsafe_subpath(tmp_path: Path, bad_subpath: str) -> None:
+    """--subpath must be a single relative path component -- defense in
+    depth against it ever being (mis)used to write outside the intended
+    subdirectory."""
+    runner = CliRunner()
+    result = runner.invoke(
+        prepare_ghpages,
+        [
+            "--output-dir", str(tmp_path),
+            "--repo-name", "annextube",
+            "--subpath", bad_subpath,
+        ],
+    )
+    assert result.exit_code != 0
+    assert "subpath" in result.output.lower()

@@ -16,6 +16,9 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # actions/download-artifact needs this to fetch an artifact from a
+  # different run (run-id: below) than the one currently executing.
+  actions: read
 
 jobs:
   publish:
@@ -23,23 +26,33 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Checked out at the *base* repo's default branch (this is a
       # workflow_run job, so it always runs this workflow's own trusted
       # definition regardless of what the PR changed) -- a real git clone
       # with an `origin` remote, which `annextube prepare-ghpages`'s git
-      # operations assume.
+      # operations assume. Never touches the PR's own ref.
       - name: Checkout annextube
         uses: actions/checkout@v7
+
+      - name: Configure git identity for gh-pages commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Resolve target PR and check build freshness
         id: resolve
         run: |
-          pr_number=$(tools/pr_preview_resolve_target.sh \
-              "${{ github.event.workflow_run.head_sha }}")
-          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          if pr_number=$(tools/pr_preview_resolve_target.sh "$HEAD_SHA"); then
+            echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Download build artifact
+        if: steps.resolve.outputs.skip != 'true'
         uses: actions/download-artifact@v4
         with:
           name: pr-preview-build
@@ -48,6 +61,7 @@ jobs:
           github-token: ${{ github.token }}
 
       - name: Set up Python
+        if: steps.resolve.outputs.skip != 'true'
         uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -58,53 +72,28 @@ jobs:
       # publishes an already-built artifact via --source-dir and never
       # needs to build the frontend itself.
       - name: Install annextube (for the prepare-ghpages CLI)
+        if: steps.resolve.outputs.skip != 'true'
         run: pip install -e .
 
       - name: Publish preview under pr-<number>/ (retry on push races)
-        env:
-          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        id: publish
+        if: steps.resolve.outputs.skip != 'true'
         run: |
-          set -e
-          attempt=1
-          max_attempts=5
-          while true; do
-            # Reset the local gh-pages checkout to match origin fresh on
-            # every attempt -- necessary because a concurrent publish job
-            # for a different PR may have pushed gh-pages since our last
-            # attempt (each PR's subpath is independent, but they share one
-            # branch/commit history).
-            git fetch origin gh-pages 2>/dev/null || true
-            if git rev-parse --verify --quiet refs/remotes/origin/gh-pages \
-                >/dev/null; then
-              git checkout -B gh-pages origin/gh-pages
-            fi
-            git checkout master 2>/dev/null || git checkout main
-
-            annextube prepare-ghpages \
-              --output-dir "$GITHUB_WORKSPACE" \
-              --source-dir /tmp/pr-preview-artifact \
-              --gh-branch gh-pages \
-              --subpath "pr-${PR_NUMBER}"
-
-            if git push origin gh-pages; then
-              break
-            fi
-
-            attempt=$((attempt + 1))
-            if [ "$attempt" -gt "$max_attempts" ]; then
-              echo "ERROR: gh-pages push kept losing the race after" \
-                  "$max_attempts attempts" >&2
-              exit 1
-            fi
-            echo "Push rejected (concurrent publish), retrying" \
-                "($attempt/$max_attempts)..."
-          done
+          rm -f /tmp/preview-stale-skip
+          tools/gh_pages_push_retry.sh /tmp/gh-pages-worktree -- \
+            tools/gh_pages_publish_preview.sh \
+              "$HEAD_SHA" /tmp/pr-preview-artifact /tmp/gh-pages-worktree
+          if [ -f /tmp/preview-stale-skip ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Post or update PR comment with the preview link
+        if: steps.resolve.outputs.skip != 'true' && steps.publish.outputs.published == 'true'
         uses: actions/github-script@v7
         env:
           PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         with:
           script: |
             const prNumber = Number(process.env.PR_NUMBER);

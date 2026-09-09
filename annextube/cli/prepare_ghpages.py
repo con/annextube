@@ -5,11 +5,48 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import click
 
 logger = logging.getLogger(__name__)
+
+
+def _replace_dest(dest: Path) -> None:
+    """Remove whatever currently exists at ``dest`` (file, dir, or symlink)."""
+    if dest.is_symlink():
+        dest.unlink()
+    elif dest.is_dir():
+        shutil.rmtree(dest)
+    elif dest.exists():
+        dest.unlink()
+
+
+def _copy_tree_no_symlinks(src: Path, dest: Path) -> None:
+    """Recursively copy ``src`` to ``dest``, refusing to follow or
+    materialize any symlink anywhere in the tree.
+
+    Used specifically when copying from an untrusted ``--source-dir`` (e.g.
+    a CI build artifact built from a fork PR's own code, uploaded via
+    ``actions/upload-artifact`` which preserves symlinks as-is).
+    ``shutil.copytree()``/``copy2()`` dereference symlinks by default, so a
+    maliciously crafted symlink in such an artifact (e.g. pointing at an
+    absolute host path) would otherwise have its target's content silently
+    copied and committed to the public gh-pages branch. This helper is not
+    used for the trusted (non-``--source-dir``) code paths, which
+    legitimately need to preserve git-annex symlinks.
+    """
+    if src.is_symlink():
+        raise ValueError(
+            f"Refusing to copy symlink from untrusted --source-dir: {src}"
+        )
+    if src.is_dir():
+        dest.mkdir(parents=True, exist_ok=True)
+        for child in src.iterdir():
+            _copy_tree_no_symlinks(child, dest / child.name)
+    else:
+        shutil.copy2(src, dest)
 
 
 @click.command()
@@ -100,6 +137,25 @@ def prepare_ghpages(
     """
     repo_path = output_dir.resolve()
     source_path = source_dir.resolve() if source_dir else None
+
+    if subpath is not None:
+        # Defense in depth: the branch-root/sibling-subpath isolation this
+        # option promises only holds if `subpath` really is a single,
+        # relative path component. Every caller in this codebase only ever
+        # passes `pr-<number>` (a GitHub-assigned integer), but this is a
+        # public CLI option -- reject anything else outright rather than
+        # relying on callers to keep constructing it safely.
+        if (
+            not subpath
+            or '/' in subpath
+            or '\\' in subpath
+            or subpath in ('.', '..')
+            or Path(subpath).is_absolute()
+        ):
+            raise click.ClickException(
+                f"--subpath must be a single relative path component "
+                f"(e.g. 'pr-42'), got: {subpath!r}"
+            )
 
     # 1. Detect or validate repo name
     if not repo_name:
@@ -389,6 +445,10 @@ def copy_frontend_to_ghpages(
     """
     if source_dir is not None:
         dist_dir = source_dir / 'web'
+        if dist_dir.is_symlink():
+            raise ValueError(
+                f"Refusing to follow symlink from untrusted --source-dir: {dist_dir}"
+            )
         if not dist_dir.exists():
             raise FileNotFoundError(
                 f"--source-dir given but no 'web/' directory found in it: "
@@ -440,16 +500,13 @@ def copy_frontend_to_ghpages(
     # anything outside dest_root, so sibling subpaths are left alone
     for item in dist_dir.iterdir():
         dest = dest_root / item.name
+        _replace_dest(dest)
 
-        # Remove existing
-        if dest.exists():
-            if dest.is_dir():
-                shutil.rmtree(dest)
-            else:
-                dest.unlink()
-
-        # Copy new
-        if item.is_dir():
+        if source_dir is not None:
+            # Untrusted content (e.g. a fork PR's build artifact) -- never
+            # follow symlinks.
+            _copy_tree_no_symlinks(item, dest)
+        elif item.is_dir():
             shutil.copytree(item, dest)
         else:
             shutil.copy2(item, dest)
@@ -492,53 +549,67 @@ def copy_data_to_ghpages(
         for item in data_items:
             item_name = item.rstrip('/')
             src = source_dir / item_name
+            if src.is_symlink():
+                raise ValueError(
+                    f"Refusing to copy symlink from untrusted --source-dir: {src}"
+                )
             if not src.exists():
                 logger.warning(f"Could not copy {item} (not found in {source_dir})")
                 continue
             dest = dest_root / item_name
-            if dest.exists():
-                if dest.is_dir():
-                    shutil.rmtree(dest)
-                else:
-                    dest.unlink()
-            if src.is_dir():
-                shutil.copytree(src, dest)
-            else:
-                shutil.copy2(src, dest)
+            _replace_dest(dest)
+            _copy_tree_no_symlinks(src, dest)
             logger.debug(f"Copied from --source-dir: {item}")
         logger.info(f"Data files copied to {branch_name} from {source_dir}")
         return
 
-    for item in data_items:
-        item_name = item.rstrip('/')
-        copied_from = None
-        for candidate_branch in ('origin/master', 'origin/main'):
-            result = subprocess.run(
-                ['git', 'checkout', candidate_branch, '--', item],
-                cwd=repo_path,
-                capture_output=True,
-            )
-            if result.returncode == 0:
-                copied_from = candidate_branch
-                break
+    # No --source-dir: read from --output-dir's own origin/master (or
+    # origin/main). Extracted via `git archive` into a scratch directory
+    # rather than `git checkout -- <item>` directly into repo_path -- the
+    # latter always lands at the repo root, so satisfying `subpath` would
+    # otherwise require checking it out onto whatever real content already
+    # lives at the branch root and then moving it aside, clobbering that
+    # root content in the process. Going through a scratch directory keeps
+    # repo_path (and any existing content on the target branch) untouched
+    # until the copy into dest_root itself.
+    with tempfile.TemporaryDirectory() as scratch:
+        scratch_path = Path(scratch)
+        for item in data_items:
+            item_name = item.rstrip('/')
+            copied_from = None
+            for candidate_branch in ('origin/master', 'origin/main'):
+                archive = subprocess.run(
+                    ['git', 'archive', candidate_branch, '--', item],
+                    cwd=repo_path,
+                    capture_output=True,
+                )
+                if archive.returncode == 0 and archive.stdout:
+                    subprocess.run(
+                        ['tar', '-x'],
+                        cwd=scratch_path,
+                        input=archive.stdout,
+                        check=True,
+                    )
+                    copied_from = candidate_branch
+                    break
 
-        if not copied_from:
-            logger.warning(f"Could not copy {item} (not found in master/main)")
-            continue
+            if not copied_from:
+                logger.warning(f"Could not copy {item} (not found in master/main)")
+                continue
 
-        if subpath:
-            # `git checkout -- <item>` always lands at repo_path's own root
-            # (relative to the repo), so relocate into the subpath.
-            checked_out = repo_path / item_name
+            extracted = scratch_path / item_name
+            if not extracted.exists():
+                logger.warning(f"Could not copy {item} (not found in master/main)")
+                continue
+
             dest = dest_root / item_name
-            if dest.exists():
-                if dest.is_dir():
-                    shutil.rmtree(dest)
-                else:
-                    dest.unlink()
-            shutil.move(str(checked_out), str(dest))
+            _replace_dest(dest)
+            if extracted.is_dir():
+                shutil.copytree(extracted, dest, symlinks=True)
+            else:
+                shutil.copy2(extracted, dest)
 
-        logger.debug(f"Copied from {copied_from}: {item}")
+            logger.debug(f"Copied from {copied_from}: {item}")
 
     logger.info(f"Data files copied to {branch_name} (including any git-annex symlinks)")
     logger.info("Run 'git annex get' to fetch annexed content, or remove symlinks if content is unavailable")

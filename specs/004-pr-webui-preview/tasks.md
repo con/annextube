@@ -34,15 +34,38 @@ Actions trigger/permissions block itself.
       instead of searching dist candidates when `source_dir` is given, and
       to write into `<repo_path>/<subpath>/` instead of `<repo_path>/` when
       `subpath` is given (never touching sibling subpaths or the root).
+      **Post-review hardening**: `source_dir` is an untrusted, fork-PR-
+      produced build artifact (see T007's note); a symlink inside it (or
+      `<source_dir>/web` itself being a symlink) could otherwise cause
+      arbitrary host content to be dereferenced and copied into the
+      publicly-served `gh-pages` branch. Added `_copy_tree_no_symlinks()`
+      and made this function refuse (raise) on any symlink found under
+      `source_dir` rather than following it.
 - [x] T005 [P] Update `copy_data_to_ghpages()` in
       `annextube/cli/prepare_ghpages.py` to copy `videos/`, `playlists/`,
       `authors.tsv` directly from `source_dir` (not `git checkout
       origin/master --`) when `source_dir` is given, writing into
       `<repo_path>/<subpath>/` when `subpath` is given.
+      **Post-review hardening**: (1) the `source_dir` branch now also uses
+      `_copy_tree_no_symlinks()` for the same reason as T004. (2) the
+      non-`source_dir` branch was rewritten from `git checkout <branch> --
+      <item>` + `shutil.move()` (which destroyed other root-level content
+      already checked out in the working tree) to `git archive <branch> --
+      <item> | tar -x` into a scratch `tempfile.TemporaryDirectory()`,
+      copying only the requested items into `dest_root` afterward —
+      preserving any pre-existing root content untouched.
 - [x] T006 [P] Add `tests/unit/test_prepare_ghpages.py`: subpath isolation
       (publishing `pr-2` doesn't touch existing `pr-1` or root content),
       `--source-dir` copy behavior for both frontend and data files, and
       base-path construction with/without a subpath.
+      **Post-review hardening**: added
+      `test_copy_frontend_to_ghpages_rejects_symlink_in_source_dir`,
+      `test_copy_frontend_to_ghpages_rejects_symlinked_web_dir`,
+      `test_copy_data_to_ghpages_rejects_symlink_in_source_dir`,
+      `test_copy_data_to_ghpages_no_source_dir_preserves_root_content`, and
+      `test_prepare_ghpages_rejects_unsafe_subpath` (parametrized over `/`,
+      `\`, `.`, `..`, empty, and absolute-path subpaths) — 17 tests total,
+      up from 7.
 
 **Checkpoint**: `annextube prepare-ghpages --source-dir X --subpath pr-N`
 publishes only under `pr-N/`, reading only from `X` — ready for Phase 3.
@@ -74,6 +97,19 @@ of the archive UI (per `quickstart.md`).
       artifact), and runs `annextube prepare-ghpages --output-dir <checkout>
       --source-dir <artifact> --gh-branch gh-pages --subpath pr-<number>`
       (`contracts/preview-workflow.md`, Publish step 1-3).
+      **Post-review hardening**: (1) added the missing `actions: read`
+      permission (required by `actions/download-artifact@v4`'s
+      cross-run `run-id:` fetch — the job silently 404'd without it).
+      (2) added a git identity config step (`prepare-ghpages`'s commit
+      fails without one on a fresh runner). (3) replaced the direct
+      `git checkout gh-pages` + `git push` with
+      `tools/gh_pages_push_retry.sh` driving a dedicated git *worktree*
+      (not the main checkout) — see T011's hardening note for why a
+      worktree specifically. (4) the freshness check is now re-run
+      immediately before each publish attempt inside
+      `tools/gh_pages_publish_preview.sh`, not just once at job start, to
+      close the TOCTOU window between the initial check and
+      artifact-download/Python-setup/retry time.
 - [x] T009 [US1] In the same publish job, create-or-update (by a marker
       string, not re-posting) a PR comment with the preview URL
       (`https://<pages-domain>/pr-<number>/`) and which commit it reflects
@@ -103,6 +139,28 @@ commit and an artificially-delayed old build would not clobber it.
       (`contracts/preview-workflow.md`, Publish step 2) is a reviewable,
       testable unit rather than inline workflow YAML; the publish workflow
       calls it and skips publishing on any mismatch (FR-007).
+      **Post-review hardening**: (1) hardened to reject a commit associated
+      with more than one open PR (was previously silently taking the first
+      match via `.[0]`, which could resolve to the wrong PR). (2) added
+      `tools/gh_pages_push_retry.sh` (`Usage: gh_pages_push_retry.sh
+      <worktree_dir> -- <command> [args...]`): creates/resets a git
+      *worktree* from `origin/gh-pages` on each of up to 5 attempts, runs
+      the given mutate command against it, and pushes, retrying on
+      rejection. A worktree (rather than `git checkout -B gh-pages` inside
+      the same directory the running `tools/*.sh` scripts live in) is
+      required because `gh-pages` has no `tools/` directory at all —
+      checking it out in-place would make the executing script's own file
+      vanish mid-run. (3) added `tools/gh_pages_publish_preview.sh`
+      (`Usage: gh_pages_publish_preview.sh <head_sha> <source_dir>
+      <worktree_dir>`), the mutate step T008's publish job now drives
+      through the retry wrapper — re-checks freshness on every invocation
+      and skips (via a `$PREVIEW_SKIP_MARKER` file, default
+      `/tmp/preview-stale-skip`, exit 0) rather than failing when stale, so
+      the PR-comment step can tell "skipped" from "published" and the
+      wrapper's subsequent push is a harmless no-op. Manually verified
+      end-to-end (concurrent-push-race retry, staleness-skip, and the
+      symlink/root-preservation cases from T004-T006) against scratch git
+      repos with a mocked `gh` CLI.
 - [x] T012 [US2] `shellcheck tools/pr_preview_resolve_target.sh` passes
       (`CLAUDE.md` shell-script convention).
 
@@ -123,6 +181,23 @@ are untouched.
       trusted job (`contents: write`) that checks out `gh-pages`, removes
       `pr-<number>/` if present, and commits (FR-009) — touching only that
       one subpath.
+      **Post-review hardening**: (1) changed the trigger from
+      `pull_request` to `pull_request_target` — GitHub silently downgrades
+      `GITHUB_TOKEN` to read-only for `pull_request`-triggered runs from
+      fork PRs regardless of the `permissions:` block, which would make
+      every teardown `git push` fail for exactly the fork-PR case FR-010
+      requires; safe here since this job never checks out or executes
+      anything from the PR's own ref (no `actions/checkout` with a PR ref
+      at all — it only operates on `gh-pages`). (2) dropped the `paths:`
+      filter entirely: a closed PR's *final* diff might no longer touch the
+      build-triggering paths even though it has a previously-published,
+      now-orphaned preview, and FR-009 is unconditional. (3) added
+      `tools/gh_pages_teardown_subpath.sh` (`Usage:
+      gh_pages_teardown_subpath.sh <worktree_dir> <pr_number>`, idempotent,
+      safe no-op when nothing to remove) and drives it through the same
+      `tools/gh_pages_push_retry.sh` worktree wrapper as T008/T011, for the
+      same self-modifying-script reason. (4) added the git identity config
+      step.
 
 **Checkpoint**: All three user stories independently functional.
 
