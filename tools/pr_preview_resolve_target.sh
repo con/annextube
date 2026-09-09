@@ -42,13 +42,16 @@ if ! command -v gh >/dev/null 2>&1; then
 fi
 
 # Derive the PR number from the commit itself (GitHub-authoritative), not
-# from anything the build job self-reports.
+# from anything the build job self-reports. Filtered to open PRs: a commit
+# that also happens to be (or once was) the head of some unrelated closed/
+# merged PR -- e.g. a reused topic branch -- must not make this refuse to
+# guess when there is really only one live candidate.
 pr_numbers=$(gh api "repos/{owner}/{repo}/commits/${head_sha}/pulls" \
-    --jq '.[].number' 2>/dev/null)
+    --jq '.[] | select(.state == "open") | .number' 2>/dev/null)
 pr_count=$(printf '%s' "$pr_numbers" | grep -c . || true)
 
 if [ "$pr_count" -eq 0 ]; then
-    echo "ERROR: no pull request found for commit ${head_sha}" >&2
+    echo "ERROR: no open pull request found for commit ${head_sha}" >&2
     exit 1
 fi
 if [ "$pr_count" -gt 1 ]; then
@@ -56,20 +59,32 @@ if [ "$pr_count" -gt 1 ]; then
     # open PR (e.g. two forks both pointed at the exact same upstream
     # commit) -- their content is byte-identical by construction, but pick
     # neither rather than silently resolving to an unverified one.
-    echo "ERROR: commit ${head_sha} is associated with more than one" \
+    echo "ERROR: commit ${head_sha} is associated with more than one open" \
         "pull request ($(printf '%s' "$pr_numbers" | tr '\n' ' '))," \
         "refusing to guess which one to publish for" >&2
     exit 1
 fi
 pr_number="$pr_numbers"
 
-# Fetch that PR's *current* head SHA and compare -- if a newer commit has
-# since been pushed, this build is stale and must not publish (FR-007).
-current_head_sha=$(gh pr view "$pr_number" --json headRefOid \
-    --jq '.headRefOid' 2>/dev/null)
+# Fetch that PR's *current* state and head SHA. A closed/merged PR (even if
+# its head SHA still matches -- closing a PR doesn't change its head) must
+# not receive a (re-)published preview: the teardown workflow only fires on
+# the open->closed transition itself, so a build that finishes after that
+# transition (e.g. a slow build started just before the PR was closed)
+# would otherwise leave an orphaned preview that nothing ever removes.
+pr_view=$(gh pr view "$pr_number" --json state,headRefOid \
+    --jq '.state + " " + .headRefOid' 2>/dev/null)
+current_state="${pr_view%% *}"
+current_head_sha="${pr_view#* }"
 
-if [ -z "$current_head_sha" ]; then
-    echo "ERROR: could not fetch current head SHA for PR #${pr_number}" >&2
+if [ -z "$pr_view" ] || [ -z "$current_head_sha" ]; then
+    echo "ERROR: could not fetch current state/head SHA for PR #${pr_number}" >&2
+    exit 1
+fi
+
+if [ "$current_state" != "OPEN" ]; then
+    echo "SKIP: PR #${pr_number} is no longer open (state: ${current_state})" \
+        "-- not publishing" >&2
     exit 1
 fi
 

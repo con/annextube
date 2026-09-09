@@ -13,6 +13,34 @@ import click
 logger = logging.getLogger(__name__)
 
 
+def _validate_subpath(subpath: str) -> None:
+    """Reject any ``subpath`` value that isn't a single, safe, relative path
+    component.
+
+    The branch-root/sibling-subpath isolation ``--subpath`` promises only
+    holds if it really is a single relative path component that can't
+    escape ``repo_path`` or land on a name git itself treats specially.
+    Every caller in this codebase only ever passes ``pr-<number>`` (a
+    GitHub-assigned integer), but this is checked at the layer that
+    actually writes files (``copy_frontend_to_ghpages``/
+    ``copy_data_to_ghpages``), not only in the CLI callback -- both of
+    those functions are called directly by tests and could be called
+    directly by other future code, so the guarantee must not depend on
+    every caller re-deriving this validation itself.
+    """
+    if (
+        not subpath
+        or '/' in subpath
+        or '\\' in subpath
+        or subpath in ('.', '..', '.git')
+        or Path(subpath).is_absolute()
+    ):
+        raise ValueError(
+            f"subpath must be a single relative path component "
+            f"(e.g. 'pr-42'), got: {subpath!r}"
+        )
+
+
 def _replace_dest(dest: Path) -> None:
     """Remove whatever currently exists at ``dest`` (file, dir, or symlink)."""
     if dest.is_symlink():
@@ -139,23 +167,14 @@ def prepare_ghpages(
     source_path = source_dir.resolve() if source_dir else None
 
     if subpath is not None:
-        # Defense in depth: the branch-root/sibling-subpath isolation this
-        # option promises only holds if `subpath` really is a single,
-        # relative path component. Every caller in this codebase only ever
-        # passes `pr-<number>` (a GitHub-assigned integer), but this is a
-        # public CLI option -- reject anything else outright rather than
-        # relying on callers to keep constructing it safely.
-        if (
-            not subpath
-            or '/' in subpath
-            or '\\' in subpath
-            or subpath in ('.', '..')
-            or Path(subpath).is_absolute()
-        ):
-            raise click.ClickException(
-                f"--subpath must be a single relative path component "
-                f"(e.g. 'pr-42'), got: {subpath!r}"
-            )
+        # Defense in depth at the CLI layer too (see _validate_subpath's
+        # docstring for why this check also lives in the copy functions
+        # themselves, not just here) -- fail fast with a click-friendly
+        # error rather than a raw ValueError traceback.
+        try:
+            _validate_subpath(subpath)
+        except ValueError as e:
+            raise click.ClickException(f"--{e}") from e
 
     # 1. Detect or validate repo name
     if not repo_name:
@@ -443,6 +462,9 @@ def copy_frontend_to_ghpages(
             frontend was already built elsewhere, e.g. by an untrusted CI
             build job whose artifact this is).
     """
+    if subpath is not None:
+        _validate_subpath(subpath)
+
     if source_dir is not None:
         dist_dir = source_dir / 'web'
         if dist_dir.is_symlink():
@@ -540,6 +562,9 @@ def copy_data_to_ghpages(
         source_dir: If given, copy directly from this directory instead of
             checking out from `origin/master`/`origin/main`.
     """
+    if subpath is not None:
+        _validate_subpath(subpath)
+
     # List of data directories/files to copy
     data_items = ['videos/', 'playlists/', 'authors.tsv']
     dest_root = (repo_path / subpath) if subpath else repo_path

@@ -66,11 +66,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Deliberately no actions/setup-node here: without npm on PATH,
-      # hatch_build.py's frontend-build hook warns and skips (by design --
-      # see hatch_build.py), which is exactly what we want since this job
-      # publishes an already-built artifact via --source-dir and never
-      # needs to build the frontend itself.
+      # Deliberately no actions/setup-node here. GitHub-hosted runners
+      # ship a system Node/npm anyway, so hatch_build.py's frontend-build
+      # hook may well still run rather than skip -- but that's harmless,
+      # not just wasted time: this checkout is always the *trusted* base
+      # branch (workflow_run defaults to it; no `ref:` override above), so
+      # even a build here only rebuilds this repo's own frontend/, and
+      # `prepare-ghpages --source-dir ...` below never consults it --
+      # passing --source-dir unconditionally sets do_build_frontend=False
+      # (see annextube/cli/prepare_ghpages.py), so the PR's actual preview
+      # content always comes from the downloaded build artifact, never
+      # from anything built in this job.
       - name: Install annextube (for the prepare-ghpages CLI)
         if: steps.resolve.outputs.skip != 'true'
         run: pip install -e .

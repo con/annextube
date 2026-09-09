@@ -244,6 +244,49 @@ def test_copy_data_to_ghpages_rejects_symlink_in_source_dir(tmp_path: Path) -> N
         copy_data_to_ghpages(repo, "gh-pages", subpath="pr-1", source_dir=source)
 
 
+@pytest.mark.ai_generated
+def test_copy_frontend_to_ghpages_rejects_deeply_nested_symlink(tmp_path: Path) -> None:
+    """The symlink guard must catch a symlink several directories deep, not
+    just at the top level of web/ -- regression guard for the recursive
+    branch of _copy_tree_no_symlinks (e.g. a future refactor that swapped
+    the manual per-child recursion for shutil.copytree(symlinks=True) on
+    subdirectories while keeping only the outer, shallow check)."""
+    source = _make_source_dir(tmp_path)
+    outside = tmp_path / "outside_secret.txt"
+    outside.write_text("host secret")
+    nested = source / "web" / "assets" / "nested"
+    nested.mkdir(parents=True)
+    (nested / "leak.txt").symlink_to(outside)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    with pytest.raises(ValueError, match="symlink"):
+        copy_frontend_to_ghpages(
+            repo, "gh-pages", was_built=False, subpath="pr-1", source_dir=source
+        )
+    assert not (repo / "pr-1" / "assets" / "nested" / "leak.txt").exists()
+
+
+@pytest.mark.ai_generated
+def test_copy_data_to_ghpages_rejects_deeply_nested_symlink(tmp_path: Path) -> None:
+    """Same regression guard as above, for the data-file copy path's
+    recursively-copied videos/ tree."""
+    source = _make_source_dir(tmp_path)
+    outside = tmp_path / "outside_secret.txt"
+    outside.write_text("host secret")
+    nested = source / "videos" / "chan" / "vid1" / "extra"
+    nested.mkdir(parents=True)
+    (nested / "leak.txt").symlink_to(outside)
+
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    with pytest.raises(ValueError, match="symlink"):
+        copy_data_to_ghpages(repo, "gh-pages", subpath="pr-1", source_dir=source)
+    assert not (repo / "pr-1" / "videos" / "chan" / "vid1" / "extra" / "leak.txt").exists()
+
+
 def _run_git(args: list[str], cwd: Path) -> None:
     subprocess.run(["git", "-C", str(cwd), *args], check=True, capture_output=True)
 
@@ -306,7 +349,46 @@ def test_copy_data_to_ghpages_no_source_dir_preserves_root_content(tmp_path: Pat
 
 @pytest.mark.ai_generated
 @pytest.mark.parametrize(
-    "bad_subpath", ["../escape", "a/b", "/absolute", ".", "..", ""]
+    "bad_subpath", ["../escape", "a/b", "/absolute", ".", "..", "", ".git"]
+)
+def test_copy_frontend_to_ghpages_rejects_unsafe_subpath_directly(
+    tmp_path: Path, bad_subpath: str
+) -> None:
+    """The subpath validation must hold even when copy_frontend_to_ghpages()
+    is called directly, bypassing the CLI's own --subpath check -- this
+    module's own tests already call it that way, so a caller doing the same
+    isn't hypothetical. Regression guard against the validation living only
+    in the click callback (annextube/cli/prepare_ghpages.py's `subpath`
+    click option) rather than in the function that actually writes files."""
+    source = _make_source_dir(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    with pytest.raises(ValueError, match="subpath"):
+        copy_frontend_to_ghpages(
+            repo, "gh-pages", was_built=False, subpath=bad_subpath, source_dir=source
+        )
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    "bad_subpath", ["../escape", "a/b", "/absolute", ".", "..", "", ".git"]
+)
+def test_copy_data_to_ghpages_rejects_unsafe_subpath_directly(
+    tmp_path: Path, bad_subpath: str
+) -> None:
+    """Same direct-call regression guard as above, for copy_data_to_ghpages()."""
+    source = _make_source_dir(tmp_path)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+
+    with pytest.raises(ValueError, match="subpath"):
+        copy_data_to_ghpages(repo, "gh-pages", subpath=bad_subpath, source_dir=source)
+
+
+@pytest.mark.ai_generated
+@pytest.mark.parametrize(
+    "bad_subpath", ["../escape", "a/b", "/absolute", ".", "..", "", ".git"]
 )
 def test_prepare_ghpages_rejects_unsafe_subpath(tmp_path: Path, bad_subpath: str) -> None:
     """--subpath must be a single relative path component -- defense in

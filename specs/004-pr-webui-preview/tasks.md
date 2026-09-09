@@ -201,6 +201,64 @@ are untouched.
 
 **Checkpoint**: All three user stories independently functional.
 
+## Phase 6.5: Independent-review round 2 (post-hardening)
+
+A second pair of independent sub-agent reviews was run against the Phase
+2-5 hardening commit itself (symlink safety, root-content-preservation,
+worktree redesign). Neither found an exploitable defect in the actual
+wired-up pipeline; both converged on real, non-blocking gaps, all fixed
+here:
+
+- [x] T016 [P] `annextube/cli/prepare_ghpages.py`: factored `--subpath`
+      validation into a shared `_validate_subpath()` and call it from
+      `copy_frontend_to_ghpages()`/`copy_data_to_ghpages()` directly, not
+      only from the `prepare_ghpages` click callback — those two functions
+      are called directly by this module's own tests (and could be by
+      future code), so the isolation guarantee must not depend on every
+      caller re-deriving the check itself. Also rejects `.git` as a
+      subpath value (writing into a checkout's own `.git/` was previously
+      not covered by the reject-list).
+- [x] T017 [P] `tools/pr_preview_resolve_target.sh`: filter the
+      `commits/{sha}/pulls` lookup and the multi-PR guard to `state ==
+      "open"` (a stray closed/merged PR sharing a commit no longer causes
+      a false "refuse to guess"), and explicitly check the resolved PR's
+      *current* `state == "OPEN"` (not just its head SHA) before allowing
+      a publish — closes a gap where a build that finishes just after its
+      PR is closed could publish (or republish) an orphaned preview that
+      the once-only close-transition teardown workflow would never remove.
+- [x] T018 [P] `tests/unit/test_prepare_ghpages.py`: added deeply-nested
+      symlink-rejection tests for both the frontend and data copy paths
+      (the previous tests only placed the malicious symlink at the shallow
+      entry point each guard is first invoked from, not inside a
+      recursively-copied subdirectory), and direct-call subpath-validation
+      tests for `copy_frontend_to_ghpages()`/`copy_data_to_ghpages()`
+      (T016) bypassing the CLI. 34 tests total, up from 17.
+- [x] T019 `.github/workflows/pr-webui-preview-publish.yml`: corrected the
+      comment claiming npm's absence from `PATH` is why `hatch_build.py`'s
+      frontend-build hook skips in this job — GitHub-hosted runners ship a
+      system Node/npm, so it may well still run. Harmless either way (this
+      checkout is always the trusted base branch, and `--source-dir`
+      unconditionally skips consulting any locally-built frontend), but
+      the comment now says why it's harmless instead of relying on an
+      assumption that doesn't actually hold.
+- [x] T020 `specs/004-pr-webui-preview/contracts/preview-workflow.md`:
+      synced the trigger-events table, which still documented the teardown
+      workflow as `pull_request: [closed]`, to the implementation's actual
+      `pull_request_target: [closed]` (with the same rationale as T013's
+      hardening note).
+- [x] T021 Re-ran `tox -e py3`, `ruff check`, `mypy`, `shellcheck
+      tools/*.sh`, and `actionlint` on the three workflow YAML files —
+      all pass. Manually re-verified `pr_preview_resolve_target.sh`'s five
+      decision branches (fresh/open, closed-but-fresh-SHA, multi-open-PR,
+      stale SHA, no-PR-found) against a mocked `gh` CLI.
+
+Not acted on (documented, not silently dropped): a reviewer noted the new
+`tools/gh_pages_*.sh` orchestration scripts have no automated (pytest or
+otherwise) regression tests, only `shellcheck` plus manual verification
+against scratch git repos in both review rounds — a real gap for a future
+change to that logic, left as a follow-up rather than blocking this PR on
+building a bash-test harness from scratch.
+
 ## Phase 6: Polish & Cross-Cutting
 
 - [x] T014 [P] Update `CLAUDE.md`'s "Recent Changes"/Active Technologies

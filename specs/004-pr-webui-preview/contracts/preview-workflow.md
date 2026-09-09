@@ -11,7 +11,7 @@ workflow YAML is written.
 | Event | Effect |
 |---|---|
 | `pull_request: [opened, synchronize, reopened]`, filtered by `paths: ['frontend/**', 'annextube/cli/generate_web.py', ...]` (research.md) | Build-and-publish (or rebuild) the preview for that PR at its current head commit. |
-| `pull_request: [closed]` (covers merge and close-without-merge) | Retire (remove) the PR's preview subpath. |
+| `pull_request_target: [closed]` (covers merge and close-without-merge), no `paths:` filter | Retire (remove) the PR's preview subpath. `pull_request_target` rather than `pull_request`: GitHub silently downgrades `GITHUB_TOKEN` to read-only for `pull_request`-triggered runs from forks regardless of the `permissions:` block, which would break every teardown push for exactly the fork-PR case FR-010 requires; safe here because this job never checks out or executes anything from the PR's own ref (it only operates on `gh-pages`). No `paths:` filter, since a closed PR's *final* diff might no longer touch the build-triggering paths even though it has a previously-published, now-orphaned preview, and FR-009 is unconditional. |
 
 Fork PRs MUST be supported (FR-010) via a two-workflow split — an untrusted
 `pull_request`-triggered **build** job (no secrets) and a trusted
