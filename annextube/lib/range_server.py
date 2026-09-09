@@ -124,21 +124,36 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             raise
 
     def copyfile(self, source, outputfile):
-        """Copy data with range support."""
-        if isinstance(source, tuple):
-            f, start, length = source
-            remaining = length
-            while remaining > 0:
-                chunk_size = min(remaining, 8192)
-                chunk = f.read(chunk_size)
-                if not chunk:
-                    break
-                outputfile.write(chunk)
-                remaining -= len(chunk)
-            f.close()
-        else:
-            # Original behavior for non-range requests
-            super().copyfile(source, outputfile)
+        """Copy data with range support.
+
+        A client that aborts an in-flight request -- e.g. quickly moving the
+        pointer off a hover-preview video, or a browser cancelling/seeking a
+        video mid-download -- closes the connection while we are still
+        writing to it. That is a normal, expected occurrence rather than a
+        server error, so it is swallowed here instead of propagating up into
+        socketserver's "Exception occurred during processing of request"
+        traceback dump (which would otherwise fill the server log for every
+        such abort).
+        """
+        try:
+            if isinstance(source, tuple):
+                f, start, length = source
+                try:
+                    remaining = length
+                    while remaining > 0:
+                        chunk_size = min(remaining, 8192)
+                        chunk = f.read(chunk_size)
+                        if not chunk:
+                            break
+                        outputfile.write(chunk)
+                        remaining -= len(chunk)
+                finally:
+                    f.close()
+            else:
+                # Original behavior for non-range requests
+                super().copyfile(source, outputfile)
+        except (ConnectionResetError, BrokenPipeError):
+            pass
 
     def log_message(self, format, *args):
         """Log all HTTP requests for monitoring."""
