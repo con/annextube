@@ -1,5 +1,6 @@
 """HTTP server with proper Range request support for video seeking."""
 
+import contextlib
 import http.server
 import os
 
@@ -135,7 +136,7 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         traceback dump (which would otherwise fill the server log for every
         such abort).
         """
-        try:
+        with contextlib.suppress(ConnectionResetError, BrokenPipeError):
             if isinstance(source, tuple):
                 f, start, length = source
                 try:
@@ -152,8 +153,6 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             else:
                 # Original behavior for non-range requests
                 super().copyfile(source, outputfile)
-        except (ConnectionResetError, BrokenPipeError):
-            pass
 
     def log_message(self, format, *args):
         """Log all HTTP requests for monitoring."""
