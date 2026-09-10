@@ -7,12 +7,28 @@
   export const HOVER_DELAY_MS = 200;
 
   /**
-   * How long a preview may take to start playing before it is given up on.
-   * A preview that never plays is never revealed (the thumbnail stays put),
-   * so without this it would go on quietly downloading the whole file from
-   * behind the thumbnail.
+   * How long one attempt at a preview may take to start playing before it
+   * is abandoned. A preview that never plays is never revealed (the
+   * thumbnail stays put), so without this it would go on quietly
+   * downloading the whole file from behind the thumbnail.
    */
-  export const PREVIEW_START_TIMEOUT_MS = 8000;
+  export const PREVIEW_START_TIMEOUT_MS = 4000;
+
+  /**
+   * How far into a video a preview starts.
+   *
+   * Recordings routinely open on black or a title card, so previewing from
+   * the very beginning shows a black rectangle even when everything is
+   * working. Starting a little way in is more representative.
+   */
+  export const PREVIEW_START_SECONDS = 30;
+
+  /**
+   * Videos shorter than this are previewed from the start instead: seeking
+   * 30s into a 40s clip lands in its tail (and into a 20s one, past the
+   * end). Derived from the offset so the two cannot drift apart.
+   */
+  export const PREVIEW_SEEK_MIN_DURATION_S = PREVIEW_START_SECONDS * 3;
 </script>
 
 <script lang="ts">
@@ -44,8 +60,15 @@
   // Bumped on every enter and leave, so an async availability probe can
   // tell whether the hover it belongs to is still the current one.
   let hoverGeneration = 0;
+  // Set after a seeked preview fails to play: not every Matroska file has
+  // the cues needed to seek, and a preview from the start beats none.
+  let previewFromStart = false;
 
   $: previewUrl = dataLoader.getVideoFileUrl(video, channelDir);
+  $: previewOffset =
+    !previewFromStart && video.duration > PREVIEW_SEEK_MIN_DURATION_S ? PREVIEW_START_SECONDS : 0;
+  // Media fragment, so the browser seeks on load rather than after it.
+  $: previewSrc = previewOffset > 0 ? `${previewUrl}#t=${previewOffset}` : previewUrl;
 
   function handleThumbnailError() {
     thumbnailError = true;
@@ -90,15 +113,27 @@
 
   function giveUpOnPreview() {
     startTimer = null;
-    // Never played, so it was never shown: drop it rather than leave it
-    // downloading invisibly behind the thumbnail.
-    if (!previewPlaying) stopPreview();
+    if (previewPlaying) return;
+    // Never played, so it was never shown. Retry without the seek if that
+    // is what failed; otherwise drop it rather than leave it downloading
+    // invisibly behind the thumbnail.
+    if (previewOffset > 0) retryFromStart();
+    else stopPreview();
+  }
+
+  function retryFromStart() {
+    // previewSrc is reactive, so dropping the offset re-points the existing
+    // element -- which aborts the seeked load along the way.
+    previewFromStart = true;
+    previewPlaying = false;
+    startTimer = setTimeout(giveUpOnPreview, PREVIEW_START_TIMEOUT_MS);
   }
 
   function stopPreview() {
     hoverGeneration++;
     previewActive = false;
     previewPlaying = false;
+    previewFromStart = false;
     clearTimers();
     teardownPreviewElement();
   }
@@ -142,8 +177,10 @@
     // Reveal the preview only once frames are actually coming through.
     // Showing the <video> as soon as it is created paints an opaque black
     // rectangle over the thumbnail for as long as the file takes to start
-    // playing -- which is forever if it never does.
-    if (previewVideoElement && previewVideoElement.currentTime > 0) {
+    // playing -- which is forever if it never does. Compare against the
+    // seek target, not zero: a seeked element reports the offset as its
+    // position before it has played anything.
+    if (previewVideoElement && previewVideoElement.currentTime > previewOffset) {
       previewPlaying = true;
     }
   }
@@ -152,6 +189,12 @@
     // An error from an element we already tore down is ours, not the
     // file's -- only the live preview's failure says anything about it.
     if (!previewVideoElement || event.currentTarget !== previewVideoElement) return;
+    // A seeked load can fail on the seek rather than on the file itself.
+    if (previewOffset > 0) {
+      clearTimers();
+      retryFromStart();
+      return;
+    }
     // The availability cache said this file was there, but loading it
     // failed anyway (e.g. content dropped from the annex mid-session).
     // Fall back to the static thumbnail and stop trusting the stale cache
@@ -204,7 +247,7 @@
         bind:this={previewVideoElement}
         class="preview-video"
         class:playing={previewPlaying}
-        src={previewUrl}
+        src={previewSrc}
         muted
         loop
         playsinline

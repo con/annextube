@@ -10,7 +10,12 @@
 
 import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
-import VideoCard, { HOVER_DELAY_MS, PREVIEW_START_TIMEOUT_MS } from '../../src/components/VideoCard.svelte';
+import VideoCard, {
+  HOVER_DELAY_MS,
+  PREVIEW_START_SECONDS,
+  PREVIEW_SEEK_MIN_DURATION_S,
+  PREVIEW_START_TIMEOUT_MS,
+} from '../../src/components/VideoCard.svelte';
 import { clearAvailabilityCache } from '../../src/services/availability';
 import type { Video } from '../../src/types/models';
 
@@ -21,7 +26,7 @@ function makeVideo(overrides: Partial<Video> = {}): Video {
     channel_id: 'chan1',
     channel_name: 'Test Channel',
     published_at: '2024-01-01T00:00:00Z',
-    duration: 120,
+    duration: 45, // short enough that previews start at 0; see the seek tests
     view_count: 0,
     like_count: 0,
     comment_count: 0,
@@ -157,6 +162,52 @@ describe('VideoCard hover preview', () => {
     unmount();
 
     expect(pauseSpy).toHaveBeenCalled();
+  });
+
+  test('starts a long video a little way in, not on its opening black frame', async () => {
+    const { container } = render(VideoCard, { props: { video: makeVideo({ duration: 3548 }) } });
+
+    const previewVideo = await hover(container);
+
+    expect(previewVideo.getAttribute('src')).toBe(`/videos/abc123/video.mkv#t=${PREVIEW_START_SECONDS}`);
+  });
+
+  test.each([
+    ['shorter than the seek offset', 20],
+    ['not much longer than the seek offset', 40],
+    ['exactly at the threshold', PREVIEW_SEEK_MIN_DURATION_S],
+    ['unknown (missing from the TSV)', 0],
+  ])('previews a video %s from the start', async (_label, duration) => {
+    // Seeking 30s into a short clip lands in its tail or past its end.
+    const { container } = render(VideoCard, { props: { video: makeVideo({ duration }) } });
+
+    const previewVideo = await hover(container);
+
+    expect(previewVideo.getAttribute('src')).toBe('/videos/abc123/video.mkv');
+  });
+
+  test('falls back to previewing from the start when the seek never plays', async () => {
+    // Not every Matroska file carries the cues needed to seek; a preview
+    // from the start beats no preview at all.
+    vi.useFakeTimers();
+    try {
+      const { container } = render(VideoCard, { props: { video: makeVideo({ duration: 3548 }) } });
+      await fireEvent.mouseEnter(container.querySelector('.thumbnail-container') as HTMLElement);
+      await vi.advanceTimersByTimeAsync(HOVER_DELAY_MS);
+
+      const previewVideo = container.querySelector('.preview-video') as HTMLVideoElement;
+      expect(previewVideo.getAttribute('src')).toContain('#t=');
+
+      await vi.advanceTimersByTimeAsync(PREVIEW_START_TIMEOUT_MS);
+      expect(container.querySelector('.preview-video')).not.toBeNull();
+      expect(previewVideo.getAttribute('src')).toBe('/videos/abc123/video.mkv');
+
+      // ...and if that does not play either, it is given up on.
+      await vi.advanceTimersByTimeAsync(PREVIEW_START_TIMEOUT_MS);
+      expect(container.querySelector('.preview-video')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('aborts the download when the file fails to load, not just the element', async () => {
