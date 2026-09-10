@@ -1,4 +1,11 @@
-"""HTTP server with proper Range request support for video seeking."""
+"""HTTP server with proper Range request support for video seeking.
+
+NOTE: This server is NOT needed for regular use/hosting of an annextube
+archive. It exists mainly for local development and testing (see
+``annextube serve``). For actually serving an archive, use a real,
+production-grade HTTP server (e.g. Apache, nginx) -- any modern server
+already supports Range requests.
+"""
 
 import contextlib
 import http.server
