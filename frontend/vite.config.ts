@@ -31,7 +31,12 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src')
-      }
+      },
+
+      // Vitest resolves package entry points with Node conditions, which hands
+      // component tests Svelte's server runtime — where onMount is a no-op, so
+      // anything a component does on mount silently never happens.
+      ...(mode === 'test' ? { conditions: ['browser'] } : {}),
     },
 
     build: {

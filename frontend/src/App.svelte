@@ -13,6 +13,12 @@
   const appVersion: string = __APP_VERSION__;
 
   let isMultiChannel = false;
+  // Archive root relative to the web UI, discovered by dataLoader.init().
+  // Mirrored into component state because `dataLoader` is a plain module
+  // singleton: Svelte cannot track mutations of its properties, so passing
+  // `dataLoader.baseUrl` straight into a prop would freeze it at its
+  // pre-init value ('').
+  let archiveBaseUrl = '';
   let channels: Channel[] = [];
   let selectedChannel: Channel | null = null;
   let allVideos: Video[] = [];
@@ -28,6 +34,7 @@
     try {
       // Check if this is a multi-channel collection
       isMultiChannel = await dataLoader.isMultiChannelMode();
+      archiveBaseUrl = dataLoader.baseUrl;
 
       if (isMultiChannel) {
         // Load channels list
@@ -220,7 +227,7 @@
           </svg>
         </a>
         <CloneCommand
-          baseUrl={dataLoader.baseUrl}
+          baseUrl={archiveBaseUrl}
           channelDir={selectedChannel?.channel_dir ?? currentRoute.params.channel_dir ?? null}
           videoFilePath={selectedVideo?.file_path ?? null}
           {isMultiChannel}
