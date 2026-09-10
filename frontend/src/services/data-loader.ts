@@ -121,6 +121,23 @@ export class DataLoader {
   }
 
   /**
+   * Build the URL for a video's local file (video.mkv), with or without
+   * a channel prefix for multi-channel collections.
+   *
+   * Shared by VideoPlayer (main playback) and VideoCard (hover preview)
+   * so the path convention lives in one place.
+   *
+   * @param video - Video object (uses file_path, falling back to video_id)
+   * @param channelDir - Optional channel directory for multi-channel mode
+   */
+  getVideoFileUrl(video: Video, channelDir?: string): string {
+    const filePath = video.file_path || video.video_id;
+    return channelDir
+      ? `${this.baseUrl}/${channelDir}/videos/${filePath}/video.mkv`
+      : `${this.baseUrl}/videos/${filePath}/video.mkv`;
+  }
+
+  /**
    * Load all videos from videos.tsv (fast initial load)
    *
    * Following mykrok pattern: Load TSV immediately for list view

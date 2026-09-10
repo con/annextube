@@ -58,16 +58,9 @@
   // Get video file path (relative from web/ directory)
   function getVideoPath(): string {
     // Use path from videos.tsv (supports hierarchical structure like 2026/01/video_dir)
-    // Fall back to video_id for older archives
-    const filePath = video.file_path || video.video_id;
-
-    // Video files are named video.mkv (git-annex symlinked to actual content)
-    // Use baseUrl from DataLoader (discovered at init time)
-    // In multi-channel mode, include channel directory prefix
-    const base = dataLoader.baseUrl;
-    const path = channelDir
-      ? `${base}/${channelDir}/videos/${filePath}/video.mkv`
-      : `${base}/videos/${filePath}/video.mkv`;
+    // Fall back to video_id for older archives. Path convention lives in
+    // DataLoader so it's shared with VideoCard's hover preview.
+    const path = dataLoader.getVideoFileUrl(video, channelDir);
 
     console.log('[VideoPlayer] Video path:', path, 'channelDir:', channelDir, 'download_status:', video.download_status);
     return path;

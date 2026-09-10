@@ -376,11 +376,13 @@ def generate_web(
         click.echo("[ok] Web browser generated successfully!")
         click.echo()
         click.echo("To view the archive:")
-        click.echo(f"  1. cd {output_dir}")
-        click.echo("  2. python3 -m http.server 8000")
-        click.echo("  3. Open http://localhost:8000/web/")
+        click.echo(f"  1. annextube serve --output-dir {output_dir}")
+        click.echo("  2. Open http://localhost:8080/web/")
         click.echo()
         click.echo("Note: Do NOT use file:// URLs - they don't work due to CORS restrictions.")
+        click.echo(
+            "Note: 'python3 -m http.server' has no Range support - seeking breaks."
+        )
 
     except Exception as e:
         logger.error(f"Web generation failed: {e}")
