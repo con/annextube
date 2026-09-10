@@ -1,0 +1,46 @@
+name: PR Web UI Preview - Teardown
+
+# Removes a closed/merged PR's preview subpath from gh-pages, so hosting
+# usage doesn't grow without bound as PRs accumulate (FR-009). Touches only
+# that one PR's subpath -- never the branch root or any other PR's preview.
+#
+# Uses `pull_request_target`, not `pull_request`: GitHub silently downgrades
+# the GITHUB_TOKEN to read-only for `pull_request`-triggered runs from forks,
+# regardless of the `permissions:` block below, which would make every
+# `git push` here fail for exactly the fork-PR case FR-010 requires this to
+# support. `pull_request_target` runs the base repo's own trusted workflow
+# definition with the requested permissions honored -- safe here because
+# this job never checks out or executes anything from the PR's own ref (no
+# `actions/checkout` with a PR ref at all; it only operates on gh-pages).
+#
+# No `paths:` filter (unlike the build workflow): a PR's *final* diff might
+# no longer touch the build-triggering paths (e.g. changes added then
+# reverted within the same PR) even though it has a previously-published,
+# now-orphaned preview -- FR-009 is unconditional, and the mutate script
+# below is already a safe, cheap no-op when there is nothing to tear down.
+
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Configure git identity for gh-pages commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Remove pr-<number>/ if present (retry on push races)
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          tools/gh_pages_push_retry.sh /tmp/gh-pages-worktree -- \
+            tools/gh_pages_teardown_subpath.sh /tmp/gh-pages-worktree "$PR_NUMBER"
