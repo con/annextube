@@ -1,10 +1,20 @@
 """Tests for annextube.lib.range_server — HTTP range server tolerant of client disconnects."""
 
+import http.client
 import io
+import socket
+import threading
+import time
+from functools import partial
 
 import pytest
 
-from annextube.lib.range_server import RangeHTTPRequestHandler
+from annextube.lib.range_server import RangeHTTPRequestHandler, ThreadedRangeHTTPServer
+
+
+def _server():
+    """Build a server instance without binding a socket (see _handler())."""
+    return ThreadedRangeHTTPServer.__new__(ThreadedRangeHTTPServer)
 
 
 def _handler():
@@ -90,3 +100,89 @@ class TestCopyfileNormalTransfer:
         _handler().copyfile(source_file, outputfile)
 
         assert outputfile.getvalue() == b"hello world"
+
+
+@pytest.fixture
+def stalled_video_server(tmp_path):
+    """A running ThreadedRangeHTTPServer with one client stalled mid-download.
+
+    This is the shape of a hover preview (or any paused <video>): the browser
+    opens the connection, buffers what it wants and then simply stops
+    reading, leaving the server blocked writing to that socket.
+    """
+    video = tmp_path / "video.mkv"
+    with video.open("wb") as f:
+        f.truncate(32 * 1024 * 1024)  # sparse: bigger than any socket buffer
+
+    handler = partial(RangeHTTPRequestHandler, directory=str(tmp_path))
+    httpd = ThreadedRangeHTTPServer(("127.0.0.1", 0), handler)
+    port = httpd.server_address[1]
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    stalled = socket.create_connection(("127.0.0.1", port), timeout=5)
+    stalled.sendall(b"GET /video.mkv HTTP/1.1\r\nHost: localhost\r\nRange: bytes=0-\r\n\r\n")
+    stalled.recv(4096)  # take the headers, then read nothing more
+    time.sleep(0.2)  # let the server fill the socket buffer and block
+
+    try:
+        yield port
+    finally:
+        stalled.close()
+        httpd.shutdown()
+        httpd.server_close()
+
+
+@pytest.mark.ai_generated
+class TestConcurrentRequests:
+    """A stalled video stream must not wedge the whole server.
+
+    Regression test for hover previews (and thumbnails, and the search
+    index) silently failing to load: served serially, one parked <video>
+    connection blocks every subsequent request until the browser gives up.
+    """
+
+    def test_a_second_video_can_be_fetched_while_the_first_is_stalled(
+        self, stalled_video_server
+    ):
+        conn = http.client.HTTPConnection("127.0.0.1", stalled_video_server, timeout=5)
+        try:
+            conn.putrequest("GET", "/video.mkv")
+            conn.putheader("Range", "bytes=0-1023")
+            conn.endheaders()
+            response = conn.getresponse()
+
+            assert response.status == 206
+            assert len(response.read()) == 1024
+        finally:
+            conn.close()
+
+
+@pytest.mark.ai_generated
+class TestHandleError:
+    """Client disconnects are routine; anything else is still a real error."""
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            ConnectionResetError(104, "Connection reset by peer"),
+            BrokenPipeError(32, "Broken pipe"),
+            ConnectionAbortedError(103, "Software caused connection abort"),
+        ],
+    )
+    def test_disconnect_is_not_reported(self, exc, capsys):
+        # A disconnect while writing headers lands here rather than in
+        # copyfile(); it must not dump a traceback either.
+        try:
+            raise exc
+        except OSError:
+            _server().handle_error(None, ("127.0.0.1", 12345))
+
+        assert capsys.readouterr().err == ""
+
+    def test_real_errors_are_still_reported(self, capsys):
+        try:
+            raise ValueError("something actually broke")
+        except ValueError:
+            _server().handle_error(None, ("127.0.0.1", 12345))
+
+        assert "something actually broke" in capsys.readouterr().err

@@ -1,8 +1,7 @@
 """Serve command for annextube - HTTP server with range support and auto-regeneration."""
 
-import os
-import socketserver
 import time
+from functools import partial
 from pathlib import Path
 from threading import Thread
 
@@ -13,7 +12,7 @@ from annextube.cli.generate_web import deploy_frontend
 from annextube.lib.archive_discovery import discover_annextube
 from annextube.lib.cli_options import output_dir_option
 from annextube.lib.logging_config import get_logger
-from annextube.lib.range_server import RangeHTTPRequestHandler
+from annextube.lib.range_server import RangeHTTPRequestHandler, ThreadedRangeHTTPServer
 from annextube.services.export import ExportService
 
 logger = get_logger(__name__)
@@ -251,14 +250,13 @@ def serve(
             watcher_thread.start()
             click.echo(f"[ok] Watching for changes (interval: {watch_interval}s)")
 
-    # Change to archive directory
-    os.chdir(output_dir)
+    # Serve from the archive directory. Pass it explicitly rather than
+    # chdir'ing: request handlers are built on their own threads, so a cwd
+    # changed anywhere else in the process would misroute them.
+    handler = partial(RangeHTTPRequestHandler, directory=str(output_dir))
 
-    # Create server with socket reuse enabled
     try:
-        # Enable SO_REUSEADDR to allow binding to recently-used ports
-        socketserver.TCPServer.allow_reuse_address = True
-        with socketserver.TCPServer((host, port), RangeHTTPRequestHandler) as httpd:
+        with ThreadedRangeHTTPServer((host, port), handler) as httpd:
             click.echo()
             if is_multi_channel:
                 click.echo(f"Serving multi-channel collection at http://{host}:{port}/")
@@ -269,6 +267,7 @@ def serve(
             click.echo()
             click.echo("Features:")
             click.echo("  [ok] HTTP Range requests (video seeking enabled)")
+            click.echo("  [ok] Concurrent requests (a playing video blocks nothing)")
             if watch and not is_multi_channel:
                 click.echo(f"  [ok] Auto-regenerate TSVs on changes ({watch_interval}s interval)")
             click.echo()

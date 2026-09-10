@@ -33,6 +33,26 @@ export async function isFileAvailable(url: string): Promise<boolean> {
 const availabilityCache = new Map<string, boolean>();
 
 /**
+ * Checks currently in flight, keyed by path.
+ *
+ * The result cache only helps once a check has finished. Without this,
+ * callers asking about the same file while a check is still in flight
+ * (e.g. several hover events landing on one card in quick succession) each
+ * fire their own HEAD request for it.
+ */
+const inFlightChecks = new Map<string, Promise<boolean>>();
+
+/**
+ * Bumped by every cache clear.
+ *
+ * A check that started before a clear describes a state the caller has
+ * already declared stale, so its result must not be written back into the
+ * cache afterwards -- otherwise clearing an entry during a check silently
+ * restores the very value that was being thrown away.
+ */
+let cacheGeneration = 0;
+
+/**
  * Check video availability with caching.
  *
  * Caches results for the session to avoid repeated HEAD requests
@@ -46,13 +66,32 @@ export async function checkVideoAvailability(
   videoPath: string,
   forceCheck = false
 ): Promise<boolean> {
-  if (!forceCheck && availabilityCache.has(videoPath)) {
-    return availabilityCache.get(videoPath)!;
+  if (!forceCheck) {
+    if (availabilityCache.has(videoPath)) {
+      return availabilityCache.get(videoPath)!;
+    }
+    const inFlight = inFlightChecks.get(videoPath);
+    if (inFlight) {
+      return inFlight;
+    }
   }
 
-  const available = await isFileAvailable(videoPath);
-  availabilityCache.set(videoPath, available);
-  return available;
+  const startedAt = cacheGeneration;
+  const check = isFileAvailable(videoPath)
+    .then((available) => {
+      if (cacheGeneration === startedAt) {
+        availabilityCache.set(videoPath, available);
+      }
+      return available;
+    })
+    .finally(() => {
+      if (inFlightChecks.get(videoPath) === check) {
+        inFlightChecks.delete(videoPath);
+      }
+    });
+
+  inFlightChecks.set(videoPath, check);
+  return check;
 }
 
 /**
@@ -63,9 +102,12 @@ export async function checkVideoAvailability(
  * @param videoPath - Specific path to clear, or undefined to clear all
  */
 export function clearAvailabilityCache(videoPath?: string): void {
+  cacheGeneration++;
   if (videoPath) {
     availabilityCache.delete(videoPath);
+    inFlightChecks.delete(videoPath);
   } else {
     availabilityCache.clear();
+    inFlightChecks.clear();
   }
 }

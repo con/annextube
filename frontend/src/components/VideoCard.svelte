@@ -1,3 +1,20 @@
+<script context="module" lang="ts">
+  /**
+   * How long the pointer has to rest on a card before its video starts
+   * loading. Sweeping across a grid must not kick off a download per card:
+   * these are the real, often multi-hundred-MB, archived files.
+   */
+  export const HOVER_DELAY_MS = 200;
+
+  /**
+   * How long a preview may take to start playing before it is given up on.
+   * A preview that never plays is never revealed (the thumbnail stays put),
+   * so without this it would go on quietly downloading the whole file from
+   * behind the thumbnail.
+   */
+  export const PREVIEW_START_TIMEOUT_MS = 8000;
+</script>
+
 <script lang="ts">
   import { onDestroy } from 'svelte';
   import type { Video } from '@/types/models';
@@ -14,9 +31,19 @@
   // Hover-to-preview (issue #11): play the actual video, muted, inline,
   // within the thumbnail area, reverting to the static image on
   // mouseleave. No snippet extraction/caching -- just the real file.
-  let isHovering = false;
-  let hasLocalVideo = false;
+  // Whether the <video> overlay is mounted at all. Only ever set by
+  // startPreview(), so re-hovering an already-probed card still waits out
+  // the hover delay rather than re-mounting instantly.
+  let previewActive = false;
+  // Whether the preview is actually rendering frames. Until it is, the
+  // <video> stays transparent so the thumbnail underneath remains visible.
+  let previewPlaying = false;
   let previewVideoElement: HTMLVideoElement | null = null;
+  let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+  let startTimer: ReturnType<typeof setTimeout> | null = null;
+  // Bumped on every enter and leave, so an async availability probe can
+  // tell whether the hover it belongs to is still the current one.
+  let hoverGeneration = 0;
 
   $: previewUrl = dataLoader.getVideoFileUrl(video, channelDir);
 
@@ -31,45 +58,112 @@
     }
   }
 
-  async function handleMouseEnter() {
-    isHovering = true;
-    // Only bother probing when the archive actually has a local copy;
-    // checkVideoAvailability caches the HEAD request so re-hovering is free.
-    if (video.download_status === 'downloaded' || video.download_status === 'tracked') {
-      const available = await checkVideoAvailability(previewUrl);
-      if (isHovering) hasLocalVideo = available;
-    }
+  function handleMouseEnter() {
+    hoverGeneration++;
+    clearTimers();
+    hoverTimer = setTimeout(startPreview, HOVER_DELAY_MS);
   }
 
   function handleMouseLeave() {
-    isHovering = false;
+    stopPreview();
+  }
+
+  async function startPreview() {
+    hoverTimer = null;
+    // Only bother probing when the archive actually has a local copy;
+    // checkVideoAvailability caches the HEAD request so re-hovering is free.
+    if (video.download_status !== 'downloaded' && video.download_status !== 'tracked') {
+      return;
+    }
+
+    const generation = hoverGeneration;
+    const url = previewUrl;
+    const available = await checkVideoAvailability(url);
+    // The probe is async: this hover may be over by the time it lands, or a
+    // later hover may have started -- and that one has its own delay to sit
+    // out rather than inheriting this result.
+    if (generation !== hoverGeneration || url !== previewUrl) return;
+
+    previewActive = available;
+    if (available) startTimer = setTimeout(giveUpOnPreview, PREVIEW_START_TIMEOUT_MS);
+  }
+
+  function giveUpOnPreview() {
+    startTimer = null;
+    // Never played, so it was never shown: drop it rather than leave it
+    // downloading invisibly behind the thumbnail.
+    if (!previewPlaying) stopPreview();
+  }
+
+  function stopPreview() {
+    hoverGeneration++;
+    previewActive = false;
+    previewPlaying = false;
+    clearTimers();
+    teardownPreviewElement();
+  }
+
+  function clearTimers() {
+    if (hoverTimer !== null) {
+      clearTimeout(hoverTimer);
+      hoverTimer = null;
+    }
+    if (startTimer !== null) {
+      clearTimeout(startTimer);
+      startTimer = null;
+    }
+  }
+
+  function teardownPreviewElement() {
+    const element = previewVideoElement;
+    if (!element) return;
+    previewVideoElement = null;
     // Pause explicitly rather than relying on the {#if} removing the
     // element -- a detached but still-referenced <video> can keep playing.
-    previewVideoElement?.pause();
+    element.pause();
+    // Dropping the source and re-running resource selection aborts the
+    // in-flight range request right away. Without it the browser happily
+    // keeps pulling (and the server keeps streaming) the rest of a large
+    // file for a card the pointer has already left.
+    element.removeAttribute('src');
+    element.load();
   }
 
   function handlePreviewCanPlay() {
     previewVideoElement?.play().catch(() => {
-      // Autoplay can be blocked by the browser; the static thumbnail
-      // stays visible underneath, so there's nothing more to do.
+      // Autoplay refused (e.g. a browser-level media block). It would stay
+      // invisible and keep downloading, so give it up; the static
+      // thumbnail underneath is the fallback.
+      stopPreview();
     });
   }
 
-  function handlePreviewError() {
+  function handlePreviewTimeUpdate() {
+    // Reveal the preview only once frames are actually coming through.
+    // Showing the <video> as soon as it is created paints an opaque black
+    // rectangle over the thumbnail for as long as the file takes to start
+    // playing -- which is forever if it never does.
+    if (previewVideoElement && previewVideoElement.currentTime > 0) {
+      previewPlaying = true;
+    }
+  }
+
+  function handlePreviewError(event: Event) {
+    // An error from an element we already tore down is ours, not the
+    // file's -- only the live preview's failure says anything about it.
+    if (!previewVideoElement || event.currentTarget !== previewVideoElement) return;
     // The availability cache said this file was there, but loading it
     // failed anyway (e.g. content dropped from the annex mid-session).
     // Fall back to the static thumbnail and stop trusting the stale cache
     // entry so the next hover re-checks for real, instead of leaving an
     // opaque, permanently-broken overlay over the thumbnail.
-    hasLocalVideo = false;
     clearAvailabilityCache(previewUrl);
+    stopPreview();
   }
 
   // Belt-and-braces: if the card is torn down (e.g. list re-render while
   // the pointer is still over it) without a mouseleave ever firing.
-  onDestroy(() => {
-    previewVideoElement?.pause();
-  });
+  onDestroy(stopPreview);
 </script>
 
 <div
@@ -101,7 +195,7 @@
       />
     {/if}
 
-    {#if isHovering && hasLocalVideo}
+    {#if previewActive}
       <!-- Decorative hover preview -- the accessible experience is the
            thumbnail img (with its alt text) plus the card's click/Enter
            handling; this overlay adds nothing for keyboard/AT users. -->
@@ -109,6 +203,7 @@
       <video
         bind:this={previewVideoElement}
         class="preview-video"
+        class:playing={previewPlaying}
         src={previewUrl}
         muted
         loop
@@ -117,6 +212,7 @@
         tabindex="-1"
         aria-hidden="true"
         on:canplay={handlePreviewCanPlay}
+        on:timeupdate={handlePreviewTimeUpdate}
         on:error={handlePreviewError}
       ></video>
     {/if}
@@ -198,6 +294,16 @@
     height: 100%;
     object-fit: cover;
     background: #000;
+    pointer-events: none;
+    /* Transparent until the first frames render, so a preview that is slow
+       to load -- or never loads -- leaves the thumbnail on screen instead
+       of covering it with a black rectangle. */
+    opacity: 0;
+    transition: opacity 0.15s ease-in;
+  }
+
+  .preview-video.playing {
+    opacity: 1;
   }
 
   .thumbnail-placeholder {

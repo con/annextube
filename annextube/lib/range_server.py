@@ -1,15 +1,15 @@
 """HTTP server with proper Range request support for video seeking.
 
-NOTE: This server is NOT needed for regular use/hosting of an annextube
-archive. It exists mainly for local development and testing (see
-``annextube serve``). For actually serving an archive, use a real,
-production-grade HTTP server (e.g. Apache, nginx) -- any modern server
-already supports Range requests.
+NOTE: This server is for viewing an archive locally (see ``annextube
+serve``), plus development and testing. For actually hosting an archive
+for others, use a real, production-grade HTTP server (e.g. Apache,
+nginx) -- any modern server already supports Range requests.
 """
 
 import contextlib
 import http.server
 import os
+import sys
 
 
 class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -143,7 +143,7 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         traceback dump (which would otherwise fill the server log for every
         such abort).
         """
-        with contextlib.suppress(ConnectionResetError, BrokenPipeError):
+        with contextlib.suppress(ConnectionError):
             if isinstance(source, tuple):
                 f, start, length = source
                 try:
@@ -165,3 +165,31 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         """Log all HTTP requests for monitoring."""
         # Log all requests (helpful for debugging and monitoring)
         super().log_message(format, *args)
+
+
+class ThreadedRangeHTTPServer(http.server.ThreadingHTTPServer):
+    """Range-capable HTTP server that serves requests concurrently.
+
+    Concurrency is not a nicety here, it is required for correctness of the
+    web UI. A ``<video>`` element keeps its connection open and stops
+    reading once it has buffered enough, which leaves the server blocked in
+    ``sendall()`` on that socket. Serving requests one at a time (plain
+    ``socketserver.TCPServer``) therefore means a single hovered/paused
+    video wedges the *whole* server until the browser aborts that download:
+    every other request -- thumbnails, other previews, the search index --
+    just queues up. One thread per request keeps a parked video stream from
+    blocking everything else.
+    """
+
+    def handle_error(self, request, client_address):
+        """Do not dump a traceback when a client simply went away.
+
+        Browsers abort in-flight media requests constantly: moving the
+        pointer off a hover preview, seeking, navigating away. ``copyfile()``
+        already handles that for the response body; this covers the same
+        disconnect surfacing anywhere else in the handler, e.g. while the
+        response headers are being written.
+        """
+        if isinstance(sys.exc_info()[1], ConnectionError):
+            return
+        super().handle_error(request, client_address)
