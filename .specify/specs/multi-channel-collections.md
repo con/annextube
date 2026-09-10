@@ -330,6 +330,30 @@ The existing web UI:
    - Load `videos.tsv` (existing behavior)
    - No channels overview
 
+4. **Clone commands** (FR-027a/FR-027b): a collection is two levels of
+   dataset, so the header's clone panel offers both — the channel
+   subdataset being browsed and the collection superdataset:
+
+   ```
+   This channel
+     $ datalad clone https://datasets.datalad.org/repronim/ReproTube/ABCD-ReproNim_Course/.git
+     $ cd ABCD-ReproNim_Course && datalad get videos/2020/10/2020-10-05_Week-2-.../
+   Whole collection
+     $ datalad clone https://datasets.datalad.org/repronim/ReproTube/.git
+     $ cd ReproTube && datalad get ABCD-ReproNim_Course/videos/2020/10/2020-10-05_Week-2-.../
+   ```
+
+   Both URLs are probed under the archive root discovered by
+   `data-loader.ts` (`<root>/.git/HEAD` and `<root>/{channel_dir}/.git/HEAD`),
+   never relative to the web server root: on a host like
+   datasets.datalad.org the server root is itself a dataset, so an
+   undiscovered root silently yields `https://datasets.datalad.org/.git`.
+   Each `get` path is relative to the repository its own clone command
+   creates. `git annex get` is offered only for the channel clone —
+   plain git cannot reach into a subdataset from the superdataset, since
+   `.gitmodules` records relative URLs (`./ABCD-ReproNim_Course`) that
+   resolve against a `…/.git` clone URL and 404.
+
 **Performance**: For 10 channels with 200 videos each, parallel loading of 10 TSV files (~500KB total) takes <200ms on decent connection. No aggregation needed.
 
 ### UX Flow (Multi-Channel)

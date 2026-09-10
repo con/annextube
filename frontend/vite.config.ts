@@ -11,6 +11,9 @@ export default defineConfig(({ mode }) => {
   // - default/local: './' for file:// protocol support
   // - gh-pages: use VITE_BASE_PATH env var (e.g., '/annextubetesting/')
   const isGitHubPages = mode === 'gh-pages';
+  // `mode` is 'test' under a plain `vitest run`, but the runner may be given
+  // another one (`vitest --mode ...`); its env var is the reliable signal
+  const isTest = mode === 'test' || !!process.env.VITEST;
   const basePath = isGitHubPages
     ? (process.env.VITE_BASE_PATH || '/')
     : './';
@@ -31,7 +34,13 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src')
-      }
+      },
+
+      // Vitest resolves package entry points with Node conditions, which hands
+      // component tests Svelte's server runtime — where onMount is a no-op, so
+      // anything a component does on mount silently never happens. Restate
+      // Vite's own defaults alongside 'browser': the option replaces them.
+      ...(isTest ? { conditions: ['browser', 'module', 'development'] } : {}),
     },
 
     build: {
@@ -55,7 +64,10 @@ export default defineConfig(({ mode }) => {
     // Configure Vitest
     test: {
       globals: true,
-      environment: 'jsdom'
+      environment: 'jsdom',
+      // Unit tests only: tests/e2e is Playwright's and *.jest.test.ts is Jest's
+      include: ['tests/unit/**/*.test.ts'],
+      exclude: ['**/node_modules/**', '**/*.jest.test.ts'],
     }
   };
 });
