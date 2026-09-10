@@ -8,14 +8,16 @@ workflow code exists.
 ## Validating the design's core assumption today (no new code needed)
 
 The whole design rests on: *"a working web UI preview can be built from any
-branch's code, against the existing `annextubetesting` dataset, without
-touching YouTube."* This is already possible manually and is worth
-confirming before implementation starts:
+branch's code, against the existing `con/annextubetesting` dataset (a
+separate, standalone repository), without touching YouTube."* This is
+already possible manually and is worth confirming before implementation
+starts:
 
 ```bash
 # From a checkout of the PR/branch you want to preview:
 WORK_DIR=$(mktemp -d)
-git archive annextubetesting | tar -x -C "$WORK_DIR"   # existing dataset, no YouTube fetch
+git clone --depth=1 https://github.com/con/annextubetesting.git "$WORK_DIR/src"
+git -C "$WORK_DIR/src" archive HEAD | tar -x -C "$WORK_DIR"  # existing dataset, no YouTube fetch
 uv run annextube generate-web --output-dir "$WORK_DIR"  # PR's own code generates the UI
 cd "$WORK_DIR" && python3 -m http.server 8080  # serve from WORK_DIR itself (not
                                                 #   WORK_DIR/web) so the frontend's
@@ -26,9 +28,11 @@ cd "$WORK_DIR" && python3 -m http.server 8080  # serve from WORK_DIR itself (not
                                                 #   http://localhost:8080/web/
 ```
 
-This is exactly `tools/deploy-demo.sh`'s existing Step 1–2 logic (see
-`research.md`), confirming the implementation phase has a real, working
-pattern to parameterize per-PR rather than invent from scratch.
+This mirrors `tools/deploy-demo.sh`'s existing Step 1–2 logic (see
+`research.md`) — export-then-`generate-web`, just against the separate
+`con/annextubetesting` repository instead of a local branch — confirming
+the implementation phase has a real, working pattern to parameterize
+per-PR rather than invent from scratch.
 
 ## Expected reviewer experience once implemented
 

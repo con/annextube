@@ -15,18 +15,19 @@ Reviewers of PRs that change the AnnexTube web UI (frontend source, or the
 backend code that generates `web/`) currently have no way to see the result
 without checking out the branch and running `annextube generate-web`
 locally. This plan adds an automated, per-PR preview: build the web UI from
-the PR's head commit against the project's existing pre-archived
-`annextubetesting` demo dataset, publish it somewhere reviewers can click
-into, post/update a link on the PR, and tear the preview down when the PR
-closes.
+the PR's head commit against the `con/annextubetesting` demo dataset — a
+separate, standalone repository, already populated, that this project
+maintains as a real archive of the `@AnnexTubeTesting` test channel —
+publish it somewhere reviewers can click into, post/update a link on the
+PR, and tear the preview down when the PR closes.
 
 **Recommended approach** (see `research.md` for the full comparison):
 reuse the project's existing GitHub Pages deployment (the `gh-pages` branch
 already used by `deploy-demo.yml`) by publishing each PR's build to a
-per-PR subpath (`gh-pages:/pr-<number>/`), generated from the
-`annextubetesting` orphan branch (pushed to `origin` as a one-time
-prerequisite — see `research.md`'s correction) — not Netlify, and not a
-live YouTube fetch. The publish step itself should extend the existing
+per-PR subpath (`gh-pages:/pr-<number>/`), generated from an anonymous
+clone of the separate `con/annextubetesting` repository (public, read-only,
+no prerequisite setup step — see `research.md`'s correction) — not Netlify,
+and not a live YouTube fetch. The publish step itself should extend the existing
 `annextube prepare-ghpages` CLI command (source-directory and subpath
 parameters) rather than hand-rolling new branch-publish logic (research.md,
 "Decision: Reuse `prepare-ghpages`/`unannex`") — a contained, focused
@@ -44,10 +45,11 @@ introduced.
 support) and `generate-web`/`unannex` as needed — git/git-annex (already
 required build dependencies). No new runtime dependency.
 **Storage**: The `gh-pages` git branch (already used for the public demo)
-gains per-PR subdirectories; source content is the existing `annextubetesting`
-orphan branch (already git-annex-tracked, already has all demo video content
-committed to git via `--all-to-git`; pushed to `origin` as a prerequisite,
-per `research.md`). No database, no new storage system.
+gains per-PR subdirectories; source content is the separate, standalone
+`con/annextubetesting` repository (already populated and public; the
+metadata/thumbnails/TSV/JSON a preview needs are plain git content per its
+`.gitattributes`, so no `git annex get` is needed — see `research.md`). No
+database, no new storage system.
 **Testing**: Workflow-level validation only (this is CI infrastructure, not
 application code): a dry-run build step that fails the check on generation
 error (FR-008); manual verification steps captured in `quickstart.md`.
@@ -62,16 +64,16 @@ phase, not this PR).
 **Performance Goals**: Preview build-and-publish completes within a typical
 CI job duration (SC-001/FR-006 target: reviewer can interact with a preview
 within ~2 minutes of checks completing) — bounded by the existing
-`generate-web` runtime against the small, fixed `annextubetesting` dataset
-(already used for the public demo, currently well under a minute to
-generate).
+`generate-web` runtime against the small, fixed `con/annextubetesting`
+dataset (a shallow clone, currently well under a minute to generate).
 **Constraints**: MUST NOT fetch from YouTube at preview-build time (already
 fails in CI due to bot detection — see `docs/content/how-to/troubleshooting.md`);
 MUST NOT require secrets on fork PRs beyond what a read-only checkout needs;
-MUST NOT re-fetch video content from YouTube per preview (the shared
-`annextubetesting` source is fetched once, independent of preview count —
-see `research.md` for why served/checked-out copies are bounded by, not
-zero across, concurrent preview count under the recommended design).
+MUST NOT re-fetch video content from YouTube per preview (`con/annextubetesting`
+is itself already an archive, cloned as-is — no YouTube fetch happens at
+preview-build time regardless of preview count — see `research.md` for why
+served/checked-out copies are bounded by, not zero across, concurrent
+preview count under the recommended design).
 **Scale/Scope**: Bounded by the number of concurrently open PRs touching the
 web UI (currently low, single-digit at any time for this project) — no
 scale requirements beyond "doesn't grow `gh-pages` without bound," which
@@ -94,31 +96,33 @@ FR-009/SC-003 (cleanup) directly addresses.
 - **XI. Resource Efficiency** (avoid re-fetching/duplicating data): PASS on
   the requirement this principle most directly governs — network
   efficiency/avoiding re-fetching — since the design's core requirement
-  (FR-011) is to reuse the single `annextubetesting` branch as the shared
-  preview *source* rather than each preview independently fetching from
-  YouTube. **Not** a strict pass on disk efficiency in the fullest sense:
+  (FR-011) is to reuse the single `con/annextubetesting` repository as the
+  shared preview *source* rather than each preview independently fetching
+  from YouTube. **Not** a strict pass on disk efficiency in the fullest sense:
   the recommended publish mechanism gives each concurrently open preview
   its own on-disk/served copy of the (small, fixed) dataset rather than a
   single shared served copy — a bounded, explicitly-scoped tradeoff, not an
   oversight; see `research.md`'s "Net effect on the video-duplication
   question" and the Complexity Tracking entry below.
-- **XIII. DataLad-Native Operations**: PASS with a note — the existing
-  `annextubetesting` branch and `tools/setup_demo_branch.sh` currently use
-  raw git/git-annex commands (predating this principle's adoption), not
-  `datalad create`/`datalad save`. This plan does not introduce new raw
-  git-annex usage beyond what those existing scripts already do, so it does
-  not add a new violation; bringing those existing scripts into DataLad-native
-  form is out of scope for this feature and tracked as a follow-up
-  (see `research.md` Alternatives Considered).
+- **XIII. DataLad-Native Operations**: PASS — this feature's own build step
+  is a plain, anonymous `git clone`/`git archive` of the separate
+  `con/annextubetesting` repository; it introduces no new raw git-annex
+  usage of its own. `tools/setup_demo_branch.sh` (which does use raw
+  git/git-annex commands, predating this principle's adoption, for the
+  unrelated public-demo branch) is not invoked by this feature at all;
+  bringing that existing script into DataLad-native form remains out of
+  scope and tracked as a follow-up (see `research.md` Alternatives
+  Considered).
 - **V. Code Efficiency & Conciseness** / **VIII. DRY**: PASS — the
   recommended design extends the existing `annextube prepare-ghpages` CLI
   command (which already implements gh-pages branch handling, frontend
   build, and data copy) — via a source-directory parameter plus a subpath
   parameter, a real if contained code change (see `research.md`'s Decision
-  for the specifics `copy_data_to_ghpages` needs) — and reuses
-  `tools/setup_demo_branch.sh`'s `annextubetesting` dataset, rather than
-  introducing a parallel new deployment mechanism or hand-rolling new shell
-  logic (`research.md`, "Decision: Reuse `prepare-ghpages`/`unannex`").
+  for the specifics `copy_data_to_ghpages` needs) — and reuses the
+  already-existing, already-populated `con/annextubetesting` repository as
+  its data source, rather than introducing a parallel new deployment
+  mechanism or hand-rolling new shell logic (`research.md`, "Decision:
+  Reuse `prepare-ghpages`/`unannex`").
 - **II. Multi-Interface Exposure / Frontend Independence**: PASS — the
   preview publishes the same static `web/` output the frontend already
   produces client-side-only; no backend is stood up for previews.
@@ -168,18 +172,19 @@ annextube/cli/
 
 tools/
 ├── deploy-demo.sh            # existing — unaffected
-└── setup_demo_branch.sh      # existing — reused as the source of the
-                              #   annextubetesting dataset this feature builds
-                              #   from; pushing that branch to `origin` once
-                              #   is a deployment prerequisite (research.md)
+└── setup_demo_branch.sh      # existing — unaffected; this feature does not
+                              #   use it. Its own preview-source dataset is
+                              #   the separate, already-populated
+                              #   `con/annextubetesting` repository, cloned
+                              #   directly (no deployment prerequisite)
 ```
 
 **Structure Decision**: No new top-level project/module. This is additive
 CI configuration plus a contained extension of the *existing*
 `annextube prepare-ghpages` CLI command (new source-directory and subpath
 parameters — see Complexity Tracking below for why this is more than a
-one-flag change), reusing `setup_demo_branch.sh`'s `annextubetesting`
-dataset. `frontend/` is unmodified — the design deliberately does not add a
+one-flag change), reusing the already-populated `con/annextubetesting`
+repository as its dataset. `frontend/` is unmodified — the design deliberately does not add a
 shared-data-path frontend capability (see Complexity Tracking); only
 `annextube/cli/prepare_ghpages.py` changes, in the implementation phase.
 

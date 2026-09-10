@@ -18,24 +18,40 @@ infrastructure directly informs the design (all found in-repo, not assumed):
   project's own dedicated, stable test channel — see `CLAUDE.md`), with
   `annextube init ... --all-to-git` so **all** video content (not just
   metadata) is committed directly to git, not left as unretrieved git-annex
-  pointers. **Correction from an earlier draft of this research**: this
-  branch is built *locally on demand* (via a `git worktree` in
-  `.worktrees/annextubetesting`) and, as of this writing, is **not** pushed
-  to `origin` (`git ls-remote --heads origin` does not list it) — only
-  `gh-pages` and an unrelated `enh-gh_pages` branch exist remotely. A
-  preview-build CI job cannot assume this branch is fetchable; making it
-  usable in CI requires either (a) pushing it to `origin` once (and
-  refreshing it periodically, decoupled from per-PR runs, exactly like the
-  existing `deploy-demo.yml`'s disabled auto-trigger already avoids
-  live-fetching per run), or (b) caching its content another way (e.g. a
-  release asset, an Actions cache keyed on channel content). This plan
-  assumes (a) — pushing it once as an implementation prerequisite — as the
-  simplest option consistent with "no live YouTube fetch per preview build."
-- **`tools/deploy-demo.sh`** generates the web UI from that branch
-  (`git archive annextubetesting | tar -x ...` into a temp dir, then
-  `annextube generate-web`) and publishes the result to `gh-pages` by
-  switching branches, clearing the tree, copying in the new `web/` output,
-  and committing — using raw git commands directly in the shell script.
+  pointers. This branch is built *locally on demand* (via a `git worktree`
+  in `.worktrees/annextubetesting`), is **not** pushed to `origin` of *this*
+  repository, and is used by `tools/deploy-demo.sh` for the unrelated
+  public-demo deployment — out of scope for this feature to change.
+- **Second correction — `con/annextubetesting` is a separate GitHub
+  repository, not something this feature needs to build.** An earlier
+  draft of this research (see below) assumed the preview-build job would
+  need `annextubetesting` pushed to `origin` as a branch of *this*
+  (`con/annextube`) repository, as a one-time implementation prerequisite.
+  That assumption was wrong: **`con/annextubetesting`** already exists as
+  its own, standalone, public repository — a real, already-populated
+  annextube archive of the `@AnnexTubeTesting` channel (`videos/`,
+  `playlists/`, `.annextube/`, per-video `metadata.json`/`thumbnail.jpg`,
+  etc.), unrelated to and independent from `con/annextube`'s own branches.
+  It requires no CI-side setup at all: the preview-build job clones it
+  directly and anonymously (`git clone --depth=1
+  https://github.com/con/annextubetesting.git`, no token, since it's
+  public) exactly the way it would clone any other public dependency. Its
+  `.gitattributes` marks per-video `thumbnail.jpg`, all `*.tsv`/`*.md`, and
+  JSON/TSV metadata as plain git content (`annex.largefiles=nothing`);
+  only the actual video files and `comments.json` are git-annex/URL-backed
+  and were never fetched into it either — so a plain clone, no `git annex
+  get`, is already everything `generate-web` needs to render a preview.
+  This removes the "push a branch once" prerequisite entirely: there is
+  nothing left to set up before a preview-build CI job can run.
+- **`tools/deploy-demo.sh`** generates the web UI from the local
+  `annextubetesting` branch above (`git archive annextubetesting | tar -x
+  ...` into a temp dir, then `annextube generate-web`) and publishes the
+  result to `gh-pages` by switching branches, clearing the tree, copying in
+  the new `web/` output, and committing — using raw git commands directly
+  in the shell script. This feature's own build step follows the same
+  export-then-`generate-web` shape, but against a clone of the separate
+  `con/annextubetesting` repository instead (see the correction above) —
+  `deploy-demo.sh` itself is unmodified.
 - **`annextube prepare-ghpages` and `annextube unannex`** (already-registered
   CLI commands — `annextube/cli/prepare_ghpages.py`,
   `annextube/cli/unannex.py`, wired into `annextube/cli/__main__.py`) are
@@ -69,8 +85,8 @@ infrastructure directly informs the design (all found in-repo, not assumed):
 
 This means the hard part most preview-per-PR systems have to solve — "where
 do we get a working dataset to render, without live API calls in CI, and
-without a backend" — is **already solved** by this project's own
-`annextubetesting` branch. The remaining design question is purely about
+without a backend" — is **already solved** by the separate, already-populated
+`con/annextubetesting` repository. The remaining design question is purely about
 *where to publish* the generated static output per PR, and *how to keep it
 current and cleaned up*.
 
@@ -98,7 +114,7 @@ token as a repository secret.
 | **Cost** | Free tier covers small OSS projects, but is a third-party account the project doesn't otherwise need; scales with bandwidth/build minutes on their pricing, an external cost surface. | Already paid for (free for public repos) and already in use for the public demo — no incremental cost. |
 | **Setup complexity** | New account, new site config, a Netlify API token stored as a GitHub secret, `netlify.toml`/CLI integration, and its own preview-URL/comment integration (though Netlify does have first-class "deploy preview" support that's less workflow code). | No new account. Reuses the existing `gh-pages` branch and the `GITHUB_TOKEN` GitHub Actions already has. The existing `annextube prepare-ghpages` CLI command already implements branch-create-or-reuse, frontend build, and data copy — it needs one new capability added (publish under a subpath instead of always the branch root) rather than new logic being written from scratch; see Decision below. |
 | **Secrets needed for fork PRs** | Requires a Netlify deploy token available to the workflow run. Giving a fork PR's workflow run access to any secret needs care (`pull_request_target` or a two-workflow "build then deploy" split) — the same care is needed either way, but there's an extra credential to scope and rotate. | Only needs `GITHUB_TOKEN` with `contents: write` scoped to `gh-pages`, which GitHub Actions already provides; the same fork-PR trust-boundary care (build in the fork's context, publish in a trusted context) is still required, but there's one credential surface, not two. |
-| **Video bandwidth/storage given git-annex** | Video content would need to be uploaded to Netlify per deploy (or fetched from GitHub at build time and re-uploaded) — Netlify has no awareness of git-annex; every preview build risks re-transferring the same video bytes to a third party, and Netlify's own storage would hold one copy per deploy preview. | The video/media *source* is fetched from YouTube exactly once (the shared `annextubetesting` branch, never re-fetched per preview — satisfies FR-011/SC-004 as written). Whether the *served* bytes are also deduplicated across concurrently open previews depends on the publish mechanism (see "Decision: Reuse `prepare-ghpages`/`unannex`" below): as currently designed, each preview subpath gets its own on-disk/in-tree copy of the video files, so served/checkout storage scales with concurrent preview count — acceptable here because that count is small (single-digit open PRs at a time, per `plan.md`'s Scale/Scope), but this is a real, bounded cost, not zero, and is *no worse* than Netlify's per-deploy storage while adding no third-party transfer. |
+| **Video bandwidth/storage given git-annex** | Video content would need to be uploaded to Netlify per deploy (or fetched from GitHub at build time and re-uploaded) — Netlify has no awareness of git-annex; every preview build risks re-transferring the same video bytes to a third party, and Netlify's own storage would hold one copy per deploy preview. | The preview-source repository, `con/annextubetesting`, keeps video content itself git-annex/URL-backed (never materialized in it) — the build step clones it as-is and never fetches or transfers the actual video bytes at all, regardless of preview count (satisfies FR-011/SC-004 trivially; see "Decision: Reuse `prepare-ghpages`/`unannex`" below for the full mechanism). The only per-subpath duplication is the small, fixed-size thumbnail/metadata/playlist set — negligible next to actual video bandwidth, and strictly better than Netlify's per-deploy video storage. |
 | **PR comment/link workflow** | Netlify's GitHub integration posts a "Deploy Preview" comment/check automatically — less custom code for FR-004. | Not automatic; the workflow must post/update its own PR comment (or check) with the `pr-<number>` subpath URL — one additional, but simple and well-precedented (many GitHub Actions do this), piece of workflow logic. |
 | **Cleanup of stale previews (FR-009)** | Netlify auto-removes deploy previews when a PR closes as part of its GitHub integration — no custom code needed. | Must be implemented explicitly: a `pull_request: closed` (covers both merge and close-without-merge) trigger removes `gh-pages:/pr-<number>/` and commits. Straightforward (same branch-edit-commit pattern as publishing), but is custom logic rather than "comes for free." |
 
@@ -164,9 +180,9 @@ Verified against the actual implementation (`annextube/cli/prepare_ghpages.py`):
   (`git checkout origin/master -- videos/ playlists/ authors.tsv`) — it
   assumes the archive being published lives in a repo whose own default
   branch already has that data. For previews, the actual data source is
-  the separate `annextubetesting` branch (accessed via the downloaded build
-  artifact — see `contracts/preview-workflow.md`'s Build step — not this
-  repository's `master`). This function needs the new `--source-dir`
+  the separate `con/annextubetesting` repository (accessed via the
+  downloaded build artifact — see `contracts/preview-workflow.md`'s Build
+  step — not this repository's `master`). This function needs the new `--source-dir`
   parameter above, not just a destination subpath, to be reusable here — a
   real (if small and well-contained) code change, not a pure extension.
 - **`prepare-ghpages`'s git operations (`git remote get-url origin`,
@@ -174,9 +190,10 @@ Verified against the actual implementation (`annextube/cli/prepare_ghpages.py`):
   is itself a git working tree with an `origin` remote** — i.e., a checkout
   of the `annextube` project repository itself, not an arbitrary directory.
   This does not compose, as-is, with a build step that extracts
-  `annextubetesting`'s content via `git archive ... | tar -x` into a plain
-  (non-git) temp directory (the pattern `tools/deploy-demo.sh` and this
-  plan's `quickstart.md` use) — the implementation phase needs to either
+  `con/annextubetesting`'s content via `git archive ... | tar -x` into a
+  plain (non-git) temp directory (the same export-then-`generate-web`
+  pattern `tools/deploy-demo.sh` and this plan's `quickstart.md` use,
+  against a clone of the separate repository instead) — the implementation phase needs to either
   run `prepare-ghpages` from within an actual clone of `con/annextube` (not
   a bare export), or relax this assumption. `quickstart.md` and
   `contracts/preview-workflow.md` are written to reflect this: `generate-web`
@@ -192,31 +209,42 @@ Verified against the actual implementation (`annextube/cli/prepare_ghpages.py`):
 `copy_data_to_ghpages` currently copies real files (whatever is checked out
 at its source path), not git-annex symlinks specifically — its behavior
 with annexed-but-unretrieved content depends on that source checkout's
-state. For the *preview* use case specifically, this plan continues to rely
-on the `annextubetesting` branch's `--all-to-git` property (see the
-correction above) so preview builds have real, already-materialized video
-bytes without invoking `unannex` or `git annex get` — `unannex` remains
-available as a documented option if a future preview source dataset is
-annexed rather than `--all-to-git`.
+state. **Correction from an earlier draft of this research**: that earlier
+draft assumed the preview-source dataset would be `--all-to-git` (all
+video content materialized, no git-annex pointers) — true of the *local*
+`annextubetesting` branch `tools/setup_demo_branch.sh` builds, but **not**
+true of the actual `con/annextubetesting` repository this feature uses
+(see the correction above). Its own `.gitattributes` keeps only
+thumbnails/metadata/TSV/JSON as plain git content; video files,
+`comments.json`, and `.vtt` captions are git-annex/URL-backed and were
+never fetched into it. The build step therefore strips any symlinks
+`git archive` exports for those paths right after export (`find ... -type
+l -delete` — see `contracts/preview-workflow.md`), both because nothing in
+CI can materialize them (no annex remote, no live YouTube fetch) and
+because `copy_frontend_to_ghpages`/`copy_data_to_ghpages`'s `--source-dir`
+path already refuses to copy *any* symlink from an untrusted source for
+unrelated security reasons (fork-PR trust boundary, above) — a symlink
+reaching that far would simply fail the publish step. **Net effect on
+scope**: previews render metadata, thumbnails, and playlists; they do not
+offer video playback or caption content. `unannex` remains available as a
+documented option if a future preview source dataset needs it.
 
-**Net effect on the video-duplication question (FR-011/SC-004)**: because
-`copy_data_to_ghpages` copies real files into each subpath (not symlinks
-that could be resolved from one shared location — the frontend today
-resolves all data/media URLs relative to its own deployed base path, with
-no separate "shared data path" concept), publishing N concurrent previews
-this way means N on-disk copies of the video files under `gh-pages`, not
-one shared copy. This is why FR-011/SC-004 above were written to require
-only "fetched from the source once, never re-fetched per preview" rather
-than "zero duplication of served bytes" — the stronger claim an earlier
-draft of this research made was not achievable without a new frontend
-capability (a data base path decoupled from the app's own base path),
-which this plan deliberately does NOT propose adding, per YAGNI/Principle V:
-this project's concurrently-open-PR count is small (single-digit,
-`plan.md` Scale/Scope), so bounded per-preview duplication of a *small,
-fixed-size* test dataset is an acceptable, explicitly-scoped tradeoff
-rather than a problem worth new frontend architecture to solve. If preview
-volume ever grows enough to matter, decoupling the data path is the
-documented follow-up (see Alternatives below).
+**Net effect on the video-duplication question (FR-011/SC-004)**: **revised
+by the correction above** — since video content is stripped from the
+export entirely (never materialized in CI, per the previous section),
+there is no video duplication to bound in the first place: FR-011/SC-004's
+"fetched from the source once, never re-fetched per preview" is satisfied
+trivially (never fetched at all). The only per-subpath duplication left is
+the small, fixed-size thumbnail/metadata/playlist set (`copy_data_to_ghpages`
+copies real files into each subpath, not symlinks resolved from one shared
+location — the frontend resolves all data/media URLs relative to its own
+deployed base path, with no separate "shared data path" concept) — cheap
+enough at this project's single-digit concurrently-open-PR scale
+(`plan.md` Scale/Scope) that a shared-data-path frontend capability to
+eliminate it would be over-engineering relative to the problem
+(YAGNI/Principle V). If preview volume or dataset size ever grows enough
+to matter, decoupling the data path is the documented follow-up (see
+Alternatives below).
 
 **Alternatives considered**:
 - *Hand-roll new bash following `deploy-demo.sh`'s pattern* (the direction
@@ -242,7 +270,7 @@ documented follow-up (see Alternatives below).
   branch-mutation logic (and its `git rm -rf .`/overwrite risk called out
   above) at all. Not recommended as the primary path: this project's
   publish step has project-specific requirements a generic Action doesn't
-  know about (the `annextubetesting` data-source wiring, git-annex
+  know about (the `con/annextubetesting` data-source wiring, git-annex
   awareness, the base-path frontend build) that would still need custom
   workflow code around any such Action, and adding a third-party Action as
   a dependency for the *branch-write* step specifically cuts against
@@ -276,35 +304,45 @@ the natural mitigation if/when it becomes a real cost.
 
 ## Decision: Preview source dataset
 
-**Decision**: Use the existing `annextubetesting` orphan branch (built by
-`tools/setup_demo_branch.sh` from the `@AnnexTubeTesting` channel) as the
-single shared preview source for every PR's build. Do not fetch from
+**Decision**: Use the separate, standalone `con/annextubetesting`
+repository — a real, already-populated annextube archive of the
+`@AnnexTubeTesting` channel — as the single shared preview source for
+every PR's build, cloned anonymously and read-only. Do not fetch from
 YouTube during preview builds, and do not create a second/separate preview
-dataset.
+dataset. **This is a correction from an earlier draft of this research**,
+which recommended the *local* `annextubetesting` orphan branch built by
+`tools/setup_demo_branch.sh` (requiring it be pushed to `origin` as a
+one-time prerequisite) — that branch is a separate, unrelated local
+artifact `tools/deploy-demo.sh` uses for the public-demo deployment, not
+the actual dataset this feature should use (see "Context gathered" above).
 
-**Rationale**: This branch already exists specifically as this project's
-designated, stable test fixture (`CLAUDE.md`: *"Small, controlled channel
-for testing all features... Predictable content (stable test fixtures)"*),
-already has playlists and captions for exercising those UI paths, and
-already has all video content committed to git (no on-demand git-annex
-`get` needed, no re-fetch). **Correction from an earlier draft of this
-research**: this research previously claimed the `annextubetesting` +
-`generate-web`/`deploy-demo.sh` combination was "already proven to work in
-production (the public demo)." Checked directly and found false: `git log`
-shows `tools/deploy-demo.sh` was added over a month *after* `gh-pages`'s
+**Rationale**: `con/annextubetesting` already exists specifically as this
+project's designated, stable test fixture's real archive (`CLAUDE.md`:
+*"Small, controlled channel for testing all features... Predictable
+content (stable test fixtures)"*), already has playlists for exercising
+those UI paths, and requires no setup, refresh, or prerequisite of any
+kind — it is simply cloned as-is. Unlike the local orphan branch this
+research previously recommended, it is **not** `--all-to-git`: only
+thumbnails/metadata/TSV/JSON are plain git content in it (per its
+`.gitattributes`); video files, `comments.json`, and `.vtt` captions
+remain git-annex/URL-backed and were never fetched into it either. The
+build step accounts for this by dropping any symlinks `git archive`
+exports for those paths (see "Decision: Reuse `prepare-ghpages`/`unannex`"
+above) — previews render metadata, thumbnails, and playlists, not video
+playback or captions. **Also corrected here**: this research previously
+claimed the `annextubetesting` + `generate-web`/`deploy-demo.sh`
+combination was "already proven to work in production (the public
+demo)." Checked directly and found false: `git log` shows
+`tools/deploy-demo.sh` was added over a month *after* `gh-pages`'s
 last actual update, and the content currently live on `gh-pages` (per its
 committed `README.md`) was built from a different source, not
-`@AnnexTubeTesting`. `deploy-demo.sh`/`deploy-demo.yml` are designed to
-work this way but have not been exercised end-to-end in their current
-form — this plan should be read as relying on a *designed-but-unverified*
-pipeline, not a proven one; the implementation phase's manual verification
-(`quickstart.md`) is therefore load-bearing, not just a nice-to-have sanity
-check. This does not change the *recommendation* (nothing else in the
-codebase is a better preview source), but it does mean the implementation
-phase should budget time to actually run the full pipeline once, end to
-end, before trusting it in automated per-PR CI. Every preview build reading
-the *same* source branch still means the video content is fetched from
-YouTube only once, no matter how many previews are built — see the
+`@AnnexTubeTesting`. That claim was about the unrelated local-branch
+pipeline in any case, not the `con/annextubetesting`-based one this
+feature actually uses — the implementation phase's manual verification
+(`quickstart.md`, updated to clone the real repository) is the load-bearing
+check for *this* pipeline, not a nice-to-have sanity check. Every preview
+build reading the *same* source repository still means it is never
+re-fetched per preview, no matter how many previews are built — see the
 video-duplication note in the previous Decision for what this does and
 does not guarantee about *served* copies.
 

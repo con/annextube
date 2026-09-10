@@ -23,16 +23,18 @@ concrete shape.
 ## Build step (untrusted context; produces the artifact to publish)
 
 1. Check out the PR's head commit (untrusted context — may be a fork).
-2. Check out/export the `annextubetesting` branch's content (trusted,
-   read-only — pushed to `origin`, not the fork; see `data-model.md`
-   prerequisite).
+2. Clone/export the separate `con/annextubetesting` repository's content
+   (trusted, read-only — an anonymous, unauthenticated public clone; not a
+   branch or fork of this repo, see `data-model.md`).
 3. Run `annextube generate-web` (the PR's version of the code) against that
-   content, exactly as `tools/deploy-demo.sh`/`tools/setup_demo_branch.sh`
-   already do for the public demo.
+   content, the same export-then-`generate-web` shape
+   `tools/deploy-demo.sh`/`tools/setup_demo_branch.sh` use for the public
+   demo (which instead sources from a same-repo branch — out of scope for
+   this feature to change).
 4. On failure: stop here. The check MUST fail (FR-008) and no publish step
    runs — the previous published preview (if any) is left untouched, not
    overwritten with a broken one.
-5. On success: upload the **whole build directory** (the `annextubetesting`
+5. On success: upload the **whole build directory** (the `con/annextubetesting`
    export's data directories — `videos/`, `playlists/`, its TSV/JSON
    metadata — *plus* the `web/` subdirectory `generate-web` just added to
    it) as a build artifact (`actions/upload-artifact`), not just `web/`
@@ -79,9 +81,9 @@ concrete shape.
      artifact from step 1 — this is what the extended `copy_frontend_to_ghpages`/
      `copy_data_to_ghpages` copy *from*, replacing today's
      `git checkout origin/master -- ...` (which reads from `--output-dir`'s
-     own default branch and would find no `videos/`/`playlists/` there,
-     since this repository's `master` doesn't carry that content — only
-     `annextubetesting` does).
+     own default branch and would find no `videos/`/`playlists/` there —
+     this repository's `master` never carries that content; it lives in
+     the separate `con/annextubetesting` repository).
 
    The new `--subpath` option must confine all of `prepare-ghpages`'s
    existing writes (frontend copy, data copy, commit) to
@@ -108,5 +110,5 @@ concrete shape.
 | Build fails | Failed check on the PR; no publish; existing preview (if any) untouched. |
 | Two pushes in quick succession | Publish step's independent head-SHA re-check (above) ensures a build for an older commit is skipped, not published, once a newer one exists — regardless of which build finishes first. |
 | Fork PR | Build has no secrets; only the separate, trusted publish step has `contents: write`, scoped to `gh-pages`; that step never trusts PR identity carried from the untrusted build without re-verifying it live (see above). |
-| Sample dataset unavailable/needs refresh | Out of scope for build failure handling — the `annextubetesting` branch is committed content in this repo, not a live fetch, so it does not have a "temporarily unavailable" failure mode the way a live API call would. |
+| Sample dataset unavailable/needs refresh | The build step does clone a separate repository (`con/annextubetesting`, public, anonymous) rather than reading a file already present in this checkout, so a GitHub-wide outage or that repository being renamed/removed does surface as an ordinary build failure (same as any other step in the job) — no live YouTube fetch is involved either way, and refreshing that repository's content is out of scope for this feature. |
 | Many concurrent/historical previews | The video *source* is fetched from YouTube once regardless of preview count (FR-011). *Served* copies scale with concurrently open previews (bounded, small — see `research.md`'s video-duplication note), not with historical/closed-PR count, since teardown (FR-009) removes each preview's subpath on close. |

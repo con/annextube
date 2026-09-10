@@ -13,10 +13,12 @@ Actions trigger/permissions block itself.
 
 ## Phase 1: Setup
 
-- [ ] T001 Ensure the `annextubetesting` orphan branch exists locally (via
-      `tools/setup_demo_branch.sh` if not already built) and push it to
-      `origin` — one-time prerequisite so CI can read it without a live
-      YouTube fetch (`research.md`, "Decision: Preview source dataset").
+- [x] T001 ~~Ensure the `annextubetesting` orphan branch exists locally... and
+      push it to `origin`~~ — **obsoleted**: `con/annextubetesting` is a
+      separate, already-populated, public repository, not a branch of this
+      repo needing to be built and pushed. No prerequisite setup remains;
+      the build job clones it directly (`research.md`, "Decision: Preview
+      source dataset", corrected).
 
 ## Phase 2: Foundational — extend `annextube prepare-ghpages` for subpaths
 
@@ -73,7 +75,7 @@ publishes only under `pr-N/`, reading only from `X` — ready for Phase 3.
 ## Phase 3: User Story 1 (P1) — Reviewer gets a clickable preview 🎯 MVP
 
 **Goal**: Every PR touching the web UI gets a working, linked preview built
-from its own code against the `annextubetesting` dataset.
+from its own code against the `con/annextubetesting` dataset.
 
 **Independent Test**: Open a PR that changes `frontend/**`, wait for checks,
 follow the posted preview link, confirm it's a working, browsable instance
@@ -82,10 +84,12 @@ of the archive UI (per `quickstart.md`).
 - [x] T007 [US1] Create `.github/workflows/pr-webui-preview-build.yml`:
       `pull_request: [opened, synchronize, reopened]` filtered by
       `paths: ['frontend/**', 'annextube/cli/generate_web.py']`; untrusted
-      job (no secrets) that checks out the PR head, exports
-      `annextubetesting` (`git archive annextubetesting | tar -x`), runs
-      `annextube generate-web` against it, and uploads the whole export
-      directory (data files + the new `web/`) as a build artifact on
+      job (no secrets) that checks out the PR head, clones the separate
+      `con/annextubetesting` repository and exports its content
+      (`git archive HEAD | tar -x`, dropping the git-annex/URL-backed
+      symlinks it never fetches), runs `annextube generate-web` against
+      it, and uploads the whole export directory (data files + the new
+      `web/`) as a build artifact on
       success. On failure the job fails (no artifact upload) — satisfies
       FR-008 without extra code (`contracts/preview-workflow.md`, Build
       step).

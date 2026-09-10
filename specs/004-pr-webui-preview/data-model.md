@@ -43,13 +43,14 @@ The shared, read-only input every PR Preview is generated from.
 
 | Field | Description |
 |---|---|
-| `branch` | `annextubetesting` (existing orphan branch, see `research.md`). |
-| `channel` | `@AnnexTubeTesting` (existing project test channel, per `CLAUDE.md`). |
-| `content_mode` | All video content committed to git (`--all-to-git`); no git-annex `get` required to render a preview. |
-| `refresh_process` | Out of scope for this feature — refreshed independently via `tools/setup_demo_branch.sh`, same as today for the public demo. This feature only *reads* the branch, never writes to it. **Prerequisite**: as of this design, the branch is built locally only and is not present on `origin` (`git ls-remote --heads origin` does not list it) — it must be pushed once before a CI-based preview build can read it without a live YouTube fetch (see `research.md`). |
+| `repository` | `con/annextubetesting` — a separate, standalone GitHub repository (not a branch of this repo), see `research.md`. |
+| `channel` | `@AnnexTubeTesting` (existing project test channel, per `CLAUDE.md`) — the channel `con/annextubetesting` was built from. |
+| `content_mode` | Metadata, thumbnails, and TSV/JSON files needed to render a preview are plain, un-annexed git content (per that repository's `.gitattributes`); the actual video/comment content stays git-annex/URL-backed and is never fetched. No git-annex `get` is required to render a preview. |
+| `refresh_process` | Out of scope for this feature — `con/annextubetesting` is refreshed independently of this repository/feature. This feature only *reads* it (an anonymous, unauthenticated clone), never writes to it. No prerequisite setup step: the repository already exists and is populated. |
 
 Never independently re-fetched per preview: every PR Preview's build step
-reads this same branch's content from YouTube exactly once, no matter how
+clones this same repository's content, not from YouTube (the channel was
+already archived into it once, independent of this feature), no matter how
 many previews exist (FR-011, SC-004). Its *served* copy is not
 shared across previews under the recommended publish design — each
 `pr-<number>/` subpath gets its own copy of the data files alongside the

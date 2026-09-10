@@ -33,9 +33,9 @@ jobs:
       - name: Checkout PR head
         uses: actions/checkout@v7
         with:
-          # Need the annextubetesting branch too (see next step); the PR's
-          # own history doesn't need to be deep. No git credentials are
-          # needed beyond this read-only clone -- this job never pushes.
+          # The PR's own history doesn't need to be deep. No git
+          # credentials are needed beyond this read-only clone -- this
+          # job never pushes.
           fetch-depth: 1
           persist-credentials: false
 
@@ -57,13 +57,31 @@ jobs:
       - name: Install annextube (builds the frontend via hatch_build.py)
         run: pip install -e ".[ci]"
 
-      - name: Fetch the annextubetesting preview-source dataset
-        run: git fetch --depth=1 origin annextubetesting
+      # con/annextubetesting is a separate, standalone repository -- a real
+      # annextube archive of the @AnnexTubeTesting channel, not a branch of
+      # this repo. Cloned anonymously over HTTPS (it's public): no token,
+      # so no write credential enters this untrusted build job.
+      - name: Clone the annextubetesting preview-source dataset
+        run: git clone --depth=1 https://github.com/con/annextubetesting.git /tmp/preview-src
 
       - name: Export annextubetesting dataset (no live YouTube fetch)
         run: |
           mkdir -p /tmp/preview-build
-          git archive FETCH_HEAD | tar -x -C /tmp/preview-build
+          git -C /tmp/preview-src archive HEAD | tar -x -C /tmp/preview-build
+
+      # Only thumbnails/metadata/TSV/JSON are plain git content in
+      # con/annextubetesting (per its .gitattributes); video files,
+      # comments.json, and .vtt captions are git-annex/URL-backed and were
+      # never fetched into it, so `git archive` exports them as dangling
+      # symlinks. Nothing in this job can materialize them (no annex
+      # remote, no live YouTube fetch), and the publish job refuses to
+      # copy any symlink from this untrusted artifact regardless (see
+      # below) -- so drop them here rather than let generate-web or the
+      # publish step trip over a broken/refused symlink. Previews render
+      # metadata, thumbnails, and playlists; they do not offer video
+      # playback or caption content.
+      - name: Drop unmaterialized git-annex content
+        run: find /tmp/preview-build -type l -delete
 
       - name: Generate web UI from this PR's code
         run: annextube generate-web --output-dir /tmp/preview-build
