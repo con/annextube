@@ -51,6 +51,7 @@ A user wants to browse their multi-channel collection through the web interface,
 3. **Given** a single-channel archive (no `channels.tsv`), **When** user opens the web interface, **Then** the existing single-channel view is displayed unchanged (backward compatibility)
 4. **Given** a multi-channel web interface, **When** user is viewing a channel's videos, **Then** breadcrumb navigation allows returning to the channel overview
 5. **Given** a collection with 10 channels averaging 200 videos each, **When** user navigates to a channel, **Then** the video listing loads within 2 seconds on a standard connection
+6. **Given** a collection published over HTTP with per-channel subdatasets, **When** user views a channel, **Then** the clone panel offers both that channel's dataset URL and the collection's, each addressing the archive rather than the web server root
 
 ---
 
@@ -199,6 +200,8 @@ A researcher browsing a multi-channel collection wants to search across all chan
 - **FR-025**: In multi-channel mode, web interface MUST load per-channel video listings from each channel's own `videos.tsv` on demand
 - **FR-026**: Web interface MUST provide breadcrumb navigation between channel overview and individual channel views
 - **FR-027**: In single-channel mode (no `channels.tsv`), web interface MUST behave identically to existing behavior (full backward compatibility)
+- **FR-027a**: In multi-channel mode, the clone commands of FR-047a (001-youtube-backup) MUST cover both levels of the collection: the channel subdataset being browsed and the collection superdataset, each labelled so the two are told apart. When only one of the two publishes a reachable `.git/`, that one MUST be offered alone
+- **FR-027b**: `get` paths offered alongside those clone commands MUST be relative to the repository each command clones -- `videos/<video_path>/` for a channel clone, `<channel_dir>/videos/<video_path>/` for a collection clone. A `get` MUST be omitted where the tool cannot reach the video from the cloned repository: on the `#/video/{video_id}` route, which names no channel and so cannot say which subdataset holds the video, and for `git annex get` from the superdataset, which cannot cross into a subdataset (`git submodule update` resolves `.gitmodules`' relative URLs against a clone URL ending in `/.git`, which 404s). `datalad get` installs the subdataset on the way and is therefore offered
 
 #### Backward Compatibility and Composability
 
