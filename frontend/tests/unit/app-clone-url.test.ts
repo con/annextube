@@ -9,7 +9,7 @@
  * @ai_generated
  */
 
-import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, vi } from 'vitest';
 import { render, waitFor } from '@testing-library/svelte';
 import App from '../../src/App.svelte';
 
@@ -25,6 +25,11 @@ const CHANNELS_TSV = [
 function mockServer() {
   const files: Record<string, string> = {
     '/repronim/ReproTube/channels.tsv': CHANNELS_TSV,
+    '/repronim/ReproTube/ABCD-ReproNim_Course/channel.json': JSON.stringify({
+      channel_id: 'UC001',
+      name: 'ABCD-ReproNim Course',
+      channel_dir: 'ABCD-ReproNim_Course',
+    }),
     '/repronim/ReproTube/.git/HEAD': 'ref: refs/heads/main\n',
     '/.git/HEAD': 'ref: refs/heads/main\n',
   };
@@ -41,16 +46,13 @@ function mockServer() {
 }
 
 describe('App clone command', () => {
-  const originalFetch = globalThis.fetch;
-
+  // The mock stays installed after the test: App keeps loading channel details
+  // past the assertions, and a restored fetch would blow up on the relative
+  // URLs those loads use.
   beforeEach(() => {
     // The web UI lives one level below the archive root
     window.history.replaceState({}, '', '/repronim/ReproTube/web/#/');
     globalThis.fetch = mockServer() as unknown as typeof fetch;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
   });
 
   test('clones the archive, not the web server root', async () => {

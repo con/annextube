@@ -51,10 +51,15 @@ describe('CloneCommand', () => {
   const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
-    window.history.replaceState({}, '', '/repronim/ReproTube/web/');
+    // Browsing a channel of the collection published at
+    // https://datasets.datalad.org/repronim/ReproTube/
+    const location = new URL(PAGE_URL);
     vi.spyOn(window, 'location', 'get').mockReturnValue({
-      href: PAGE_URL,
-      protocol: 'https:',
+      href: location.href,
+      origin: location.origin,
+      pathname: location.pathname,
+      hash: location.hash,
+      protocol: location.protocol,
     } as Location);
   });
 
@@ -149,7 +154,9 @@ describe('CloneCommand', () => {
     await waitFor(() => expect(container.querySelector('.clone-toggle')).not.toBeNull());
     await expandPanel(container);
 
-    const gitTab = container.querySelectorAll('.tab')[1] as HTMLButtonElement;
+    const gitTab = Array.from(container.querySelectorAll('.tab')).find((el) =>
+      /git/i.test(el.textContent ?? '')
+    ) as HTMLButtonElement;
     gitTab.click();
     await waitFor(() =>
       expect(commandTexts(container)[0]).toContain('git clone')
@@ -187,6 +194,54 @@ describe('CloneCommand', () => {
       'cd ReproTube && datalad get videos/2024/20240101_intro/',
     ]);
     expect(container.querySelectorAll('.target-label')).toHaveLength(0);
+  });
+
+  test('offers only the clone when a video is opened without channel context', async () => {
+    // #/video/{id} in a collection: the video is in some channel subdataset,
+    // but the route does not say which, so there is no path to hand `get`
+    globalThis.fetch = mockServer([
+      '/.git/HEAD',
+      '/repronim/ReproTube/.git/HEAD',
+    ]) as unknown as typeof fetch;
+
+    const { container } = render(CloneCommand, {
+      props: {
+        baseUrl: '..',
+        channelDir: null,
+        videoFilePath: '2024/20240101_intro',
+        isMultiChannel: true,
+      },
+    });
+
+    await waitFor(() => expect(container.querySelector('.clone-toggle')).not.toBeNull());
+    await expandPanel(container);
+
+    expect(commandTexts(container)).toEqual([
+      'datalad clone https://datasets.datalad.org/repronim/ReproTube/.git',
+    ]);
+  });
+
+  test('quotes command arguments a shell would otherwise split', async () => {
+    globalThis.fetch = mockServer([
+      '/.git/HEAD',
+      '/repronim/ReproTube/.git/HEAD',
+    ]) as unknown as typeof fetch;
+
+    const { container } = render(CloneCommand, {
+      props: {
+        baseUrl: '..',
+        channelDir: null,
+        videoFilePath: '2024/2024-01-01 Intro talk',
+        isMultiChannel: false,
+      },
+    });
+
+    await waitFor(() => expect(container.querySelector('.clone-toggle')).not.toBeNull());
+    await expandPanel(container);
+
+    expect(commandTexts(container)[1]).toBe(
+      "cd ReproTube && datalad get 'videos/2024/2024-01-01 Intro talk/'"
+    );
   });
 
   test('falls back to the collection when the channel dataset is not published', async () => {

@@ -44,7 +44,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        env: [lint, type, e2e, spec-check, duplication]
+        env: [lint, type, frontend, e2e, spec-check, duplication]
 
     steps:
       - uses: actions/checkout@v7
@@ -61,7 +61,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Only e2e and duplication actually need Node/npm, but setup-node is
+      # Only frontend, e2e and duplication actually need Node/npm, but setup-node is
       # cheap and this keeps the job matrix uniform.
       - name: Set up Node.js
         uses: actions/setup-node@v7

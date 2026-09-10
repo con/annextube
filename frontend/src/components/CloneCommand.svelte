@@ -13,8 +13,8 @@
     url: string;
     /** Path of the current video inside this repository, if any */
     relPath: string | null;
-    /** Subdataset the video lives in, when it is not this repository itself */
-    subdataset: string | null;
+    /** Whether that path crosses into a subdataset of this repository */
+    videoInSubdataset: boolean;
   }
 
   let collectionUrl: string | null = null;
@@ -36,11 +36,21 @@
 
   async function probeGit(base: string, channel: string | null, multi: boolean) {
     const seq = ++probeSeq;
-    const channelBase = multi && channel ? `${base}/${channel}` : null;
+
+    // Without a known archive root every path below would be
+    // server-root-absolute and probe some unrelated repository
+    if (!base) {
+      collectionUrl = null;
+      channelUrl = null;
+      return;
+    }
+
+    // Never keep offering the channel we have navigated away from
+    channelUrl = null;
 
     const [collection, chan] = await Promise.all([
       probeGitUrl(base),
-      channelBase ? probeGitUrl(channelBase) : Promise.resolve(null),
+      multi && channel ? probeGitUrl(`${base}/${channel}`) : Promise.resolve(null),
     ]);
 
     // Drop results of a probe superseded while it was in flight
@@ -56,6 +66,12 @@
     return decodeURIComponent(url.replace(/\/\.git\/?$/, '').split('/').pop() || 'repo');
   }
 
+  // Quote only what a shell would otherwise mangle, so the common case stays
+  // readable: archive directories can carry spaces once published by hand
+  function shellArg(value: string): string {
+    return /^[A-Za-z0-9._@%+:,\/-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+  }
+
   $: targets = buildTargets(collectionUrl, channelUrl, channelDir, videoFilePath, isMultiChannel);
 
   function buildTargets(
@@ -65,7 +81,6 @@
     filePath: string | null,
     multi: boolean
   ): Target[] {
-    const inSubdataset = multi && dir ? dir : null;
     const out: Target[] = [];
 
     // The channel's own dataset: the video lives directly in it
@@ -74,17 +89,24 @@
         label: 'This channel',
         url: channel,
         relPath: filePath ? `videos/${filePath}/` : null,
-        subdataset: null,
+        videoInSubdataset: false,
       });
     }
 
     // The whole collection (superdataset), unless it is the same repository
     if (collection && collection !== channel) {
+      // In a collection the video sits in a channel subdataset. Without a
+      // channel in context (the plain #/video/{id} route) we cannot say which,
+      // so offer the clone alone rather than a path that does not exist.
+      const relPath = !filePath || (multi && !dir)
+        ? null
+        : `${multi ? `${dir}/` : ''}videos/${filePath}/`;
+
       out.push({
         label: 'Whole collection',
         url: collection,
-        relPath: filePath ? `${inSubdataset ? `${inSubdataset}/` : ''}videos/${filePath}/` : null,
-        subdataset: inSubdataset,
+        relPath,
+        videoInSubdataset: multi,
       });
     }
 
@@ -95,14 +117,15 @@
   $: showLabels = targets.length > 1;
 
   function buildCommands(tab: 'datalad' | 'git', target: Target): string[] {
-    const dir = dirnameOf(target.url);
+    const dir = shellArg(dirnameOf(target.url));
+    const relPath = target.relPath ? shellArg(target.relPath) : null;
     const cmds: string[] = [];
 
     if (tab === 'datalad') {
       cmds.push(`datalad clone ${target.url}`);
-      if (target.relPath) {
+      if (relPath) {
         // datalad get installs the subdataset on the way, if any
-        cmds.push(`cd ${dir} && datalad get ${target.relPath}`);
+        cmds.push(`cd ${dir} && datalad get ${relPath}`);
       }
     } else {
       cmds.push(`git clone ${target.url}`);
@@ -110,8 +133,8 @@
       // subdataset takes `git submodule update`, which resolves .gitmodules'
       // relative URLs against the clone URL — and those 404 for a clone URL
       // ending in /.git. The channel's own clone command above covers it.
-      if (target.relPath && !target.subdataset) {
-        cmds.push(`cd ${dir} && git annex get ${target.relPath}`);
+      if (relPath && !target.videoInSubdataset) {
+        cmds.push(`cd ${dir} && git annex get ${relPath}`);
       }
     }
 
@@ -179,7 +202,7 @@
                   class="copy-btn"
                   on:click={() => copyToClipboard(cmd, `${target.url}|${i}`)}
                   title="Copy to clipboard"
-                  aria-label="Copy command to clipboard"
+                  aria-label="Copy to clipboard: {cmd}"
                 >
                   {#if copiedKey === `${target.url}|${i}`}
                     <span class="copied-feedback">Copied!</span>
