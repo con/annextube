@@ -1,3 +1,22 @@
+# v0.15.0 (Mon Sep 14 2026)
+
+#### 🚀 Enhancement
+
+- feat(web): auto-play video snippet on thumbnail hover [#26](https://github.com/con/annextube/pull/26) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+- feat(backup): auto-regenerate web/ when its version is stale [#18](https://github.com/con/annextube/pull/18) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+
+#### 🐛 Bug Fix
+
+- docs(specs): design plan for PR web UI previews (004) [#25](https://github.com/con/annextube/pull/25) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+- Add clone command support for multi-channel collections [#29](https://github.com/con/annextube/pull/29) ([@claude](https://github.com/claude) [@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+
+#### Authors: 2
+
+- Claude ([@claude](https://github.com/claude))
+- GitMate for @yarikoptic ([@yarikoptic-gitmate](https://github.com/yarikoptic-gitmate))
+
+---
+
 # v0.14.2 (Sat Sep 05 2026)
 
 #### 🐛 Bug Fix
