@@ -66,6 +66,9 @@ export function isLocalDeployment(): boolean {
 
 /**
  * Get the deployment mode for debugging/display.
+ *
+ * (No behavior change; touched to exercise the PR Web UI Preview pipeline
+ * end-to-end per #25's T010 follow-up.)
  */
 export function getDeploymentMode(): 'local' | 'github-pages' | 'web-server' {
   if (isLocalDeployment()) {
