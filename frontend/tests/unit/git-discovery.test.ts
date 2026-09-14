@@ -54,6 +54,18 @@ describe('probeGitUrl', () => {
     );
   });
 
+  it('never probes the web server root when the base is unknown', async () => {
+    (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
+
+    // '' is DataLoader.baseUrl before the archive root has been discovered;
+    // probing it would resolve '/.git' against the server root and offer an
+    // unrelated repository (e.g. https://datasets.datalad.org/.git).
+    const result = await probeGitUrl('');
+
+    expect(result).toBeNull();
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
   it('strips trailing slash from result', async () => {
     (globalThis.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true });
 

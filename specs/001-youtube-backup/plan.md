@@ -179,19 +179,20 @@ frontend/                     # Client-side web interface (Svelte + TypeScript)
 ├── src/
 │   ├── App.svelte           # Root component
 │   ├── main.ts              # Entry point
-│   ├── components/          # 12 Svelte components
+│   ├── components/          # 10 Svelte components
 │   │   ├── VideoList.svelte, VideoCard.svelte, VideoDetail.svelte
 │   │   ├── VideoPlayer.svelte, CaptionBrowser.svelte
-│   │   ├── CaptionSearchResults.svelte, ChannelList.svelte
+│   │   ├── FullSearchResults.svelte, ChannelList.svelte
 │   │   ├── FilterPanel.svelte, CommentView.svelte, CloneCommand.svelte
-│   ├── services/            # 8 TypeScript services
+│   ├── services/            # 10 TypeScript services
 │   │   ├── data-loader.ts, pagefind.ts, search.ts, filter.ts
 │   │   ├── sort.ts, router.ts, url-state.ts, availability.ts
+│   │   ├── browser-detect.ts, git-discovery.ts
 │   ├── utils/               # TSV/VTT parsers, formatters, config
 │   └── types/models.ts      # Auto-generated from JSON Schema
 └── tests/
-    ├── unit/                # 13 Vitest test files
-    └── e2e/                 # 4 Playwright test suites
+    ├── unit/                # 13 Vitest + 3 Jest (*.jest.test.ts) test files
+    └── e2e/                 # 7 Playwright test suites
 
 tests/                        # Backend/library tests
 ├── contract/                 # Library API contract tests

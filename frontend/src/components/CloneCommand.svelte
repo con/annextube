@@ -1,18 +1,33 @@
 <script lang="ts">
   import { probeGitUrl } from '@/services/git-discovery';
 
+  /** Archive root relative to the page (e.g. '..'); '' until discovered. */
   export let baseUrl: string;
   export let channelDir: string | null;
   export let videoFilePath: string | null;
   export let isMultiChannel: boolean;
 
-  let gitUrl: string | null = null;
+  /** A repository the user can clone, with paths relative to that repository. */
+  interface Target {
+    label: string;
+    url: string;
+    /** Path of the current video inside this repository, if any */
+    relPath: string | null;
+    /** Whether that path crosses into a subdataset of this repository */
+    videoInSubdataset: boolean;
+  }
+
+  let collectionUrl: string | null = null;
+  let channelUrl: string | null = null;
   let expanded = false;
   let activeTab: 'datalad' | 'git' = 'datalad';
-  let copiedIndex: number | null = null;
+  let copiedKey: string | null = null;
 
-  // Re-probe when channelDir changes
+  // Re-probe whenever the archive root or the selected channel changes.
+  // baseUrl starts out empty (the archive root is discovered asynchronously)
+  // and probeGitUrl rejects that, so nothing is probed until it is known.
   let lastProbeKey = '';
+  let probeSeq = 0;
   $: probeKey = `${baseUrl}|${channelDir}|${isMultiChannel}`;
   $: if (probeKey !== lastProbeKey) {
     lastProbeKey = probeKey;
@@ -20,63 +35,118 @@
   }
 
   async function probeGit(base: string, channel: string | null, multi: boolean) {
-    if (multi && channel) {
-      gitUrl = await probeGitUrl(`${base}/${channel}`);
-      if (!gitUrl) {
-        gitUrl = await probeGitUrl(base);
-      }
-    } else {
-      gitUrl = await probeGitUrl(base);
+    const seq = ++probeSeq;
+
+    // Without a known archive root every path below would be
+    // server-root-absolute and probe some unrelated repository
+    if (!base) {
+      collectionUrl = null;
+      channelUrl = null;
+      return;
     }
+
+    // Never keep offering the channel we have navigated away from
+    channelUrl = null;
+
+    const [collection, chan] = await Promise.all([
+      probeGitUrl(base),
+      multi && channel ? probeGitUrl(`${base}/${channel}`) : Promise.resolve(null),
+    ]);
+
+    // Drop results of a probe superseded while it was in flight
+    if (seq !== probeSeq) return;
+
+    collectionUrl = collection;
+    channelUrl = chan;
   }
 
-  // Derive the directory name from the clone URL
+  // Derive the directory name clone creates from a clone URL
   // e.g. "https://example.com/archive/.git" → "archive"
-  $: dirname = gitUrl
-    ? decodeURIComponent(gitUrl.replace(/\/\.git\/?$/, '').split('/').pop() || 'repo')
-    : 'repo';
-
-  // Build the video-relative path for get commands
-  $: videoRelPath = (() => {
-    if (!videoFilePath) return null;
-    if (isMultiChannel && channelDir) {
-      return `${channelDir}/videos/${videoFilePath}/`;
-    }
-    return `videos/${videoFilePath}/`;
-  })();
-
-  interface Command {
-    text: string;
+  function dirnameOf(url: string): string {
+    return decodeURIComponent(url.replace(/\/\.git\/?$/, '').split('/').pop() || 'repo');
   }
 
-  // Build commands reactively, listing all dependencies explicitly
-  $: commands = buildCommands(activeTab, gitUrl, videoRelPath, dirname);
+  // Quote only what a shell would otherwise mangle, so the common case stays
+  // readable: archive directories can carry spaces once published by hand
+  function shellArg(value: string): string {
+    return /^[A-Za-z0-9._@%+:,\/-]+$/.test(value) ? value : `'${value.replace(/'/g, `'\\''`)}'`;
+  }
 
-  function buildCommands(tab: 'datalad' | 'git', url: string | null, relPath: string | null, dir: string): Command[] {
-    if (!url) return [];
-    const cmds: Command[] = [];
+  $: targets = buildTargets(collectionUrl, channelUrl, channelDir, videoFilePath, isMultiChannel);
+
+  function buildTargets(
+    collection: string | null,
+    channel: string | null,
+    dir: string | null,
+    filePath: string | null,
+    multi: boolean
+  ): Target[] {
+    const out: Target[] = [];
+
+    // The channel's own dataset: the video lives directly in it
+    if (channel) {
+      out.push({
+        label: 'This channel',
+        url: channel,
+        relPath: filePath ? `videos/${filePath}/` : null,
+        videoInSubdataset: false,
+      });
+    }
+
+    // The whole collection (superdataset), unless it is the same repository
+    if (collection && collection !== channel) {
+      // In a collection the video sits in a channel subdataset. Without a
+      // channel in context (the plain #/video/{id} route) we cannot say which,
+      // so offer the clone alone rather than a path that does not exist.
+      const relPath = !filePath || (multi && !dir)
+        ? null
+        : `${multi ? `${dir}/` : ''}videos/${filePath}/`;
+
+      out.push({
+        label: 'Whole collection',
+        url: collection,
+        relPath,
+        videoInSubdataset: multi,
+      });
+    }
+
+    return out;
+  }
+
+  // Only worth labelling the groups when there is more than one of them
+  $: showLabels = targets.length > 1;
+
+  function buildCommands(tab: 'datalad' | 'git', target: Target): string[] {
+    const dir = shellArg(dirnameOf(target.url));
+    const relPath = target.relPath ? shellArg(target.relPath) : null;
+    const cmds: string[] = [];
 
     if (tab === 'datalad') {
-      cmds.push({ text: `datalad clone ${url}` });
+      cmds.push(`datalad clone ${target.url}`);
       if (relPath) {
-        cmds.push({ text: `cd ${dir} && datalad get ${relPath}` });
+        // datalad get installs the subdataset on the way, if any
+        cmds.push(`cd ${dir} && datalad get ${relPath}`);
       }
     } else {
-      cmds.push({ text: `git clone ${url}` });
-      if (relPath) {
-        cmds.push({ text: `cd ${dir} && git annex get ${relPath}` });
+      cmds.push(`git clone ${target.url}`);
+      // Only when the video lives in this very repository. Reaching into a
+      // subdataset takes `git submodule update`, which resolves .gitmodules'
+      // relative URLs against the clone URL — and those 404 for a clone URL
+      // ending in /.git. The channel's own clone command above covers it.
+      if (relPath && !target.videoInSubdataset) {
+        cmds.push(`cd ${dir} && git annex get ${relPath}`);
       }
     }
 
     return cmds;
   }
 
-  async function copyToClipboard(text: string, index: number) {
+  async function copyToClipboard(text: string, key: string) {
     try {
       await navigator.clipboard.writeText(text);
-      copiedIndex = index;
+      copiedKey = key;
       setTimeout(() => {
-        copiedIndex = null;
+        copiedKey = null;
       }, 1500);
     } catch {
       // Fallback: select text (clipboard API may not be available on file://)
@@ -84,7 +154,7 @@
   }
 </script>
 
-{#if gitUrl}
+{#if targets.length > 0}
   <div class="clone-section">
     <button
       class="clone-toggle"
@@ -120,28 +190,33 @@
           </button>
         </div>
 
-        <div class="commands">
-          {#each commands as cmd, i}
-            <div class="command-line">
-              <code class="command-text">$ {cmd.text}</code>
-              <button
-                class="copy-btn"
-                on:click={() => copyToClipboard(cmd.text, i)}
-                title="Copy to clipboard"
-                aria-label="Copy command to clipboard"
-              >
-                {#if copiedIndex === i}
-                  <span class="copied-feedback">Copied!</span>
-                {:else}
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                  </svg>
-                {/if}
-              </button>
-            </div>
-          {/each}
-        </div>
+        {#each targets as target (target.url)}
+          <div class="commands">
+            {#if showLabels}
+              <div class="target-label">{target.label}</div>
+            {/if}
+            {#each buildCommands(activeTab, target) as cmd, i}
+              <div class="command-line">
+                <code class="command-text">$ {cmd}</code>
+                <button
+                  class="copy-btn"
+                  on:click={() => copyToClipboard(cmd, `${target.url}|${i}`)}
+                  title="Copy to clipboard"
+                  aria-label="Copy to clipboard: {cmd}"
+                >
+                  {#if copiedKey === `${target.url}|${i}`}
+                    <span class="copied-feedback">Copied!</span>
+                  {:else}
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                  {/if}
+                </button>
+              </div>
+            {/each}
+          </div>
+        {/each}
       </div>
     {/if}
   </div>
@@ -217,6 +292,19 @@
 
   .commands {
     padding: 12px 16px;
+  }
+
+  .commands + .commands {
+    border-top: 1px solid #e0e0e0;
+  }
+
+  .target-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #606060;
+    padding-bottom: 4px;
   }
 
   .command-line {

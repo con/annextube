@@ -1,0 +1,133 @@
+name: PR Web UI Preview - Publish
+
+# Trusted publish job: only this workflow holds `contents: write`. It never
+# checks out, builds, or executes anything from the PR's own ref -- it only
+# consumes the static artifact the (untrusted) build workflow produced, and
+# derives the PR number and build freshness from GitHub-authoritative fields
+# on the workflow_run event, never from the artifact itself. See
+# specs/004-pr-webui-preview/research.md, "Decision: Fork-PR trust boundary
+# and build-freshness check".
+
+on:
+  workflow_run:
+    workflows: ["PR Web UI Preview - Build"]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+  # actions/download-artifact needs this to fetch an artifact from a
+  # different run (run-id: below) than the one currently executing.
+  actions: read
+
+jobs:
+  publish:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      # Checked out at the *base* repo's default branch (this is a
+      # workflow_run job, so it always runs this workflow's own trusted
+      # definition regardless of what the PR changed) -- a real git clone
+      # with an `origin` remote, which `annextube prepare-ghpages`'s git
+      # operations assume. Never touches the PR's own ref.
+      - name: Checkout annextube
+        uses: actions/checkout@v7
+
+      - name: Configure git identity for gh-pages commits
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve target PR and check build freshness
+        id: resolve
+        run: |
+          if pr_number=$(tools/pr_preview_resolve_target.sh "$HEAD_SHA"); then
+            echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download build artifact
+        if: steps.resolve.outputs.skip != 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-preview-build
+          path: /tmp/pr-preview-artifact
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Set up Python
+        if: steps.resolve.outputs.skip != 'true'
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # Deliberately no actions/setup-node here. GitHub-hosted runners
+      # ship a system Node/npm anyway, so hatch_build.py's frontend-build
+      # hook may well still run rather than skip -- but that's harmless,
+      # not just wasted time: this checkout is always the *trusted* base
+      # branch (workflow_run defaults to it; no `ref:` override above), so
+      # even a build here only rebuilds this repo's own frontend/, and
+      # `prepare-ghpages --source-dir ...` below never consults it --
+      # passing --source-dir unconditionally sets do_build_frontend=False
+      # (see annextube/cli/prepare_ghpages.py), so the PR's actual preview
+      # content always comes from the downloaded build artifact, never
+      # from anything built in this job.
+      - name: Install annextube (for the prepare-ghpages CLI)
+        if: steps.resolve.outputs.skip != 'true'
+        run: pip install -e .
+
+      - name: Publish preview under pr-<number>/ (retry on push races)
+        id: publish
+        if: steps.resolve.outputs.skip != 'true'
+        run: |
+          rm -f /tmp/preview-stale-skip
+          tools/gh_pages_push_retry.sh /tmp/gh-pages-worktree -- \
+            tools/gh_pages_publish_preview.sh \
+              "$HEAD_SHA" /tmp/pr-preview-artifact /tmp/gh-pages-worktree
+          if [ -f /tmp/preview-stale-skip ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post or update PR comment with the preview link
+        if: steps.resolve.outputs.skip != 'true' && steps.publish.outputs.published == 'true'
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.resolve.outputs.pr_number }}
+        with:
+          script: |
+            const prNumber = Number(process.env.PR_NUMBER);
+            const headSha = process.env.HEAD_SHA;
+            const url = `https://con.github.io/annextube/pr-${prNumber}/`;
+            const marker = '<!-- pr-webui-preview -->';
+            const body = `${marker}\n### 🔍 Web UI Preview\n\n` +
+              `**[View preview](${url})** (built from ${headSha.substring(0, 7)})\n`;
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+            }

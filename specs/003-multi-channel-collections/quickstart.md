@@ -166,6 +166,11 @@ The web UI automatically detects multi-channel mode when `channels.tsv` is prese
 - **Channel overview page**: Shows all channels with titles, statistics, video counts
 - **Channel drill-down**: Click a channel to see its video listing
 - **Breadcrumb navigation**: Navigate back to the overview from any channel
+- **Clone commands**: When the collection is served over HTTP with its
+  `.git/` directories reachable, the header's *Clone* panel offers both the
+  channel being viewed and the whole collection, e.g.
+  `datalad clone https://example.org/MyCollection/ch-example/.git` and
+  `datalad clone https://example.org/MyCollection/.git`
 
 ---
 
