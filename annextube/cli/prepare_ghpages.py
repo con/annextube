@@ -5,11 +5,76 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import click
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_subpath(subpath: str) -> None:
+    """Reject any ``subpath`` value that isn't a single, safe, relative path
+    component.
+
+    The branch-root/sibling-subpath isolation ``--subpath`` promises only
+    holds if it really is a single relative path component that can't
+    escape ``repo_path`` or land on a name git itself treats specially.
+    Every caller in this codebase only ever passes ``pr-<number>`` (a
+    GitHub-assigned integer), but this is checked at the layer that
+    actually writes files (``copy_frontend_to_ghpages``/
+    ``copy_data_to_ghpages``), not only in the CLI callback -- both of
+    those functions are called directly by tests and could be called
+    directly by other future code, so the guarantee must not depend on
+    every caller re-deriving this validation itself.
+    """
+    if (
+        not subpath
+        or '/' in subpath
+        or '\\' in subpath
+        or subpath in ('.', '..', '.git')
+        or Path(subpath).is_absolute()
+    ):
+        raise ValueError(
+            f"subpath must be a single relative path component "
+            f"(e.g. 'pr-42'), got: {subpath!r}"
+        )
+
+
+def _replace_dest(dest: Path) -> None:
+    """Remove whatever currently exists at ``dest`` (file, dir, or symlink)."""
+    if dest.is_symlink():
+        dest.unlink()
+    elif dest.is_dir():
+        shutil.rmtree(dest)
+    elif dest.exists():
+        dest.unlink()
+
+
+def _copy_tree_no_symlinks(src: Path, dest: Path) -> None:
+    """Recursively copy ``src`` to ``dest``, refusing to follow or
+    materialize any symlink anywhere in the tree.
+
+    Used specifically when copying from an untrusted ``--source-dir`` (e.g.
+    a CI build artifact built from a fork PR's own code, uploaded via
+    ``actions/upload-artifact`` which preserves symlinks as-is).
+    ``shutil.copytree()``/``copy2()`` dereference symlinks by default, so a
+    maliciously crafted symlink in such an artifact (e.g. pointing at an
+    absolute host path) would otherwise have its target's content silently
+    copied and committed to the public gh-pages branch. This helper is not
+    used for the trusted (non-``--source-dir``) code paths, which
+    legitimately need to preserve git-annex symlinks.
+    """
+    if src.is_symlink():
+        raise ValueError(
+            f"Refusing to copy symlink from untrusted --source-dir: {src}"
+        )
+    if src.is_dir():
+        dest.mkdir(parents=True, exist_ok=True)
+        for child in src.iterdir():
+            _copy_tree_no_symlinks(child, dest / child.name)
+    else:
+        shutil.copy2(src, dest)
 
 
 @click.command()
@@ -38,6 +103,29 @@ logger = logging.getLogger(__name__)
     default=True,
     help='Copy data files (videos/, playlists/, etc.) to gh-pages branch (default: enabled)'
 )
+@click.option(
+    '--subpath',
+    default=None,
+    help=(
+        'Publish under this subdirectory of the target branch '
+        '(e.g. "pr-42") instead of the branch root. Only this subpath is '
+        'written to -- the branch root and any other subpath (e.g. other '
+        'PRs\' previews) are left untouched.'
+    )
+)
+@click.option(
+    '--source-dir',
+    default=None,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help=(
+        'Copy the frontend build and data files from this directory '
+        'instead of building fresh and reading data from --output-dir\'s '
+        'own origin/master (or origin/main). The directory must already '
+        'contain a built "web/" subdirectory (e.g. the output of '
+        '`annextube generate-web`) alongside the data files. Implies '
+        'skipping the frontend build step.'
+    )
+)
 @click.pass_context
 def prepare_ghpages(
     ctx: click.Context,
@@ -45,7 +133,9 @@ def prepare_ghpages(
     repo_name: str | None,
     gh_branch: str,
     build_frontend: bool,
-    copy_data: bool
+    copy_data: bool,
+    subpath: str | None,
+    source_dir: Path | None,
 ):
     """Prepare archive for GitHub Pages deployment.
 
@@ -66,8 +156,25 @@ def prepare_ghpages(
 
         # Skip data copy (metadata only, useful for large archives)
         annextube prepare-ghpages --output-dir ~/my-archive --no-copy-data
+
+        # Publish a pre-built preview under a subpath, from an already-built
+        # source directory (e.g. a downloaded CI build artifact), leaving
+        # everything else on the branch untouched
+        annextube prepare-ghpages --output-dir ~/annextube-checkout \\
+            --source-dir /tmp/pr-42-build --subpath pr-42
     """
     repo_path = output_dir.resolve()
+    source_path = source_dir.resolve() if source_dir else None
+
+    if subpath is not None:
+        # Defense in depth at the CLI layer too (see _validate_subpath's
+        # docstring for why this check also lives in the copy functions
+        # themselves, not just here) -- fail fast with a click-friendly
+        # error rather than a raw ValueError traceback.
+        try:
+            _validate_subpath(subpath)
+        except ValueError as e:
+            raise click.ClickException(f"--{e}") from e
 
     # 1. Detect or validate repo name
     if not repo_name:
@@ -80,14 +187,22 @@ def prepare_ghpages(
             )
         click.echo(f"Detected repository: {repo_name}")
 
-    # 2. Build frontend with GitHub Pages config
-    if build_frontend:
-        click.echo(f"\nBuilding frontend for GitHub Pages (/{repo_name}/)...")
+    # 2. Build frontend with GitHub Pages config -- skipped when --source-dir
+    # is given, since it must already contain a pre-built web/ directory
+    do_build_frontend = build_frontend and source_path is None
+    if do_build_frontend:
+        base_path = f'/{repo_name}/{subpath}/' if subpath else f'/{repo_name}/'
+        click.echo(f"\nBuilding frontend for GitHub Pages ({base_path})...")
         try:
-            build_frontend_for_ghpages(repo_path, repo_name)
+            build_frontend_for_ghpages(repo_path, repo_name, subpath=subpath)
             click.echo("✓ Frontend build completed")
         except Exception as e:
             raise click.ClickException(f"Frontend build failed: {e}") from e
+    elif source_path is not None:
+        click.echo(
+            "\nSkipping frontend build: using pre-built content from "
+            f"--source-dir ({source_path})"
+        )
 
     # 3. Create/update gh-pages branch
     click.echo(f"\nPreparing {gh_branch} branch...")
@@ -97,19 +212,25 @@ def prepare_ghpages(
     except Exception as e:
         raise click.ClickException(f"Failed to create {gh_branch} branch: {e}") from e
 
-    # 4. Copy frontend build to gh-pages branch
-    click.echo(f"\nCopying frontend to {gh_branch} branch...")
+    # 4. Copy frontend build to gh-pages branch (into --subpath if given)
+    dest = f"{gh_branch}/{subpath}" if subpath else gh_branch
+    click.echo(f"\nCopying frontend to {dest}...")
     try:
-        copy_frontend_to_ghpages(repo_path, gh_branch, build_frontend)
+        copy_frontend_to_ghpages(
+            repo_path, gh_branch, do_build_frontend,
+            subpath=subpath, source_dir=source_path,
+        )
         click.echo("✓ Frontend copied")
     except Exception as e:
         raise click.ClickException(f"Failed to copy frontend: {e}") from e
 
-    # 5. Copy data files if requested
+    # 5. Copy data files if requested (into --subpath if given)
     if copy_data:
-        click.echo(f"\nCopying data files to {gh_branch} branch...")
+        click.echo(f"\nCopying data files to {dest}...")
         try:
-            copy_data_to_ghpages(repo_path, gh_branch)
+            copy_data_to_ghpages(
+                repo_path, gh_branch, subpath=subpath, source_dir=source_path,
+            )
             click.echo("✓ Data files copied")
         except Exception as e:
             raise click.ClickException(f"Failed to copy data files: {e}") from e
@@ -190,12 +311,18 @@ def get_github_repo_name(repo_path: Path) -> str | None:
     return None
 
 
-def build_frontend_for_ghpages(repo_path: Path, repo_name: str) -> None:
+def build_frontend_for_ghpages(
+    repo_path: Path, repo_name: str, subpath: str | None = None
+) -> None:
     """Build frontend with GitHub Pages base path.
 
     Args:
         repo_path: Path to repository
         repo_name: GitHub repository name
+        subpath: If given, build for `/{repo_name}/{subpath}/` instead of
+            `/{repo_name}/`, so the built assets resolve correctly when
+            published under a subdirectory of the branch (e.g. a per-PR
+            preview).
     """
     # Find frontend directory
     # Try multiple locations:
@@ -240,7 +367,7 @@ def build_frontend_for_ghpages(repo_path: Path, repo_name: str) -> None:
 
     # Set base path via environment variable
     env = os.environ.copy()
-    env['VITE_BASE_PATH'] = f'/{repo_name}/'
+    env['VITE_BASE_PATH'] = f'/{repo_name}/{subpath}/' if subpath else f'/{repo_name}/'
 
     # Install dependencies if needed
     if not (frontend_dir / 'node_modules').exists():
@@ -318,7 +445,9 @@ def create_ghpages_branch(repo_path: Path, branch_name: str) -> None:
 def copy_frontend_to_ghpages(
     repo_path: Path,
     branch_name: str,
-    was_built: bool
+    was_built: bool,
+    subpath: str | None = None,
+    source_dir: Path | None = None,
 ) -> None:
     """Copy built frontend to gh-pages branch.
 
@@ -326,56 +455,80 @@ def copy_frontend_to_ghpages(
         repo_path: Path to repository
         branch_name: Target branch name
         was_built: Whether frontend was just built
+        subpath: If given, copy into `<repo_path>/<subpath>/` instead of
+            `<repo_path>/`, leaving everything else on the branch untouched.
+        source_dir: If given, copy from `<source_dir>/web` instead of
+            searching the usual build-output locations (used when the
+            frontend was already built elsewhere, e.g. by an untrusted CI
+            build job whose artifact this is).
     """
-    # Find frontend dist directory using same logic as build
-    import annextube
+    if subpath is not None:
+        _validate_subpath(subpath)
 
-    search_paths = []
+    if source_dir is not None:
+        dist_dir = source_dir / 'web'
+        if dist_dir.is_symlink():
+            raise ValueError(
+                f"Refusing to follow symlink from untrusted --source-dir: {dist_dir}"
+            )
+        if not dist_dir.exists():
+            raise FileNotFoundError(
+                f"--source-dir given but no 'web/' directory found in it: "
+                f"{source_dir}"
+            )
+    else:
+        # Find frontend dist directory using same logic as build
+        import annextube
 
-    # Check environment variable first (same as build step)
-    env_frontend = os.environ.get('ANNEXTUBE_FRONTEND_DIR')
-    if env_frontend:
-        search_paths.append(Path(env_frontend))
+        search_paths = []
 
-    if hasattr(annextube, '__file__') and annextube.__file__:
-        annextube_root = Path(annextube.__file__).parent.parent
-        search_paths.append(annextube_root / 'frontend')
+        # Check environment variable first (same as build step)
+        env_frontend = os.environ.get('ANNEXTUBE_FRONTEND_DIR')
+        if env_frontend:
+            search_paths.append(Path(env_frontend))
 
-    search_paths.extend([
-        repo_path.parent.parent / 'frontend',
-        repo_path.parent / 'frontend',
-        repo_path / 'frontend'
-    ])
+        if hasattr(annextube, '__file__') and annextube.__file__:
+            annextube_root = Path(annextube.__file__).parent.parent
+            search_paths.append(annextube_root / 'frontend')
 
-    dist_dir = None
-    for path in search_paths:
-        # Check dist/ (gh-pages mode), web/ subdir, and ../web (vite outDir: '../web')
-        for candidate in (path / 'dist', path / 'web', path.parent / 'web'):
-            if candidate.exists():
-                dist_dir = candidate
+        search_paths.extend([
+            repo_path.parent.parent / 'frontend',
+            repo_path.parent / 'frontend',
+            repo_path / 'frontend'
+        ])
+
+        dist_dir = None
+        for path in search_paths:
+            # Check dist/ (gh-pages mode), web/ subdir, and ../web (vite outDir: '../web')
+            for candidate in (path / 'dist', path / 'web', path.parent / 'web'):
+                if candidate.exists():
+                    dist_dir = candidate
+                    break
+            if dist_dir:
                 break
-        if dist_dir:
-            break
 
-    if not dist_dir:
-        raise FileNotFoundError(
-            "Frontend dist directory not found.\n"
-            "Run with --build-frontend to build first."
-        )
+        if not dist_dir:
+            raise FileNotFoundError(
+                "Frontend dist directory not found.\n"
+                "Run with --build-frontend to build first."
+            )
 
-    # Copy all files from dist/ to repository root
+    assert dist_dir is not None  # guaranteed by the branches above (else they raise)
+
+    dest_root = (repo_path / subpath) if subpath else repo_path
+    dest_root.mkdir(parents=True, exist_ok=True)
+
+    # Copy all files from dist/ to the destination root -- never touches
+    # anything outside dest_root, so sibling subpaths are left alone
     for item in dist_dir.iterdir():
-        dest = repo_path / item.name
+        dest = dest_root / item.name
+        _replace_dest(dest)
 
-        # Remove existing
-        if dest.exists():
-            if dest.is_dir():
-                shutil.rmtree(dest)
-            else:
-                dest.unlink()
-
-        # Copy new
-        if item.is_dir():
+        if source_dir is not None:
+            # Untrusted content (e.g. a fork PR's build artifact) -- never
+            # follow symlinks.
+            _copy_tree_no_symlinks(item, dest)
+        elif item.is_dir():
             shutil.copytree(item, dest)
         else:
             shutil.copy2(item, dest)
@@ -383,42 +536,105 @@ def copy_frontend_to_ghpages(
         logger.debug(f"Copied: {item.name}")
 
 
-def copy_data_to_ghpages(repo_path: Path, branch_name: str) -> None:
-    """Copy data files from master branch to gh-pages.
+def copy_data_to_ghpages(
+    repo_path: Path,
+    branch_name: str,
+    subpath: str | None = None,
+    source_dir: Path | None = None,
+) -> None:
+    """Copy data files (videos/, playlists/, authors.tsv) to gh-pages.
 
-    Copies both unannexed files and git-annex symlinks. The symlinks can be
-    resolved later by running 'git annex get' or removed if content is unavailable.
+    Without --source-dir, copies both unannexed files and git-annex symlinks
+    from `--output-dir`'s own `origin/master`/`origin/main`. The symlinks
+    can be resolved later by running 'git annex get' or removed if content
+    is unavailable.
+
+    With --source-dir, copies real files directly from that directory
+    instead (used when the data comes from a separate export, e.g. the
+    `annextubetesting` branch's content, not this repo's own default
+    branch).
 
     Args:
         repo_path: Path to repository
         branch_name: Target branch name
+        subpath: If given, copy into `<repo_path>/<subpath>/` instead of
+            `<repo_path>/`, leaving everything else on the branch untouched.
+        source_dir: If given, copy directly from this directory instead of
+            checking out from `origin/master`/`origin/main`.
     """
+    if subpath is not None:
+        _validate_subpath(subpath)
+
     # List of data directories/files to copy
     data_items = ['videos/', 'playlists/', 'authors.tsv']
+    dest_root = (repo_path / subpath) if subpath else repo_path
+    dest_root.mkdir(parents=True, exist_ok=True)
 
-    for item in data_items:
-        try:
-            # Check out item from master/main branch
-            subprocess.run(
-                ['git', 'checkout', 'origin/master', '--', item],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-            logger.debug(f"Copied from master: {item}")
-        except subprocess.CalledProcessError:
-            try:
-                # Try main branch
-                subprocess.run(
-                    ['git', 'checkout', 'origin/main', '--', item],
-                    cwd=repo_path,
-                    check=True,
-                    capture_output=True
+    if source_dir is not None:
+        for item in data_items:
+            item_name = item.rstrip('/')
+            src = source_dir / item_name
+            if src.is_symlink():
+                raise ValueError(
+                    f"Refusing to copy symlink from untrusted --source-dir: {src}"
                 )
-                logger.debug(f"Copied from main: {item}")
-            except subprocess.CalledProcessError:
+            if not src.exists():
+                logger.warning(f"Could not copy {item} (not found in {source_dir})")
+                continue
+            dest = dest_root / item_name
+            _replace_dest(dest)
+            _copy_tree_no_symlinks(src, dest)
+            logger.debug(f"Copied from --source-dir: {item}")
+        logger.info(f"Data files copied to {branch_name} from {source_dir}")
+        return
+
+    # No --source-dir: read from --output-dir's own origin/master (or
+    # origin/main). Extracted via `git archive` into a scratch directory
+    # rather than `git checkout -- <item>` directly into repo_path -- the
+    # latter always lands at the repo root, so satisfying `subpath` would
+    # otherwise require checking it out onto whatever real content already
+    # lives at the branch root and then moving it aside, clobbering that
+    # root content in the process. Going through a scratch directory keeps
+    # repo_path (and any existing content on the target branch) untouched
+    # until the copy into dest_root itself.
+    with tempfile.TemporaryDirectory() as scratch:
+        scratch_path = Path(scratch)
+        for item in data_items:
+            item_name = item.rstrip('/')
+            copied_from = None
+            for candidate_branch in ('origin/master', 'origin/main'):
+                archive = subprocess.run(
+                    ['git', 'archive', candidate_branch, '--', item],
+                    cwd=repo_path,
+                    capture_output=True,
+                )
+                if archive.returncode == 0 and archive.stdout:
+                    subprocess.run(
+                        ['tar', '-x'],
+                        cwd=scratch_path,
+                        input=archive.stdout,
+                        check=True,
+                    )
+                    copied_from = candidate_branch
+                    break
+
+            if not copied_from:
                 logger.warning(f"Could not copy {item} (not found in master/main)")
                 continue
+
+            extracted = scratch_path / item_name
+            if not extracted.exists():
+                logger.warning(f"Could not copy {item} (not found in master/main)")
+                continue
+
+            dest = dest_root / item_name
+            _replace_dest(dest)
+            if extracted.is_dir():
+                shutil.copytree(extracted, dest, symlinks=True)
+            else:
+                shutil.copy2(extracted, dest)
+
+            logger.debug(f"Copied from {copied_from}: {item}")
 
     logger.info(f"Data files copied to {branch_name} (including any git-annex symlinks)")
     logger.info("Run 'git annex get' to fetch annexed content, or remove symlinks if content is unavailable")

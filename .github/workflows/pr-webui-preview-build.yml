@@ -1,0 +1,103 @@
+name: PR Web UI Preview - Build
+
+# Untrusted build job: runs the PR's own code (frontend/, generate_web.py),
+# so it MUST NOT hold any write credential. It only uploads a build
+# artifact; a separate, trusted workflow (pr-webui-preview-publish.yml)
+# decides whether and how to publish it. See
+# specs/004-pr-webui-preview/research.md, "Decision: Fork-PR trust boundary
+# and build-freshness check".
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'frontend/**'
+      - 'annextube/cli/generate_web.py'
+      - 'annextube/cli/prepare_ghpages.py'
+      - '.github/workflows/pr-webui-preview-build.yml'
+
+# Supersede an in-flight build for the same PR as soon as a newer push
+# arrives -- cheap, though the publish job's own freshness re-check (not
+# this) is what actually guarantees no stale overwrite (FR-007).
+concurrency:
+  group: pr-webui-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v7
+        with:
+          # The PR's own history doesn't need to be deep. No git
+          # credentials are needed beyond this read-only clone -- this
+          # job never pushes.
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-annex
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install annextube (builds the frontend via hatch_build.py)
+        run: pip install -e ".[ci]"
+
+      # con/annextubetesting is a separate, standalone repository -- a real
+      # annextube archive of the @AnnexTubeTesting channel, not a branch of
+      # this repo. Cloned anonymously over HTTPS (it's public): no token,
+      # so no write credential enters this untrusted build job.
+      - name: Clone the annextubetesting preview-source dataset
+        run: git clone --depth=1 https://github.com/con/annextubetesting.git /tmp/preview-src
+
+      - name: Export annextubetesting dataset (no live YouTube fetch)
+        run: |
+          mkdir -p /tmp/preview-build
+          git -C /tmp/preview-src archive HEAD | tar -x -C /tmp/preview-build
+
+      # Only thumbnails/metadata/TSV/JSON are plain git content in
+      # con/annextubetesting (per its .gitattributes); video files,
+      # comments.json, and .vtt captions are git-annex/URL-backed and were
+      # never fetched into it, so `git archive` exports them as dangling
+      # symlinks. Nothing in this job can materialize them (no annex
+      # remote, no live YouTube fetch), and the publish job refuses to
+      # copy any symlink from this untrusted artifact regardless (see
+      # below) -- so drop them here rather than let generate-web or the
+      # publish step trip over a broken/refused symlink. Previews render
+      # metadata, thumbnails, and playlists; they do not offer video
+      # playback or caption content.
+      - name: Drop unmaterialized git-annex content
+        run: find /tmp/preview-build -type l -delete
+
+      - name: Generate web UI from this PR's code
+        run: annextube generate-web --output-dir /tmp/preview-build
+
+      # Uploaded as a build artifact rather than published directly -- this
+      # job has no gh-pages write access. The whole export (data files +
+      # the web/ subdirectory generate-web just added) is uploaded, not
+      # just web/ alone: the frontend resolves videos/, playlists/, etc.
+      # relative to its own deployed base path, so both pieces are needed
+      # together at publish time. The publish job treats this artifact as
+      # untrusted content (e.g. refuses to follow any symlink in it) since
+      # it was produced by this PR's own, possibly fork-originated, code.
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-preview-build
+          path: /tmp/preview-build
+          retention-days: 7
+          if-no-files-found: error
