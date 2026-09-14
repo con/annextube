@@ -1,0 +1,2 @@
+# Exclude annextube source checkout (used only for building)
+_annextube_source/

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Redirecting...</title>
+  <script>
+    // GitHub Pages 404 handler for client-side routing
+    // Redirects to index.html with hash-based path
+    const segments = window.location.pathname.split('/').slice(1);
+    const repoName = segments[0];
+    const path = segments.slice(1).join('/');
+
+    if (path) {
+      const redirect = window.location.origin + '/' + repoName + '/#/' + path + window.location.search;
+      window.location.replace(redirect);
+    } else {
+      const redirect = window.location.origin + '/' + repoName + '/';
+      window.location.replace(redirect);
+    }
+  </script>
+</head>
+<body>
+  <p>Redirecting...</p>
+</body>
+</html>
