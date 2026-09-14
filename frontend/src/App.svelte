@@ -288,6 +288,7 @@
         {error}
         onVideoClick={handleVideoClick}
         {fuzzyStartIndex}
+        channelDir={selectedChannel?.channel_dir}
       />
       {/if}
     {/if}

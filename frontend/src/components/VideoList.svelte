@@ -7,6 +7,7 @@
   export let onVideoClick: (video: Video) => void = () => {};
   export let loading: boolean = false;
   export let error: string | null = null;
+  export let channelDir: string | undefined = undefined; // Channel directory for multi-channel mode
   /** Index of the first fuzzy result; Infinity when there is no search or all results are exact. */
   export let fuzzyStartIndex: number = Infinity;
 
@@ -65,7 +66,7 @@
             <span>Approximate matches</span>
           </div>
         {/if}
-        <VideoCard {video} onClick={onVideoClick} />
+        <VideoCard {video} onClick={onVideoClick} {channelDir} />
       {/each}
     </div>
   {/if}
