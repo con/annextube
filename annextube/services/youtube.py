@@ -1,6 +1,7 @@
 """YouTube service using yt-dlp for metadata and video operations."""
 
 import json
+import logging as stdlib_logging
 import re
 from collections.abc import Generator
 from contextlib import contextmanager
@@ -151,7 +152,6 @@ class YouTubeService:
         Creates a fresh ``RateLimitDetector``, injects it into yt-dlp opts,
         and raises ``YouTubeRateLimitError`` if a ban pattern is logged.
         """
-        import logging as stdlib_logging
         base_logger = stdlib_logging.getLogger("yt_dlp")
         detector = self._make_rate_limit_detector(base_logger)
         opts = self._get_ydl_opts(download=download, rate_limit_detector=detector)
@@ -196,8 +196,6 @@ class YouTubeService:
 
         # Enable yt-dlp's own verbose logging only at HEAVY_DEBUG level (5)
         # Regular DEBUG level (10) shows only annextube debug logs
-        import logging as stdlib_logging
-
         from annextube.lib.logging_config import HEAVY_DEBUG
 
         # Check effective level (handles inheritance from parent loggers)
@@ -322,7 +320,6 @@ class YouTubeService:
         if use_two_pass:
             assert existing_video_ids is not None  # Type narrowing for mypy
             # First pass: Get just IDs with extract_flat
-            import logging as stdlib_logging
             _base_logger = stdlib_logging.getLogger("yt_dlp")
             _detector = self._make_rate_limit_detector(_base_logger)
             flat_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector)
@@ -413,7 +410,6 @@ class YouTubeService:
 
         # Regular extraction (initial backup or fallback)
         logger.info("Fetching videos (this may take several minutes for large channels)...")
-        import logging as stdlib_logging
         _base_logger2 = stdlib_logging.getLogger("yt_dlp")
         _detector2 = self._make_rate_limit_detector(_base_logger2)
         ydl_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector2)
@@ -534,7 +530,6 @@ class YouTubeService:
 
         if use_two_pass:
             # First pass: Get just video IDs with extract_flat (fast, no metadata fetching)
-            import logging as stdlib_logging
             _base_logger_pl = stdlib_logging.getLogger("yt_dlp")
             _detector_pl = self._make_rate_limit_detector(_base_logger_pl)
             flat_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector_pl)
@@ -622,7 +617,6 @@ class YouTubeService:
                 return videos
 
         # Regular extraction (non-incremental or no unavailable videos)
-        import logging as stdlib_logging
         _base_logger_plr = stdlib_logging.getLogger("yt_dlp")
         _detector_plr = self._make_rate_limit_detector(_base_logger_plr)
         ydl_opts = self._get_ydl_opts(download=False, rate_limit_detector=_detector_plr)
@@ -987,6 +981,13 @@ class YouTubeService:
         # Construct podcasts tab URL
         podcasts_url = channel_url.rstrip("/") + "/podcasts"
 
+        # Suppress yt-dlp's ERROR log for "no podcasts tab" — that case is expected
+        # for most channels and is handled gracefully below.  Rate-limit errors are
+        # still caught because RateLimitDetector inspects messages before forwarding
+        # to the base logger, so raising YouTubeRateLimitError is unaffected.
+        _yt_dlp_logger = stdlib_logging.getLogger("yt_dlp")
+        _saved_level = _yt_dlp_logger.level
+        _yt_dlp_logger.setLevel(stdlib_logging.CRITICAL)
         try:
             info = self._with_rate_limit_retry(
                 self._extract_info_checked,
@@ -999,6 +1000,8 @@ class YouTubeService:
         except Exception as e:
             logger.debug(f"Failed to fetch channel podcasts (may not have podcasts): {e}")
             return []
+        finally:
+            _yt_dlp_logger.setLevel(_saved_level)
 
         if not info or "entries" not in info:
             logger.debug(f"No podcasts found for channel: {channel_url}")
