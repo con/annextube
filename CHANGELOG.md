@@ -1,3 +1,15 @@
+# v0.15.1 (Wed Sep 16 2026)
+
+#### 🐛 Bug Fix
+
+- fix(youtube): suppress yt-dlp ERROR log for expected "no podcasts tab" case [#33](https://github.com/con/annextube/pull/33) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 1
+
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # v0.15.0 (Mon Sep 14 2026)
 
 #### 🚀 Enhancement
