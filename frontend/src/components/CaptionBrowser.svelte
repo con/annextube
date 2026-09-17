@@ -133,15 +133,24 @@
     currentMatchPos = 0;
   }
 
+  /** Scroll el to the center of container without touching any parent scroll position. */
+  function scrollIntoContainer(container: HTMLElement, el: HTMLElement) {
+    const containerRect = container.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
+    const elRelativeTop = elRect.top - containerRect.top + container.scrollTop;
+    const target = elRelativeTop - (container.clientHeight - elRect.height) / 2;
+    container.scrollTo({ top: target, behavior: 'smooth' });
+  }
+
   function scrollToMatch(pos: number) {
     // Run after DOM updates
     setTimeout(() => {
       const targetIdx = matchingIndices[pos];
       if (targetIdx == null) return;
-      const el = cueListEl?.querySelector(`[data-cue-index="${targetIdx}"]`);
-      if (el) {
+      const el = cueListEl?.querySelector<HTMLElement>(`[data-cue-index="${targetIdx}"]`);
+      if (el && cueListEl) {
         autoScroll = false;
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        scrollIntoContainer(cueListEl, el);
       }
     }, 0);
   }
@@ -202,12 +211,12 @@
     return -1;
   }
 
-  // Auto-scroll to active cue
+  // Auto-scroll to active cue (scroll only within cueListEl, never the page)
   afterUpdate(() => {
     if (!autoScroll || activeCueIndex < 0) return;
-    const activeEl = cueListEl?.querySelector('.cue.active');
-    if (activeEl) {
-      activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const activeEl = cueListEl?.querySelector<HTMLElement>('.cue.active');
+    if (activeEl && cueListEl) {
+      scrollIntoContainer(cueListEl, activeEl);
     }
   });
 
