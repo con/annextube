@@ -106,10 +106,13 @@ already found:
   already curates exactly the CC-licensed subset.
 - **`.gitattributes` already has a precedent for a plain-git override on a
   specific video-directory path**: `videos/2026/02/*/thumbnail.jpg
-  annex.largefiles=nothing` sits alongside the default rule that sends any
-  binary file over 10KB to git-annex. This is the exact mechanism this
-  feature's curated `video.mkv` files need, scoped per curated video path
-  rather than changed globally.
+  annex.largefiles=nothing` sits alongside the default rule
+  `(((mimeencoding=binary)and(largerthan=0))or(largerthan=10k))` — two
+  independent, OR'd conditions: *any* binary file regardless of size, *or*
+  any file (binary or not) over 10KB, goes to git-annex. That's why even a
+  99-byte `thumbnail.jpg` needs the explicit override. This is the exact
+  mechanism this feature's curated `video.mkv` files need, scoped per
+  curated video path rather than changed globally.
 
 ## Decision: which videos to curate, and how many
 

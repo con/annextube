@@ -106,11 +106,16 @@ design PR itself.
    `research.md`'s correction on this point), and that column already reads
    `"tracked"` for every video today, which already makes "Play from
    Archive"/hover-preview work with zero changes; only the status *badge*
-   needs `"downloaded"` specifically. Update both files for consistency
-   anyway, using whatever tooling `con/annextubetesting` normally uses to
-   keep `videos.tsv` in sync with per-video `metadata.json` files (reuse its
-   existing export step rather than hand-editing the TSV — the snippet below
-   only shows the `metadata.json` half, which has no such existing tool):
+   needs `"downloaded"` specifically. Update both files, but **hand-edit
+   only this one video's `videos.tsv` row** — do not run `annextube export`
+   (`ExportService.generate_videos_tsv()`) to regenerate the whole file: it
+   rescans every video's `metadata.json` and maps anything other than
+   `"downloaded"` to `"metadata_only"`, which has its own frontend badge
+   (unlike `"tracked"`, which has none). Since the other 9 videos'
+   `metadata.json` already say `"not_downloaded"` (stale relative to the
+   TSV's `"tracked"`), regenerating would put a spurious "metadata only"
+   badge on all of them. This TSV/`metadata.json` drift is a pre-existing
+   inconsistency in `con/annextubetesting`, out of scope to fix here:
 
    ```bash
    python3 - "$VIDEO_DIR/metadata.json" <<'EOF'
@@ -120,6 +125,10 @@ design PR itself.
    data["download_status"] = "downloaded"
    json.dump(data, open(path, "w"), indent=2)
    EOF
+
+   # hand-edit only this video's row in videos/videos.tsv, changing its
+   # download_status column from "tracked" to "downloaded" -- do NOT run
+   # `annextube export` here, per the note above
    ```
 
    Also add a short note near the `.gitattributes` override (or in that
@@ -132,8 +141,14 @@ design PR itself.
 
    ```bash
    git commit -m "Add downscaled preview video for Test-Video-Creative-Commons-1"
-   git push origin main   # or whatever that repo's default branch is
+   git push origin master   # con/annextubetesting's actual default branch
    ```
+
+   Note: this push touches `videos/**`/`.gitattributes`, which also
+   triggers `con/annextubetesting`'s own `deploy-ghpages.yml` (via
+   `con/annextube-action`) — not something this plan modifies or has
+   verified the internals of, but worth knowing if that workflow also
+   regenerates `videos.tsv` on push (see the note in step 5 above).
 
 7. Verify end-to-end against the *existing*, unmodified preview pipeline —
    no `con/annextube` code changes needed for this step to work, per
