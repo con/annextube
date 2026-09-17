@@ -1,3 +1,16 @@
+# v0.15.2 (Thu Sep 17 2026)
+
+#### 🐛 Bug Fix
+
+- fix(git_annex): stage deletions, harden diff loop, log commit failures [#35](https://github.com/con/annextube/pull/35) ([@yarikoptic](https://github.com/yarikoptic))
+- fix(frontend): stop caption auto-scroll from hijacking page scroll [#34](https://github.com/con/annextube/pull/34) ([@yarikoptic](https://github.com/yarikoptic))
+
+#### Authors: 1
+
+- Yaroslav Halchenko ([@yarikoptic](https://github.com/yarikoptic))
+
+---
+
 # v0.15.1 (Wed Sep 16 2026)
 
 #### 🐛 Bug Fix
