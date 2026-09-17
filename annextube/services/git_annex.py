@@ -383,14 +383,24 @@ class GitAnnexService:
             ]
 
             for file_path in modified_files:
-                # Check if this file only has timestamp changes
-                diff_result = subprocess.run(
-                    ["git", "diff", file_path],
-                    cwd=self.repo_path,
-                    capture_output=True,
-                    encoding="utf-8",
-                    check=True
-                )
+                # Check if this file only has timestamp changes.
+                # Deleted annex symlinks (and uninitialized submodules) cause
+                # `git diff <path>` to exit 128; skip them and treat as a real
+                # change so the loop can still clean up the remaining files.
+                try:
+                    diff_result = subprocess.run(
+                        ["git", "diff", file_path],
+                        cwd=self.repo_path,
+                        capture_output=True,
+                        encoding="utf-8",
+                        check=True
+                    )
+                except subprocess.CalledProcessError as per_file_err:
+                    logger.debug(
+                        f"Cannot diff {file_path!r} (exit {per_file_err.returncode}), "
+                        "treating as real change"
+                    )
+                    continue
 
                 diff = diff_result.stdout
                 if not diff:
@@ -543,6 +553,14 @@ class GitAnnexService:
         else:
             subprocess.run(["git", "annex", "add", "."], cwd=self.repo_path, check=True)
 
+        # Stage deletions of tracked files (e.g. renumbered playlist symlinks).
+        # `git annex add` handles new/modified files but silently skips deleted
+        # tracked paths, leaving stale index entries that block future commits.
+        subprocess.run(
+            ["git", "add", "-u", "."],
+            cwd=self.repo_path, check=True, capture_output=True,
+        )
+
         # Check if only timestamps changed
         if self._is_timestamp_only_change():
             logger.info("Skipping commit - only timestamp fields changed (no real content updates)")
@@ -566,7 +584,11 @@ class GitAnnexService:
             if "nothing to commit" in combined or "no changes added to commit" in combined:
                 logger.debug("No changes to commit")
                 return False
-            # Re-raise if it's a real error
+            # Log the output before re-raising so failures are diagnosable
+            logger.error(
+                f"git commit failed (exit {e.returncode}): "
+                f"stdout={e.stdout!r} stderr={e.stderr!r}"
+            )
             raise
 
     def is_annex_repo(self) -> bool:
