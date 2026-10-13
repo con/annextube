@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="annextube — Playback spool">
+  <title>annextube — Playback spool</title>
+  <desc>A continuous lowercase a encloses a playable triangular aperture; its tail winds back into the archive.</desc>
+  <style>.primary{fill:#3578A8}.accent{fill:#DC6D3E}</style>
+  <path class="primary" fill-rule="evenodd" d="M128 28c-55.2 0-100 44.8-100 100s44.8 100 100 100h80v-36h-80c-35.3 0-64-28.7-64-64s28.7-64 64-64 64 28.7 64 64v28h36v-28c0-55.2-44.8-100-100-100Z"/><path class="accent" d="M108 88v80l64-40Z"/>
+</svg>
