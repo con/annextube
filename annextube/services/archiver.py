@@ -859,7 +859,9 @@ class Archiver:
                     logger.error(f"Invalid include_podcasts regex '{include_podcasts}': {e}")
                     podcasts = []
 
-            playlists.extend(podcasts)
+            # A podcast can also be listed on the Playlists tab; keep one copy.
+            known_ids = {p['id'] for p in playlists}
+            playlists.extend(p for p in podcasts if p['id'] not in known_ids)
 
         if not playlists:
             return []

@@ -252,6 +252,66 @@ class TestPlaylistPaginationResumeOnQuota:
         assert client._call_counts.get("playlistItems.list") == 3
         quota_manager.handle_quota_exceeded.assert_called_once()
 
+    def test_get_playlist_video_ids_stops_on_repeated_page_token(self):
+        """YouTube can return the same nextPageToken forever with 0 items.
+
+        Observed live for PLSWNjjvqdBIsNCZCMnWCOW-7SWRDtoLH6 (Oct 2026):
+        page 1 had 17 items + token T, every subsequent request for T
+        returned 0 items + token T again.  Without a guard this burned the
+        whole daily quota and, combined with quota-reset waiting, kept a
+        cron backup alive for 15 days.
+        """
+        mock_youtube = MagicMock()
+        page1 = {
+            "pageInfo": {"totalResults": 21, "resultsPerPage": 50},
+            "items": [{"contentDetails": {"videoId": f"vid{i}"}} for i in range(17)],
+            "nextPageToken": "LOOP",
+        }
+        stuck = {
+            "pageInfo": {"totalResults": 21, "resultsPerPage": 50},
+            "items": [],
+            "nextPageToken": "LOOP",
+        }
+        mock_youtube.playlistItems().list().execute.side_effect = (
+            [page1] + [stuck] * 1000
+        )
+
+        with patch("annextube.services.youtube_api.build") as mock_build:
+            mock_build.return_value = mock_youtube
+            client = YouTubeAPIMetadataClient(
+                api_key="test-key", quota_manager=MagicMock(spec=QuotaManager),
+            )
+            result = client.get_playlist_video_ids("PL_test")
+
+        assert result == [f"vid{i}" for i in range(17)]
+        assert client._call_counts.get("playlistItems.list") == 2
+
+    def test_get_playlist_video_ids_caps_pages_by_total_results(self):
+        """Ever-changing tokens must not paginate past totalResults allows."""
+        mock_youtube = MagicMock()
+
+        def _page(n: int) -> dict:
+            return {
+                "pageInfo": {"totalResults": 60, "resultsPerPage": 50},
+                "items": [{"contentDetails": {"videoId": f"vid{n}"}}],
+                "nextPageToken": f"TOKEN{n}",
+            }
+
+        mock_youtube.playlistItems().list().execute.side_effect = [
+            _page(n) for n in range(1000)
+        ]
+
+        with patch("annextube.services.youtube_api.build") as mock_build:
+            mock_build.return_value = mock_youtube
+            client = YouTubeAPIMetadataClient(
+                api_key="test-key", quota_manager=MagicMock(spec=QuotaManager),
+            )
+            result = client.get_playlist_video_ids("PL_test")
+
+        # ceil(60 / 50) = 2 pages expected, plus 1 page of slack.
+        assert result is not None
+        assert client._call_counts.get("playlistItems.list") == 3
+
     def test_fetch_comments_resumes_after_quota_reset(self):
         """Same invariant for fetch_comments: quota on page 2 resumes on page 2."""
         mock_youtube = MagicMock()

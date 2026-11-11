@@ -14,6 +14,7 @@ Requires YouTube Data API v3 key from:
 https://console.cloud.google.com/apis/credentials
 """
 
+import math
 import os
 import time
 
@@ -671,10 +672,18 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
 
         Quota cost: 1 unit per page of up to 50 items.
         A 500-video playlist costs 10 units.
+
+        YouTube has been observed to return the same ``nextPageToken``
+        indefinitely (with 0 items) for some playlists.  Pagination
+        therefore stops, returning the IDs collected so far, when a token
+        repeats or when more pages were fetched than ``totalResults``
+        warrants (plus one page of slack).
         """
         video_ids: list[str] = []
         page_token: str | None = None
         page_num = 0
+        seen_tokens: set[str] = set()
+        max_pages: int | None = None
 
         while True:
             try:
@@ -718,9 +727,27 @@ class YouTubeAPIMetadataClient(QuotaTrackingMixin):
                 if vid:
                     video_ids.append(vid)
 
+            if max_pages is None:
+                total = response.get("pageInfo", {}).get("totalResults")
+                if isinstance(total, int):
+                    max_pages = math.ceil(total / 50) + 1
+
             page_token = response.get("nextPageToken")
             if not page_token:
                 break
+            if page_token in seen_tokens:
+                logger.warning(
+                    f"YouTube API returned repeated nextPageToken for playlist "
+                    f"{playlist_id} after {page_num} page(s); stopping pagination"
+                )
+                break
+            if max_pages is not None and page_num >= max_pages:
+                logger.warning(
+                    f"YouTube API pagination for playlist {playlist_id} exceeded "
+                    f"{max_pages} page(s) expected from totalResults; stopping"
+                )
+                break
+            seen_tokens.add(page_token)
 
         logger.info(
             f"Fetched {len(video_ids)} video ID(s) from playlist {playlist_id} "
