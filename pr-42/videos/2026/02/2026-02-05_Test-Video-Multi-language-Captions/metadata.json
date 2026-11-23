@@ -1,0 +1,49 @@
+{
+  "video_id": "s4J8b9qNJ6U",
+  "title": "Test Video - Multi-language Captions",
+  "description": "Test video with captions in multiple languages (EN, ES, DE). 5 seconds.",
+  "channel_id": "UCHpuDwi3IorJ_Uez2e7pqHA",
+  "channel_name": "AnnexTube Testing",
+  "published_at": "2026-02-05T00:00:00",
+  "source_url": "https://www.youtube.com/watch?v=s4J8b9qNJ6U",
+  "fetched_at": "2026-02-07T09:27:09.429950",
+  "duration": 5,
+  "thumbnail_url": "https://i.ytimg.com/vi/s4J8b9qNJ6U/maxresdefault.jpg",
+  "language": null,
+  "view_count": 0,
+  "like_count": 0,
+  "comment_count": 0,
+  "privacy_status": "public",
+  "availability": "public",
+  "download_status": "not_downloaded",
+  "file_path": null,
+  "file_size": null,
+  "tags": [
+    "annextube",
+    "captions",
+    "multilingual",
+    "test"
+  ],
+  "categories": [
+    "Science & Technology"
+  ],
+  "captions_available": [
+    "de-1M3ZeO2Nhyc",
+    "en-lyDMbHnkR6w",
+    "es-C8RBf78anDQ"
+  ],
+  "has_auto_captions": false,
+  "license": "Creative Commons Attribution license (reuse allowed)",
+  "licensed_content": null,
+  "embeddable": null,
+  "made_for_kids": null,
+  "recording_date": null,
+  "recording_location": null,
+  "location_description": null,
+  "definition": null,
+  "dimension": null,
+  "projection": null,
+  "region_restriction": null,
+  "content_rating": null,
+  "topic_categories": null
+}

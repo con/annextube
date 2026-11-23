@@ -1,0 +1,16 @@
+{
+  "playlist_id": "PLQg3etb9oyYi4HoXWFLb-DZBpAsPqK0HV",
+  "title": "Videos with Location Metadata",
+  "description": "Test videos with GPS recording location data",
+  "channel_id": "UCHpuDwi3IorJ_Uez2e7pqHA",
+  "channel_name": "AnnexTube Testing",
+  "video_count": 2,
+  "privacy_status": null,
+  "last_modified": "2026-02-06T00:00:00",
+  "video_ids": [
+    "CPfZiBffVQs",
+    "KB8yRMmZkkM"
+  ],
+  "thumbnail_url": null,
+  "fetched_at": "2026-02-07T09:28:11.568712"
+}
