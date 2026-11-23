@@ -14,6 +14,7 @@ Auto-generated from all feature plans. Last updated: 2026-01-24
 - Svelte (client-side web interface)
 - Vitest + @testing-library/svelte (unit/integration tests)
 - Playwright (E2E tests)
+- Storybook + Chromatic (visual snapshots of component stories and whole pages)
 
 **Documentation**:
 - Hugo static site generator with Congo theme
@@ -96,6 +97,7 @@ mypy annextube/
 # Frontend tests
 cd frontend && npm test
 cd frontend && npm run test:e2e
+cd frontend && npm run test:chromatic   # page snapshots, locally (nothing is uploaded)
 ```
 
 **Full test sweep** (network + e2e):
@@ -223,6 +225,20 @@ These patterns are in `.gitignore` to prevent accidental commits.
   [testenv:foo]
   commands = bash {toxinidir}/tools/foo.sh
   ```
+
+## Visual snapshots
+
+Rules for the stories under `frontend/stories/` and the Chromatic tests under `frontend/tests/chromatic/`, distilled from Chromatic diffs that no code change explained. `frontend/README.md` ("Visual Snapshots") describes the setup.
+
+- **One test per viewport, viewport in the title.** `forEachViewport`, never a Playwright project: Chromatic names an archive by the test's file, describe and title, never its project, so several projects write over one story file and only their viewports survive.
+- **Fail on overflow by name.** Every snapshot test ends with `expectNoHorizontalOverflow`; the usual fix is a `@media (max-width: ...)` rule that lets a row wrap.
+- **Pin what changes on its own.** The clock (`page.clock.setFixedTime` in the tests, the `Date` shim in `.storybook/preview.ts`: the UI prints ages relative to now), the runner image (`ubuntu-24.04`, printed by the workflow), media fixtures (committed files), random ids, live fetches. `__APP_VERSION__` is already a constant placeholder in `vite.config.ts`; if it ever becomes a real version, pin it for these builds.
+- **Nothing from the network.** Fixture thumbnails are files under `tests/chromatic/fixtures/`, and the video-detail snapshot uses the one fixture video with a local file, so the page never embeds YouTube.
+- **Reach states honestly.** A page state is a fixture archive that the built web UI reads through its real boot path (`scripts/serve-chromatic-fixtures.sh`); prefer adding fixture files to `page.route` stubbing, and add no test-only code to the app.
+- **Stories mount real components.** Storybook runs under `@storybook/html-vite` (the Svelte framework needs Svelte 5), so a story's `render` calls `mount` from `stories/utils.ts` with fixed props.
+- **Merge master before reading a diff.** The baseline is the branch's own last build.
+- **A canvas is not in the archive.** The DOM carries a canvas element's size, not its pixels.
+- **Growing the suite.** A new component state gets a story. A new page state gets a `forEachViewport` test and fixture files that reach it.
 
 ## Pre-release Checks
 

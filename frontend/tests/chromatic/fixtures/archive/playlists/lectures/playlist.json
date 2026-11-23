@@ -1,0 +1,15 @@
+{
+  "playlist_id": "PLFIXTURE01",
+  "title": "Fixture lectures",
+  "description": "Two of the fixture videos",
+  "channel_id": "UCFIXTURE01",
+  "channel_name": "Fixture Channel",
+  "video_count": 2,
+  "privacy_status": "public",
+  "video_ids": [
+    "FIXTURE0001",
+    "FIXTURE0002"
+  ],
+  "updated_at": "2024-06-01T00:00:00Z",
+  "fetched_at": "2024-06-01T00:00:00Z"
+}
