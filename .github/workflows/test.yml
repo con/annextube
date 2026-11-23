@@ -40,7 +40,11 @@ jobs:
     # (rather than folded into one Python version's `tox` run) so a failure
     # in any one of them shows up as its own clearly-named, clearly-failing
     # check on the PR.
-    runs-on: ubuntu-latest
+    #
+    # e2e stays on ubuntu-24.04 for now: ubuntu-latest moved to 26.04, for which
+    # the Playwright release pinned in frontend/package-lock.json has no Chromium
+    # build ("Playwright does not support chromium on ubuntu26.04-x64").
+    runs-on: ${{ matrix.env == 'e2e' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
       matrix:
