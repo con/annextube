@@ -1,0 +1,38 @@
+[
+  {
+    "comment_id": "c1",
+    "video_id": "FIXTURE0001",
+    "author": "@fixture-viewer",
+    "author_channel_id": "UCAUTHOR01",
+    "text": "A top-level fixture comment.",
+    "timestamp": "2024-01-16T08:00:00Z",
+    "like_count": 12,
+    "parent": "root",
+    "reply_count": 0,
+    "fetched_at": "2024-06-01T00:00:00Z"
+  },
+  {
+    "comment_id": "c2",
+    "video_id": "FIXTURE0001",
+    "author": "@fixture-author",
+    "author_channel_id": "UCAUTHOR02",
+    "text": "A reply to it.",
+    "timestamp": "2024-01-17T08:00:00Z",
+    "like_count": 3,
+    "parent": "c1",
+    "reply_count": 0,
+    "fetched_at": "2024-06-01T00:00:00Z"
+  },
+  {
+    "comment_id": "c3",
+    "video_id": "FIXTURE0001",
+    "author": "@another-viewer",
+    "author_channel_id": "UCAUTHOR03",
+    "text": "A second top-level comment, long enough to wrap on a phone: lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+    "timestamp": "2024-02-01T10:00:00Z",
+    "like_count": 0,
+    "parent": "root",
+    "reply_count": 0,
+    "fetched_at": "2024-06-01T00:00:00Z"
+  }
+]

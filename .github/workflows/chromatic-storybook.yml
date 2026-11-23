@@ -1,0 +1,81 @@
+name: Chromatic (Storybook)
+
+# Builds Storybook without the project token and hands it on as an artifact; `chromatic-publish.yml`
+# uploads it to Chromatic from the default branch, which holds the token. Building without it is what
+# lets a pull request from a fork get snapshots, since GitHub gives a fork's runs no secrets.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+# The web UI is its own npm package under frontend/.
+defaults:
+  run:
+    working-directory: frontend
+
+jobs:
+  chromatic:
+    # Named for the required check it satisfies; Chromatic's own statuses on the commit report the
+    # result of the upload.
+    name: Run Chromatic (Storybook)
+    # A branch of this repository is already built on push, so only a fork's pull request is built
+    # as one.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    # Pinned rather than ubuntu-latest: a runner image bump (system fonts, antialiasing,
+    # rasterizer) shifts screenshot pixels on its own, with no code change to explain it.
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          # The commit Chromatic reports on, rather than the merge commit a pull request would
+          # otherwise check out.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # The whole history, for the behind-master report below.
+          fetch-depth: 0
+
+      - name: Report the runner image
+        # The ubuntu-24.04 label is not a fixed machine: the image behind it is rebuilt roughly
+        # weekly, and a new one brings new fonts and rasterizer libraries. Printed so a snapshot
+        # diff with no code change behind it can be checked against the image its baseline used.
+        # (A block scalar: the colon in the message would otherwise make this line invalid YAML.)
+        run: |
+          echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+
+      - name: Report how far the branch is behind master
+        # Chromatic takes the branch's own last build as the baseline, so a branch that has not
+        # seen master in a week diffs against a week-old UI and reports master's changes as this
+        # branch's. Merge master in before reading the result.
+        if: github.ref != 'refs/heads/master'
+        run: |
+          git fetch --no-tags --quiet origin master
+          behind=$(git rev-list --count HEAD..origin/master)
+          if [ "$behind" -eq 0 ]; then
+            echo "Branch is up to date with master."
+          else
+            echo "::notice::This branch is $behind commit(s) behind master. Chromatic diffs it against the branch's own last build, so the changes it reports may be master's rather than this branch's; merge master in before reading them."
+          fi
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Storybook
+        run: npm run build-storybook -- --output-dir storybook-static
+
+      - name: Upload Storybook
+        # The name `chromatic-publish.yml` downloads; kept a day, long enough for it to run.
+        uses: actions/upload-artifact@v7
+        with:
+          name: chromatic-build
+          path: frontend/storybook-static/
+          retention-days: 1

@@ -1,0 +1,30 @@
+{
+  "video_id": "FIXTURE0001",
+  "title": "Introduction to the fixture archive",
+  "description": "Opening lecture of the snapshot fixture.\n\nEvery value here is fixed and obviously fake, so the captures come out alike.\nhttps://example.org/fixture",
+  "channel_id": "UCFIXTURE01",
+  "channel_name": "Fixture Channel",
+  "published_at": "2024-01-15T12:00:00Z",
+  "duration": 754,
+  "view_count": 12345,
+  "like_count": 321,
+  "comment_count": 3,
+  "thumbnail_url": "../videos/2024-01-15_introduction/thumbnail.svg",
+  "license": "creativeCommon",
+  "privacy_status": "public",
+  "availability": "public",
+  "tags": [
+    "fixture",
+    "snapshot",
+    "annextube"
+  ],
+  "categories": [
+    "Education"
+  ],
+  "language": "en",
+  "captions_available": [],
+  "has_auto_captions": false,
+  "source_url": "https://www.youtube.com/watch?v=FIXTURE0001",
+  "fetched_at": "2024-06-01T00:00:00Z",
+  "updated_at": "2024-06-01T00:00:00Z"
+}

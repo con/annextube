@@ -1,0 +1,21 @@
+{
+  "channel_id": "UCFIXTURE01",
+  "name": "Fixture Channel",
+  "custom_url": "@FixtureChannel",
+  "description": "The first channel of the snapshot fixture collection",
+  "subscriber_count": 50000,
+  "video_count": 100,
+  "avatar_url": "",
+  "videos": [],
+  "playlists": [],
+  "last_sync": "2024-06-15T00:00:00Z",
+  "created_at": "2019-01-01T00:00:00Z",
+  "fetched_at": "2024-06-15T00:00:00Z",
+  "archive_stats": {
+    "total_videos_archived": 95,
+    "first_video_date": "2020-01-01",
+    "last_video_date": "2024-06-01",
+    "total_duration_seconds": 360000,
+    "total_size_bytes": 5368709120
+  }
+}

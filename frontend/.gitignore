@@ -34,7 +34,12 @@ coverage/
 # Playwright
 test-results/
 playwright-report/
+playwright-report-chromatic/
 playwright/.cache/
+
+# Storybook build, and the site the Chromatic snapshot suite serves
+storybook-static/
+.tmp/
 
 # Environment
 .env
